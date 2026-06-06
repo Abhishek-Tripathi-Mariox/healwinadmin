@@ -1,0 +1,152 @@
+/* Leaflet CSS */
+@import "leaflet/dist/leaflet.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #111827;
+  background-color: #f9fafb;
+}
+
+/* Slimmer, modern scrollbars to match the SaaS look. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #9ca3af;
+}
+
+#root {
+  width: 100%;
+  height: 100vh;
+}
+
+/* ============================================================
+   Motion — subtle, modern entrance + interaction animations.
+   Applied via the shared UI kit so the whole panel feels alive.
+   ============================================================ */
+@keyframes hw-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes hw-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes hw-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: hw-fade-in 0.25s ease-out both;
+}
+.animate-fade-in-up {
+  animation: hw-fade-in-up 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-modal-in {
+  animation: hw-modal-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-backdrop-in {
+  animation: hw-fade-in 0.2s ease-out both;
+}
+
+/* Respect users who prefer less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-fade-in-up,
+  .animate-modal-in,
+  .animate-backdrop-in {
+    animation: none !important;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-healwin-600 text-white px-4 py-2 rounded-lg hover:bg-healwin-700 shadow-sm transition-colors font-medium;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors font-medium;
+  }
+
+  .card {
+    @apply bg-white rounded-xl border border-gray-200 shadow-sm;
+  }
+
+  .status-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium capitalize;
+  }
+
+  .status-active {
+    @apply bg-emerald-50 text-emerald-700;
+  }
+
+  .status-inactive {
+    @apply bg-gray-100 text-gray-600;
+  }
+
+  .status-online {
+    @apply bg-emerald-50 text-emerald-700;
+  }
+
+  .status-offline {
+    @apply bg-gray-100 text-gray-600;
+  }
+
+  .status-delivered {
+    @apply bg-emerald-50 text-emerald-700;
+  }
+
+  .status-transit {
+    @apply bg-blue-50 text-blue-700;
+  }
+
+  .status-pending {
+    @apply bg-amber-50 text-amber-700;
+  }
+
+  /* Generic surface + input helpers old pages can opt into. */
+  .input-field {
+    @apply w-full h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition-colors focus:border-healwin-500 focus:ring-2 focus:ring-healwin-500/20;
+  }
+}
