@@ -1,108 +1,182 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import toast from "react-hot-toast";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Phone, MapPin, X } from "lucide-react";
 import { adminSocket } from "../services/socket";
 
 /**
- * Mounts inside the authenticated admin shell. Connects the realtime socket and
- * raises a loud, clickable toast + alert chime whenever a patient triggers SOS
- * or a new ambulance request comes in — so dispatchers react immediately
- * instead of waiting for the polling interval.
+ * Real-time emergency alerter. When a patient triggers SOS (or a new ambulance
+ * request arrives), this raises a BLOCKING modal that keeps sounding an alarm
+ * until the dispatcher acknowledges it — so an incoming emergency can never be
+ * missed. "Dispatch" jumps straight to the SOS Dashboard.
  */
 
-// Short attention chime via the Web Audio API (no asset to bundle).
-// Reuse ONE AudioContext — browsers cap total contexts (~6); creating a new one
-// per alert silently fails after a burst of SOS events, killing the chime.
-let sharedCtx: AudioContext | null = null;
-const chime = () => {
+interface SosItem {
+  id: string;
+  emergency: boolean;
+  patientName: string;
+  address: string;
+  at: number;
+}
+
+// One shared AudioContext (browsers cap the total count).
+let ctx: AudioContext | null = null;
+const beep = () => {
   try {
-    const Ctx =
-      (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext })
-        .AudioContext ||
+    const Ctor =
+      (window as unknown as { AudioContext?: typeof AudioContext }).AudioContext ||
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    if (!sharedCtx) sharedCtx = new Ctx();
-    const ctx = sharedCtx;
-    // Autoplay policies suspend the context until a user gesture; nudge it.
+    if (!Ctor) return;
+    if (!ctx) ctx = new Ctor();
     if (ctx.state === "suspended") void ctx.resume();
-    const beep = (freq: number, start: number, dur: number) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+    const tone = (freq: number, start: number, dur: number) => {
+      const osc = ctx!.createOscillator();
+      const gain = ctx!.createGain();
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(ctx!.destination);
+      osc.type = "square";
       osc.frequency.value = freq;
-      osc.type = "sine";
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
-      gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
-      osc.start(ctx.currentTime + start);
-      osc.stop(ctx.currentTime + start + dur);
+      const t0 = ctx!.currentTime + start;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.start(t0);
+      osc.stop(t0 + dur);
     };
-    beep(880, 0, 0.25);
-    beep(660, 0.28, 0.3);
+    tone(880, 0, 0.22);
+    tone(660, 0.25, 0.28);
   } catch {
-    /* audio not available */
+    /* audio unavailable */
   }
 };
 
-interface IncomingSos {
-  requestId?: string;
-  emergency?: boolean;
-  patientName?: string | null;
-  pickup?: { address?: string } | null;
-}
-
 export const SosRealtime: React.FC = () => {
   const navigate = useNavigate();
+  const [items, setItems] = useState<SosItem[]>([]);
+  const alarm = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Socket → push new alerts into the queue.
   useEffect(() => {
     adminSocket.connect();
-
-    const announce = (raw: unknown, emergency: boolean) => {
-      const d = (raw || {}) as IncomingSos;
-      const who = d.patientName || "A patient";
-      const where = d.pickup?.address ? ` · ${d.pickup.address}` : "";
-      chime();
-      toast(
-        (t) => (
-          <div
-            onClick={() => {
-              toast.dismiss(t.id);
-              navigate("/admin/ambulance-requests");
-            }}
-            style={{ cursor: "pointer", display: "flex", gap: 10, alignItems: "center" }}
-          >
-            <AlertTriangle
-              size={22}
-              color={emergency ? "#dc2626" : "#2563eb"}
-              style={{ flexShrink: 0 }}
-            />
-            <div>
-              <div style={{ fontWeight: 700, color: emergency ? "#b91c1c" : "#1d4ed8" }}>
-                {emergency ? "🚨 New SOS" : "New ambulance request"}
-              </div>
-              <div style={{ fontSize: 13, color: "#374151" }}>
-                {who}
-                {where} — tap to dispatch
-              </div>
-            </div>
-          </div>
-        ),
-        { duration: 12000, style: { borderLeft: `4px solid ${emergency ? "#dc2626" : "#2563eb"}` } },
+    let seq = 0;
+    const add = (raw: unknown, emergency: boolean) => {
+      const d = (raw || {}) as {
+        requestId?: string;
+        sosId?: string;
+        patientName?: string | null;
+        pickup?: { address?: string } | null;
+        address?: string;
+      };
+      seq += 1;
+      const id = String(d.requestId || d.sosId || `sos-${seq}-${emergency}`);
+      setItems((prev) =>
+        prev.some((p) => p.id === id)
+          ? prev
+          : [
+              ...prev,
+              {
+                id,
+                emergency,
+                patientName: d.patientName || "A patient",
+                address: d.pickup?.address || d.address || "Location unavailable",
+                at: seq,
+              },
+            ],
       );
     };
-
-    const offSos = adminSocket.on("sos:new", (d) => announce(d, true));
-    const offReq = adminSocket.on("ambulance-request:new", (d) => announce(d, false));
-
+    const offSos = adminSocket.on("sos:new", (d) => add(d, true));
+    const offReq = adminSocket.on("ambulance-request:new", (d) => add(d, false));
     return () => {
       offSos();
       offReq();
     };
-  }, [navigate]);
+  }, []);
 
-  return null;
+  // Loop the alarm while any alert is unacknowledged.
+  useEffect(() => {
+    if (items.length > 0) {
+      if (!alarm.current) {
+        beep();
+        alarm.current = setInterval(beep, 1800);
+      }
+    } else if (alarm.current) {
+      clearInterval(alarm.current);
+      alarm.current = null;
+    }
+    return () => {
+      if (items.length === 0 && alarm.current) {
+        clearInterval(alarm.current);
+        alarm.current = null;
+      }
+    };
+  }, [items]);
+
+  if (items.length === 0) return null;
+
+  const dismiss = (id: string) => setItems((prev) => prev.filter((p) => p.id !== id));
+  const dispatch = (id: string) => {
+    dismiss(id);
+    navigate("/admin/sos");
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      role="alertdialog"
+      aria-live="assertive"
+    >
+      <div className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-2xl bg-white shadow-2xl ring-2 ring-red-500">
+        <div className="flex items-center gap-3 rounded-t-2xl bg-red-600 px-5 py-4 text-white">
+          <AlertTriangle className="h-7 w-7 animate-pulse" />
+          <div>
+            <p className="text-lg font-bold leading-tight">🚨 Emergency SOS</p>
+            <p className="text-sm text-red-100">
+              {items.length} unacknowledged alert{items.length > 1 ? "s" : ""} — respond now
+            </p>
+          </div>
+        </div>
+
+        <div className="divide-y divide-gray-100">
+          {items.map((it) => (
+            <div key={it.id} className="px-5 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold text-gray-900">
+                    {it.emergency ? "🚨 " : ""}
+                    {it.patientName}
+                  </p>
+                  <p className="mt-1 flex items-center gap-1 text-sm text-gray-600">
+                    <MapPin className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{it.address}</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => dismiss(it.id)}
+                  className="shrink-0 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                  title="Acknowledge & silence"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => dispatch(it.id)}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                >
+                  <Phone className="h-4 w-4" /> Dispatch now
+                </button>
+                <button
+                  onClick={() => dismiss(it.id)}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Acknowledge
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default SosRealtime;
