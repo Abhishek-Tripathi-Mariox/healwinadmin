@@ -20,14 +20,36 @@ interface SosItem {
 
 // One shared AudioContext (browsers cap the total count).
 let ctx: AudioContext | null = null;
-const beep = () => {
+
+const getCtx = (): AudioContext | null => {
   try {
     const Ctor =
       (window as unknown as { AudioContext?: typeof AudioContext }).AudioContext ||
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctor) return;
+    if (!Ctor) return null;
     if (!ctx) ctx = new Ctor();
-    if (ctx.state === "suspended") void ctx.resume();
+    return ctx;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Browsers block audio until the user has interacted with the page. Call this
+ * from a real user gesture (any click/keypress) to create + resume the
+ * AudioContext — afterwards the alarm can sound on its own when an SOS arrives.
+ */
+export const unlockAlarmAudio = () => {
+  const c = getCtx();
+  if (c && c.state === "suspended") void c.resume();
+};
+
+const beep = () => {
+  try {
+    const c = getCtx();
+    if (!c) return;
+    if (c.state === "suspended") void c.resume();
+    ctx = c;
     const tone = (freq: number, start: number, dur: number) => {
       const osc = ctx!.createOscillator();
       const gain = ctx!.createGain();
@@ -53,6 +75,22 @@ export const SosRealtime: React.FC = () => {
   const navigate = useNavigate();
   const [items, setItems] = useState<SosItem[]>([]);
   const alarm = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Unlock audio on the dispatcher's first interaction with the page so the
+  // alarm can sound by itself when an SOS arrives (browsers block autoplay
+  // until a user gesture has happened).
+  useEffect(() => {
+    const unlock = () => unlockAlarmAudio();
+    const opts = { once: true } as AddEventListenerOptions;
+    window.addEventListener("pointerdown", unlock, opts);
+    window.addEventListener("keydown", unlock, opts);
+    window.addEventListener("touchstart", unlock, opts);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("touchstart", unlock);
+    };
+  }, []);
 
   // Socket → push new alerts into the queue.
   useEffect(() => {
