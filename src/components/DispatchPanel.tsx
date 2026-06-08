@@ -108,17 +108,23 @@ export default function DispatchPanel({ sosId }: { sosId: string }) {
           <Marker position={center}>
             <Popup>Patient SOS</Popup>
           </Marker>
-          {ambulances.map((a) => (
-            <Marker
-              key={a.ambulanceId}
-              position={[a.ambulanceLocation.lat, a.ambulanceLocation.lng]}
-            >
-              <Popup>
-                {a.registrationNumber} — {a.roadDistanceKm} km,{" "}
-                {a.etaMinutes} min
-              </Popup>
-            </Marker>
-          ))}
+          {ambulances
+            .filter(
+              (a) =>
+                a.ambulanceLocation &&
+                (a.ambulanceLocation.lat !== 0 || a.ambulanceLocation.lng !== 0),
+            )
+            .map((a) => (
+              <Marker
+                key={a.ambulanceId}
+                position={[a.ambulanceLocation.lat, a.ambulanceLocation.lng]}
+              >
+                <Popup>
+                  {a.registrationNumber} — {a.roadDistanceKm} km, {a.etaMinutes}{" "}
+                  min
+                </Popup>
+              </Marker>
+            ))}
         </MapContainer>
       </div>
       <div className="overflow-y-auto">
@@ -168,7 +174,9 @@ export default function DispatchPanel({ sosId }: { sosId: string }) {
                   {a.providerName} · Driver: {a.driverName}
                 </p>
                 <p className="text-sm">
-                  {a.roadDistanceKm} km · ETA {a.etaMinutes} min
+                  {a.roadDistanceKm > 0
+                    ? `${a.roadDistanceKm} km · ETA ${a.etaMinutes} min`
+                    : "Location unavailable (GPS off)"}
                 </p>
               </div>
               <button
