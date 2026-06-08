@@ -55,8 +55,9 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
       const error = await response
         .json()
         .catch(() => ({ message: "Request failed" }));
-      console.error(`[API] Error: ${error.message}`);
-      throw new Error(error.message || "Request failed");
+      const msg = error.message || error.rMsg || error.msg || "Request failed";
+      console.error(`[API] Error: ${msg}`);
+      throw new Error(msg);
     }
 
     return response.json();
@@ -1298,10 +1299,12 @@ export const ambulanceApi = {
       method: "PUT",
       body: JSON.stringify(data),
     }),
-  assign: (id: string, data: { driverId?: string; attendantId?: string }) =>
+  // Backend assigns ONE seat per call and derives the seat from the staff's
+  // own role — the client only sends staffId.
+  assign: (id: string, staffId: string) =>
     fetchWithAuth(`/admin/ambulances/${id}/assign`, {
       method: "POST",
-      body: JSON.stringify(data),
+      body: JSON.stringify({ staffId }),
     }),
   unassign: (id: string, role: "driver" | "attendant") =>
     fetchWithAuth(`/admin/ambulances/${id}/unassign`, {

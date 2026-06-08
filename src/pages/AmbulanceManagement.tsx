@@ -71,6 +71,10 @@ export default function AmbulanceManagement() {
     driverId?: string;
     attendantId?: string;
   }>({});
+  const [assignError, setAssignError] = useState("");
+  const [assignSaving, setAssignSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [formSaving, setFormSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -103,6 +107,7 @@ export default function AmbulanceManagement() {
   }, []);
 
   const openAssign = async (a: Ambulance) => {
+    setAssignError("");
     const providerId =
       typeof a.providerId === "object" ? a.providerId._id : a.providerId;
     const [drivers, attendants] = await Promise.all([
@@ -128,20 +133,57 @@ export default function AmbulanceManagement() {
 
   const submitAssign = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!assignFor) return;
-    await ambulanceApi.assign(assignFor._id, assignForm);
-    setAssignFor(null);
-    load();
+    if (!assignFor || assignSaving) return;
+    setAssignError("");
+    setAssignSaving(true);
+    // The backend assigns ONE seat per call ({ staffId, role }) and clears a
+    // seat via /unassign. Diff each seat against what the ambulance already
+    // has so we only fire the calls that actually changed.
+    const idOf = (v: any) =>
+      v && typeof v === "object" ? v._id : v || "";
+    const origDriver = idOf(assignFor.assignedDriverId);
+    const origAttendant = idOf(assignFor.assignedAttendantId);
+    const newDriver = assignForm.driverId || "";
+    const newAttendant = assignForm.attendantId || "";
+    try {
+      // Backend derives the seat from each staff member's role — we just send
+      // the staffId. (Driver/Attendant dropdowns are already role-filtered.)
+      if (newDriver && newDriver !== origDriver)
+        await ambulanceApi.assign(assignFor._id, newDriver);
+      else if (!newDriver && origDriver)
+        await ambulanceApi.unassign(assignFor._id, "driver");
+
+      if (newAttendant && newAttendant !== origAttendant)
+        await ambulanceApi.assign(assignFor._id, newAttendant);
+      else if (!newAttendant && origAttendant)
+        await ambulanceApi.unassign(assignFor._id, "attendant");
+
+      setAssignFor(null);
+      load();
+    } catch (err: any) {
+      setAssignError(err?.message || "Could not assign staff. Please try again.");
+    } finally {
+      setAssignSaving(false);
+    }
   };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editing) await ambulanceApi.update(editing._id, form);
-    else await ambulanceApi.create(form);
-    setShowForm(false);
-    setEditing(null);
-    setForm({ ambulanceType: "BLS" });
-    load();
+    if (formSaving) return;
+    setFormError("");
+    setFormSaving(true);
+    try {
+      if (editing) await ambulanceApi.update(editing._id, form);
+      else await ambulanceApi.create(form);
+      setShowForm(false);
+      setEditing(null);
+      setForm({ ambulanceType: "BLS" });
+      load();
+    } catch (err: any) {
+      setFormError(err?.message || "Could not save ambulance. Please try again.");
+    } finally {
+      setFormSaving(false);
+    }
   };
 
   return (
@@ -154,6 +196,7 @@ export default function AmbulanceManagement() {
             onClick={() => {
               setEditing(null);
               setForm({ ambulanceType: "BLS" });
+              setFormError("");
               setShowForm(true);
             }}
           >
@@ -309,6 +352,7 @@ export default function AmbulanceManagement() {
                             ? a.providerId._id
                             : a.providerId,
                       });
+                      setFormError("");
                       setShowForm(true);
                     }}
                   >
@@ -345,11 +389,18 @@ export default function AmbulanceManagement() {
             <Button variant="secondary" onClick={() => setShowForm(false)}>
               Cancel
             </Button>
-            <Button onClick={onSubmit}>Save</Button>
+            <Button onClick={onSubmit} disabled={formSaving}>
+              {formSaving ? "Saving…" : "Save"}
+            </Button>
           </>
         }
       >
         <form onSubmit={onSubmit} className="space-y-4">
+          {formError && (
+            <div className="px-3 py-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">
+              {formError}
+            </div>
+          )}
           <Field label="Provider *">
             <Select
               required
@@ -434,11 +485,18 @@ export default function AmbulanceManagement() {
             <Button variant="secondary" onClick={() => setAssignFor(null)}>
               Cancel
             </Button>
-            <Button onClick={submitAssign}>Save</Button>
+            <Button onClick={submitAssign} disabled={assignSaving}>
+              {assignSaving ? "Saving…" : "Save"}
+            </Button>
           </>
         }
       >
         <form onSubmit={submitAssign} className="space-y-4">
+          {assignError && (
+            <div className="px-3 py-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">
+              {assignError}
+            </div>
+          )}
           <Field label="Driver">
             <Select
               value={assignForm.driverId || ""}
