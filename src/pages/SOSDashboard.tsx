@@ -326,7 +326,9 @@ const SOSDashboard: React.FC = () => {
   const handleOpenDispatch = (sub: SOSSubmission) => {
     setSelectedSubmission(sub);
     setDispatchForm({
-      dispatchType: sub.type === "CALL" ? "AMBULANCE" : "EMERGENCY_CENTER",
+      // SOS always defaults to AMBULANCE so dispatch goes straight to an
+      // ambulance; the dispatcher can still switch type if needed.
+      dispatchType: "AMBULANCE",
       serviceName: "",
       servicePhone: "",
       serviceAddress: "",

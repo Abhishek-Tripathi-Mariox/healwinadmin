@@ -49,6 +49,9 @@ export default function AmbulanceStaffManagement() {
     role: "driver",
     countryCode: "+91",
   });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -76,18 +79,53 @@ export default function AmbulanceStaffManagement() {
     load();
   }, []);
 
+  const validate = () => {
+    const errs: Record<string, string> = {};
+    const name = (form.fullName || "").trim();
+    const phone = (form.mobileNumber || "").trim();
+    const email = (form.email || "").trim();
+
+    if (!name) errs.fullName = "Full name is required.";
+    else if (name.length < 2) errs.fullName = "Enter a valid name.";
+
+    if (!phone) errs.mobileNumber = "Mobile number is required.";
+    else if (!/^[6-9]\d{9}$/.test(phone))
+      errs.mobileNumber = "Enter a valid 10-digit number (starting 6–9).";
+
+    if (!form.role) errs.role = "Select a role.";
+    if (!form.providerId) errs.providerId = "Select a service provider.";
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      errs.email = "Enter a valid email address.";
+
+    setFormErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const setField = (key: string, value: any) => {
+    setForm((f: any) => ({ ...f, [key]: value }));
+    setFormErrors((e) => (e[key] ? { ...e, [key]: "" } : e));
+    setSubmitError("");
+  };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!/^[6-9]\d{9}$/.test((form.mobileNumber || "").trim())) {
-      alert("Please enter a valid 10-digit mobile number (starting 6-9).");
-      return;
+    setSubmitError("");
+    if (!validate() || saving) return;
+    setSaving(true);
+    try {
+      if (editing) await ambulanceStaffApi.update(editing._id, form);
+      else await ambulanceStaffApi.create(form);
+      setShowForm(false);
+      setEditing(null);
+      setForm({ role: "driver", countryCode: "+91" });
+      setFormErrors({});
+      load();
+    } catch (err: any) {
+      setSubmitError(err?.message || "Could not save staff. Please try again.");
+    } finally {
+      setSaving(false);
     }
-    if (editing) await ambulanceStaffApi.update(editing._id, form);
-    else await ambulanceStaffApi.create(form);
-    setShowForm(false);
-    setEditing(null);
-    setForm({ role: "driver", countryCode: "+91" });
-    load();
   };
 
   return (
@@ -100,6 +138,8 @@ export default function AmbulanceStaffManagement() {
             onClick={() => {
               setEditing(null);
               setForm({ role: "driver", countryCode: "+91" });
+              setFormErrors({});
+              setSubmitError("");
               setShowForm(true);
             }}
           >
@@ -204,6 +244,8 @@ export default function AmbulanceStaffManagement() {
                             ? s.providerId._id
                             : s.providerId,
                       });
+                      setFormErrors({});
+                      setSubmitError("");
                       setShowForm(true);
                     }}
                   >
@@ -255,16 +297,22 @@ export default function AmbulanceStaffManagement() {
             <Button variant="secondary" onClick={() => setShowForm(false)}>
               Cancel
             </Button>
-            <Button onClick={onSubmit}>Save</Button>
+            <Button onClick={onSubmit} disabled={saving}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
           </>
         }
       >
         <form onSubmit={onSubmit} className="space-y-4">
+          {submitError && (
+            <div className="px-3 py-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">
+              {submitError}
+            </div>
+          )}
           <Field label="Provider *">
             <Select
-              required
               value={form.providerId || ""}
-              onChange={(e) => setForm({ ...form, providerId: e.target.value })}
+              onChange={(e) => setField("providerId", e.target.value)}
             >
               <option value="">Select Provider</option>
               {providers.map((p) => (
@@ -273,47 +321,53 @@ export default function AmbulanceStaffManagement() {
                 </option>
               ))}
             </Select>
+            {formErrors.providerId && (
+              <p className="mt-1 text-xs text-red-500">{formErrors.providerId}</p>
+            )}
           </Field>
           <Field label="Role *">
-            <Select
-              required
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value })}
-            >
+            <Select value={form.role} onChange={(e) => setField("role", e.target.value)}>
               <option value="driver">Driver</option>
               <option value="attendant">Attendant</option>
             </Select>
+            {formErrors.role && (
+              <p className="mt-1 text-xs text-red-500">{formErrors.role}</p>
+            )}
           </Field>
           <Field label="Full Name *">
             <Input
-              required
               placeholder="Full Name"
               value={form.fullName || ""}
-              onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+              onChange={(e) => setField("fullName", e.target.value)}
             />
+            {formErrors.fullName && (
+              <p className="mt-1 text-xs text-red-500">{formErrors.fullName}</p>
+            )}
           </Field>
           <Field label="Mobile Number *">
             <Input
-              required
               type="tel"
               inputMode="numeric"
               maxLength={10}
               placeholder="10-digit mobile number"
               value={form.mobileNumber || ""}
               onChange={(e) =>
-                setForm({
-                  ...form,
-                  mobileNumber: e.target.value.replace(/\D/g, "").slice(0, 10),
-                })
+                setField("mobileNumber", e.target.value.replace(/\D/g, "").slice(0, 10))
               }
             />
+            {formErrors.mobileNumber && (
+              <p className="mt-1 text-xs text-red-500">{formErrors.mobileNumber}</p>
+            )}
           </Field>
           <Field label="Email">
             <Input
               placeholder="Email (optional)"
               value={form.email || ""}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              onChange={(e) => setField("email", e.target.value)}
             />
+            {formErrors.email && (
+              <p className="mt-1 text-xs text-red-500">{formErrors.email}</p>
+            )}
           </Field>
           {form.role === "driver" && (
             <Field label="License Number">
