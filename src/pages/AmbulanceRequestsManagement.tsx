@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ambulanceRequestApi, ambulanceStaffApi } from "../services/admin-api";
+import { adminSocket } from "../services/socket";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
@@ -12,6 +13,8 @@ interface ReqRow {
   status: string;
   pickup?: { address?: string };
   patientName?: string;
+  recipientName?: string;
+  recipientPhone?: string;
   notes?: string;
   driverName?: string;
   vehicleNumber?: string;
@@ -51,11 +54,24 @@ export default function AmbulanceRequestsManagement() {
     }
   }, [statusFilter]);
 
-  // Poll so new patient requests appear without a manual refresh.
+  // Poll as a fallback safety net behind the realtime socket below.
   useEffect(() => {
     load();
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
+  }, [load]);
+
+  // Realtime: a new patient "Where To?" ambulance request (or an emergency SOS)
+  // shows up the instant it's created — and the row refreshes the moment its
+  // status changes (assigned/en-route/etc.). Backend emits to the "admin" room.
+  useEffect(() => {
+    adminSocket.connect();
+    const offs = [
+      adminSocket.on("ambulance-request:new", load),
+      adminSocket.on("sos:new", load),
+      adminSocket.on("sos:dispatched", load),
+    ];
+    return () => offs.forEach((off) => off());
   }, [load]);
 
   const openAssign = (r: ReqRow) => {
@@ -145,8 +161,18 @@ export default function AmbulanceRequestsManagement() {
             items.map((r) => (
               <TR key={r._id}>
                 <Td className="font-medium text-gray-900">
-                  {r.userId?.fullName || r.patientName || "Patient"}
-                  {r.userId?.mobileNumber && <div className="text-xs text-gray-400">{r.userId.mobileNumber}</div>}
+                  {r.recipientName || r.userId?.fullName || r.patientName || "Patient"}
+                  {r.recipientPhone && <div className="text-xs text-gray-400">{r.recipientPhone}</div>}
+                  {/* When booked for someone else, show who placed the request. */}
+                  {r.recipientName && r.userId?.fullName && (
+                    <div className="text-xs text-gray-400">
+                      by {r.userId.fullName}
+                      {r.userId?.mobileNumber ? ` · ${r.userId.mobileNumber}` : ""}
+                    </div>
+                  )}
+                  {!r.recipientName && r.userId?.mobileNumber && (
+                    <div className="text-xs text-gray-400">{r.userId.mobileNumber}</div>
+                  )}
                 </Td>
                 <Td>{r.emergency ? <Badge tone="danger">SOS</Badge> : r.type || "—"}</Td>
                 <Td className="text-xs text-gray-500">{r.pickup?.address || "—"}</Td>

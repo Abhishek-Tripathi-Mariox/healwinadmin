@@ -34,6 +34,7 @@ import {
 } from "../services/admin-api";
 import DispatchPanel from "../components/DispatchPanel";
 import type { NearbyAmbulance } from "../components/DispatchPanel";
+import { adminSocket } from "../services/socket";
 import {
   PageHeader,
   Button,
@@ -276,7 +277,7 @@ const SOSDashboard: React.FC = () => {
     if (showMap) fetchMapData();
   }, [showMap, fetchMapData]);
 
-  // Auto-refresh 30s
+  // Auto-refresh 30s (fallback safety net behind the realtime socket below)
   useEffect(() => {
     const iv = setInterval(() => {
       fetchSubmissions();
@@ -284,6 +285,25 @@ const SOSDashboard: React.FC = () => {
       if (showMap) fetchMapData();
     }, 30000);
     return () => clearInterval(iv);
+  }, [fetchSubmissions, fetchStats, fetchMapData, showMap]);
+
+  // Realtime: the instant a SOS form/call is submitted (patient app or website)
+  // or a submission/dispatch changes, refresh the list + stats — no manual
+  // refresh, no 30s wait. The backend emits these to the "admin" room.
+  useEffect(() => {
+    adminSocket.connect();
+    const refresh = () => {
+      fetchSubmissions();
+      fetchStats();
+      if (showMap) fetchMapData();
+    };
+    const offs = [
+      adminSocket.on("sos:new", refresh),
+      adminSocket.on("sos:submission-updated", refresh),
+      adminSocket.on("sos:dispatch-created", refresh),
+      adminSocket.on("sos:dispatch-updated", refresh),
+    ];
+    return () => offs.forEach((off) => off());
   }, [fetchSubmissions, fetchStats, fetchMapData, showMap]);
 
   // ---------- Handlers ----------
