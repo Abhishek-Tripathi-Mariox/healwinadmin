@@ -61,16 +61,15 @@ export default function AmbulanceRequestsManagement() {
     return () => clearInterval(t);
   }, [load]);
 
-  // Realtime: a new patient "Where To?" ambulance request (or an emergency SOS)
-  // shows up the instant it's created — and the row refreshes the moment its
-  // status changes (assigned/en-route/etc.). Backend emits to the "admin" room.
+  // Realtime: a new patient "Where To?" ambulance request shows up the instant
+  // it's created — and the row refreshes the moment its status changes
+  // (assigned/en-route/etc.). Backend emits `ambulance-request:new` to the
+  // "admin" room. NOTE: SOS events (`sos:new`/`sos:dispatched`) are deliberately
+  // NOT handled here — SOS belongs to the SOS Dashboard only, never the
+  // Ambulance Requests queue.
   useEffect(() => {
     adminSocket.connect();
-    const offs = [
-      adminSocket.on("ambulance-request:new", load),
-      adminSocket.on("sos:new", load),
-      adminSocket.on("sos:dispatched", load),
-    ];
+    const offs = [adminSocket.on("ambulance-request:new", load)];
     return () => offs.forEach((off) => off());
   }, [load]);
 
@@ -136,7 +135,7 @@ export default function AmbulanceRequestsManagement() {
     <div className="p-6">
       <PageHeader
         title="Ambulance Requests"
-        subtitle="Live patient ambulance/SOS dispatch — assign a driver to notify the patient"
+        subtitle="Live patient ambulance bookings — assign a driver to notify the patient (SOS emergencies live in the SOS Dashboard)"
         actions={<Button variant="secondary" onClick={load}>Refresh</Button>}
       />
 
