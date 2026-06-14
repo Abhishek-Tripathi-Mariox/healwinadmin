@@ -137,6 +137,8 @@ const PayrollManagement = lazy(() => import("./pages/hr/PayrollManagement"));
 // Patient Catalog
 const CatalogManagement = lazy(() => import("./pages/CatalogManagement"));
 const AmbulanceRequestsManagement = lazy(() => import("./pages/AmbulanceRequestsManagement"));
+const MembershipPlansManagement = lazy(() => import("./pages/MembershipPlansManagement"));
+const HomePromosManagement = lazy(() => import("./pages/HomePromosManagement"));
 // Reports
 const ReportsBookings = lazy(() => import("./pages/ReportsBookings"));
 const ReportsRevenue = lazy(() => import("./pages/ReportsRevenue"));
@@ -501,6 +503,18 @@ export const adminRoutes = [
     element: CatalogManagement,
     name: "Pharmacy & Lab Catalog",
     icon: HeartPulse,
+  },
+  {
+    path: "membership-plans",
+    element: MembershipPlansManagement,
+    name: "Membership Plans",
+    icon: Award,
+  },
+  {
+    path: "home-promos",
+    element: HomePromosManagement,
+    name: "Home Promos",
+    icon: ImageIcon,
   },
   {
     path: "reports/bookings",

@@ -43,6 +43,8 @@ export default function AmbulanceRequestsManagement() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [crew, setCrew] = useState<any[]>([]);
+  const [nearby, setNearby] = useState<any[]>([]);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,12 +85,40 @@ export default function AmbulanceRequestsManagement() {
       driverStaffId: "",
     });
     setError("");
+    setNearby([]);
     // Load the ambulance crew so the dispatcher picks a real driver — that's
     // what notifies the driver/staff app (socket + FCM dispatch push).
     ambulanceStaffApi
       .list({ role: "driver" })
       .then((res: any) => setCrew(res?.data?.items || res?.data || []))
       .catch(() => setCrew([]));
+    // Geo-ranked available ambulances near the pickup — same as SOS dispatch.
+    setNearbyLoading(true);
+    ambulanceRequestApi
+      .nearby(r._id)
+      .then((res: any) => setNearby(res?.data?.ambulances || []))
+      .catch(() => setNearby([]))
+      .finally(() => setNearbyLoading(false));
+  };
+
+  // One-tap dispatch: reserve the picked ambulance + auto-fill crew (atomic on
+  // the backend) and ring the crew app — exactly like SOS dispatch.
+  const assignNearby = async (amb: any) => {
+    if (!assignFor || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await ambulanceRequestApi.assign(assignFor._id, {
+        ambulanceId: amb.ambulanceId,
+        etaMinutes: amb.etaMinutes != null ? Number(amb.etaMinutes) : undefined,
+      });
+      setAssignFor(null);
+      load();
+    } catch (e: any) {
+      setError(e.message || "Failed to dispatch — try another ambulance.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const pickCrew = (id: string) => {
@@ -209,6 +239,42 @@ export default function AmbulanceRequestsManagement() {
           </>
         }
       >
+        {/* SOS-style geo-ranked picker: tap an available ambulance to dispatch
+            instantly (reserve + auto-fill crew + ring the crew app). */}
+        <div className="mb-4">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Nearby available ambulances
+          </div>
+          {nearbyLoading ? (
+            <div className="rounded-lg border border-gray-200 px-3 py-3 text-sm text-gray-400">Finding nearby ambulances…</div>
+          ) : nearby.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-300 px-3 py-3 text-sm text-gray-400">
+              No available ambulances nearby — assign manually below.
+            </div>
+          ) : (
+            <div className="max-h-56 space-y-2 overflow-y-auto">
+              {nearby.map((a) => (
+                <div key={a.ambulanceId} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-gray-900">
+                      {a.registrationNumber || "Ambulance"}{a.ambulanceType ? ` · ${a.ambulanceType}` : ""}
+                    </div>
+                    <div className="truncate text-xs text-gray-500">
+                      {a.driverName || "No driver"}{a.driverPhone ? ` · ${a.driverPhone}` : ""}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      {a.roadDistanceKm != null ? `${a.roadDistanceKm} km` : ""}
+                      {a.etaMinutes != null ? ` · ~${a.etaMinutes} min` : ""}
+                    </div>
+                  </div>
+                  <Button size="sm" disabled={saving} onClick={() => assignNearby(a)}>Dispatch</Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 text-center text-xs text-gray-400">— or assign manually —</div>
+        </div>
+
         <form onSubmit={(e) => { e.preventDefault(); submitAssign(); }} className="space-y-3">
           {error && <Alert tone="danger">{error}</Alert>}
           <Field label="Ambulance crew (notifies their app)">

@@ -2038,6 +2038,13 @@ export const catalogApi = {
 export const ambulanceRequestApi = {
   list: (status?: string) =>
     fetchWithAuth(`/admin/ambulance-requests${status ? `?status=${status}` : ""}`),
+  // Geo-ranked available ambulances for a request's pickup — same as SOS dispatch.
+  nearby: (id: string, radiusKm?: number) =>
+    fetchWithAuth(
+      `/admin/ambulance-requests/${id}/nearby-ambulances${
+        radiusKm != null ? `?radiusKm=${radiusKm}` : ""
+      }`,
+    ),
   assign: (
     id: string,
     data: {
@@ -2058,6 +2065,32 @@ export const ambulanceRequestApi = {
       method: "POST",
       body: JSON.stringify({ status }),
     }),
+};
+
+// ==================== MEMBERSHIP PLANS ====================
+export const membershipPlanApi = {
+  list: () => fetchWithAuth(`/admin/membership-plans`),
+  create: (data: Record<string, unknown>) =>
+    fetchWithAuth(`/admin/membership-plans`, { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Record<string, unknown>) =>
+    fetchWithAuth(`/admin/membership-plans/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  toggle: (id: string) =>
+    fetchWithAuth(`/admin/membership-plans/${id}/toggle`, { method: "PATCH" }),
+  remove: (id: string) =>
+    fetchWithAuth(`/admin/membership-plans/${id}`, { method: "DELETE" }),
+};
+
+// ==================== HOME PROMOS ====================
+export const homePromoApi = {
+  list: () => fetchWithAuth(`/admin/home-promos`),
+  create: (data: Record<string, unknown>) =>
+    fetchWithAuth(`/admin/home-promos`, { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Record<string, unknown>) =>
+    fetchWithAuth(`/admin/home-promos/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  toggle: (id: string) =>
+    fetchWithAuth(`/admin/home-promos/${id}/toggle`, { method: "PATCH" }),
+  remove: (id: string) =>
+    fetchWithAuth(`/admin/home-promos/${id}`, { method: "DELETE" }),
 };
 
 export default {
