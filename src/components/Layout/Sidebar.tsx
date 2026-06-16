@@ -403,6 +403,18 @@ const Sidebar: React.FC<SidebarProps> = ({
           path: "/admin/home",
         },
         {
+          id: "home-promos",
+          label: "App Home Promos",
+          icon: Image,
+          path: "/admin/home-promos",
+        },
+        {
+          id: "membership-plans",
+          label: "Membership Plans",
+          icon: ClipboardList,
+          path: "/admin/membership-plans",
+        },
+        {
           id: "about",
           label: "About Page",
           icon: FileText,

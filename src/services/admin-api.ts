@@ -1,5 +1,16 @@
 // Admin API Service
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:9050/v1/api";
+// Resolve the API base robustly: an explicit VITE_API_URL wins; otherwise
+// localhost dev hits the local backend, but ANY non-localhost host (e.g. the
+// deployed admin.healwin.in) falls back to the production API instead of
+// localhost:9050 — so a build that missed .env.production still works.
+const resolveApiUrl = (): string => {
+  const fromEnv = import.meta.env.VITE_API_URL as string | undefined;
+  if (fromEnv) return fromEnv;
+  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  const isLocal = host === "localhost" || host === "127.0.0.1";
+  return isLocal ? "http://localhost:9050/v1/api" : "https://apis.healwin.in/v1/api";
+};
+const API_URL = resolveApiUrl();
 
 // Helper function to get auth token
 const getAuthToken = () => localStorage.getItem("adminToken");
@@ -1993,8 +2004,7 @@ export const payrollApi = {
   // Streams a PDF blob and triggers a browser download.
   downloadPayslip: async (id: string, filename: string) => {
     const token = localStorage.getItem("adminToken");
-    const base =
-      import.meta.env.VITE_API_URL || "http://localhost:9050/v1/api";
+    const base = API_URL;
     const res = await fetch(`${base}/admin/hr/payroll/payslip/${id}/pdf`, {
       headers: { Authorization: `Bearer ${token}` },
     });
