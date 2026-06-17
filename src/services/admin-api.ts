@@ -2103,7 +2103,37 @@ export const homePromoApi = {
     fetchWithAuth(`/admin/home-promos/${id}`, { method: "DELETE" }),
 };
 
+// Records created by the ambulance-staff (attendant) app: staff-registered
+// patients, case notes, stock requests and leave applications.
+const qstr = (params: Record<string, string | undefined> = {}) => {
+  const clean = Object.fromEntries(
+    Object.entries(params).filter(([, v]) => v != null && v !== ""),
+  ) as Record<string, string>;
+  const q = new URLSearchParams(clean).toString();
+  return q ? `?${q}` : "";
+};
+
+export const staffRecordsApi = {
+  caseNotes: (params?: Record<string, string>) =>
+    fetchWithAuth(`/admin/staff-records/case-notes${qstr(params)}`),
+  stockRequests: (params?: Record<string, string>) =>
+    fetchWithAuth(`/admin/staff-records/stock-requests${qstr(params)}`),
+  setStockRequestStatus: (id: string, status: string) =>
+    fetchWithAuth(`/admin/staff-records/stock-requests/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  leaves: (params?: Record<string, string>) =>
+    fetchWithAuth(`/admin/staff-records/leaves${qstr(params)}`),
+  setLeaveStatus: (id: string, status: string) =>
+    fetchWithAuth(`/admin/staff-records/leaves/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+};
+
 export default {
+  staffRecords: staffRecordsApi,
   sosSubmissions: sosSubmissionApi,
   dispatches: dispatchApi,
   providers: providerApi,

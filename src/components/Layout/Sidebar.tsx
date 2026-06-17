@@ -185,6 +185,12 @@ const Sidebar: React.FC<SidebarProps> = ({
               path: "/admin/ambulance-staff",
             },
             {
+              id: "staff-records",
+              label: "Staff App Records",
+              icon: ClipboardList,
+              path: "/admin/staff-records",
+            },
+            {
               id: "ambulances",
               label: "Ambulances",
               icon: Heart,

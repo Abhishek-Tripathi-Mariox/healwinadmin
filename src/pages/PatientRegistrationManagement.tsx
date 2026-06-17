@@ -37,6 +37,7 @@ interface PatientRow {
   bloodGroup?: string;
   phone: string;
   isActive: boolean;
+  source?: string; // "admin" | "ambulance_staff"
   createdAt?: string;
 }
 
@@ -234,7 +235,12 @@ export default function PatientRegistrationManagement() {
             items.map((row) => (
               <TR key={row._id}>
                 <Td className="font-mono text-xs">{row.patientId}</Td>
-                <Td className="font-medium text-gray-900">{row.fullName}</Td>
+                <Td className="font-medium text-gray-900">
+                  {row.fullName}
+                  {row.source === "ambulance_staff" && (
+                    <Badge tone="info" className="ml-2 align-middle">Field / Ambulance</Badge>
+                  )}
+                </Td>
                 <Td className="capitalize">
                   {row.gender}
                   {row.age != null ? ` / ${row.age}y` : ""}
