@@ -1324,6 +1324,13 @@ export const ambulanceApi = {
     }),
   remove: (id: string) =>
     fetchWithAuth(`/admin/ambulances/${id}`, { method: "DELETE" }),
+  // Manually free a stuck ambulance: cancels its active dispatch + notifies
+  // crew/patient, then flips it back to available.
+  free: (id: string, reason?: string) =>
+    fetchWithAuth(`/admin/ambulances/${id}/free`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
 };
 
 // ==================== SHIFTS API ====================

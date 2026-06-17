@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { UserPlus, Pencil, Trash2 } from "lucide-react";
+import { UserPlus, Pencil, Trash2, RotateCcw } from "lucide-react";
 import {
   ambulanceApi,
   ambulanceStaffApi,
@@ -327,6 +327,22 @@ export default function AmbulanceManagement() {
                   </Badge>
                 </Td>
                 <Td className="text-right whitespace-nowrap">
+                  {a.status === "on_dispatch" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="px-2 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+                      title="Free ambulance (cancel its dispatch)"
+                      aria-label="Free ambulance"
+                      onClick={async () => {
+                        if (!confirm("Cancel this ambulance's active dispatch and free it?")) return;
+                        await ambulanceApi.free(a._id);
+                        load();
+                      }}
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
