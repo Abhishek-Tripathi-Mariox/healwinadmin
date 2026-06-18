@@ -157,6 +157,12 @@ const Sidebar: React.FC<SidebarProps> = ({
       path: "/admin/bookings",
     },
     {
+      id: "patient-orders",
+      label: "Patient Orders",
+      icon: ClipboardList,
+      path: "/admin/patient-orders",
+    },
+    {
       id: "users-group",
       label: "Users",
       icon: Users,

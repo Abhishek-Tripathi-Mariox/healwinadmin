@@ -2139,6 +2139,41 @@ export const staffRecordsApi = {
     }),
 };
 
+// Patient-app commerce inbox — doctor consultations, lab bookings, pharmacy orders.
+export const patientCommerceApi = {
+  consultations: (params?: Record<string, string>) =>
+    fetchWithAuth(`/admin/patient-commerce/consultations${qstr(params)}`),
+  setConsultationStatus: (id: string, status: string) =>
+    fetchWithAuth(`/admin/patient-commerce/consultations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  rescheduleConsultation: (id: string, date: string, slot: string) =>
+    fetchWithAuth(`/admin/patient-commerce/consultations/${id}/reschedule`, {
+      method: "PATCH",
+      body: JSON.stringify({ date, slot }),
+    }),
+  labBookings: (params?: Record<string, string>) =>
+    fetchWithAuth(`/admin/patient-commerce/lab-bookings${qstr(params)}`),
+  setLabBookingStatus: (id: string, status: string) =>
+    fetchWithAuth(`/admin/patient-commerce/lab-bookings/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  rescheduleLabBooking: (id: string, date: string, slot: string) =>
+    fetchWithAuth(`/admin/patient-commerce/lab-bookings/${id}/reschedule`, {
+      method: "PATCH",
+      body: JSON.stringify({ date, slot }),
+    }),
+  pharmacyOrders: (params?: Record<string, string>) =>
+    fetchWithAuth(`/admin/patient-commerce/pharmacy-orders${qstr(params)}`),
+  setPharmacyOrderStatus: (id: string, status: string) =>
+    fetchWithAuth(`/admin/patient-commerce/pharmacy-orders/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+};
+
 export default {
   staffRecords: staffRecordsApi,
   sosSubmissions: sosSubmissionApi,
