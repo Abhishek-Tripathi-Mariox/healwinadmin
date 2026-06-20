@@ -28,6 +28,9 @@ interface Row {
   scheduledAt?: string;
   slotLabel?: string;
   slotTime?: string;
+  summary?: string; // consultation
+  reportUrl?: string; // lab
+  reportNotes?: string; // lab
   // consultation
   doctorName?: string;
   speciality?: string;
@@ -88,6 +91,10 @@ export default function PatientOrders() {
   const [flash, setFlash] = useState(false);
   const [rsDate, setRsDate] = useState("");
   const [rsTime, setRsTime] = useState("");
+  const [summary, setSummary] = useState("");
+  const [reportNotes, setReportNotes] = useState("");
+  const [reportFile, setReportFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const canSchedule = tab === "consultations" || tab === "lab-bookings";
 
@@ -152,6 +159,37 @@ export default function PatientOrders() {
     setSelected(r);
     setRsDate("");
     setRsTime("");
+    setSummary(r.summary || "");
+    setReportNotes(r.reportNotes || "");
+    setReportFile(null);
+  };
+
+  const saveSummary = async (id: string) => {
+    if (!summary.trim() || saving) return;
+    setSaving(true);
+    try {
+      const res = await patientCommerceApi.setConsultationSummary(id, summary.trim());
+      if (res.data?.item) setSelected(res.data.item as Row);
+      load();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveReport = async (id: string) => {
+    if ((!reportNotes.trim() && !reportFile) || saving) return;
+    setSaving(true);
+    try {
+      const form = new FormData();
+      if (reportNotes.trim()) form.append("reportNotes", reportNotes.trim());
+      if (reportFile) form.append("file", reportFile);
+      const res = await patientCommerceApi.setLabReport(id, form);
+      if (res.data?.item) setSelected(res.data.item as Row);
+      setReportFile(null);
+      load();
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -307,6 +345,59 @@ export default function PatientOrders() {
                     {selected.slotLabel ? "Reschedule" : "Set time"}
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Consultation summary — what the doctor advised */}
+            {tab === "consultations" && (
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="mb-1 text-sm font-medium text-gray-700">Consultation summary</div>
+                <textarea
+                  value={summary}
+                  onChange={(e) => setSummary(e.target.value)}
+                  rows={4}
+                  placeholder="What was discussed / advised / prescribed to the patient…"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <button
+                  disabled={!summary.trim() || saving}
+                  onClick={() => saveSummary(selected._id)}
+                  className="mt-2 h-9 rounded-lg bg-green-600 px-4 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {selected.summary ? "Update summary" : "Save & complete"}
+                </button>
+              </div>
+            )}
+
+            {/* Lab report — upload a file and/or type findings */}
+            {tab === "lab-bookings" && (
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="mb-1 text-sm font-medium text-gray-700">Lab report</div>
+                {selected.reportUrl && (
+                  <a href={selected.reportUrl} target="_blank" rel="noreferrer" className="mb-2 block text-sm text-blue-600 underline">
+                    View current report
+                  </a>
+                )}
+                <textarea
+                  value={reportNotes}
+                  onChange={(e) => setReportNotes(e.target.value)}
+                  rows={3}
+                  placeholder="Findings / what problem was detected…"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setReportFile(e.target.files?.[0] || null)}
+                  className="mt-2 block w-full text-sm"
+                />
+                <button
+                  disabled={(!reportNotes.trim() && !reportFile) || saving}
+                  onClick={() => saveReport(selected._id)}
+                  className="mt-2 h-9 rounded-lg bg-green-600 px-4 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {saving ? "Saving…" : "Save report (mark ready)"}
+                </button>
               </div>
             )}
 

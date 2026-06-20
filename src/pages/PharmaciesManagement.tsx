@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { pharmacyApi } from "../services/admin-api";
+import MapPicker from "../components/MapPicker";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
 import {
@@ -359,20 +360,29 @@ export default function PharmaciesManagement() {
               onChange={(e) => setForm({ ...form, services: e.target.value })}
             />
           </Field>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Field label="Latitude">
-              <Input
-                value={form.lat}
-                onChange={(e) => setForm({ ...form, lat: e.target.value })}
-              />
-            </Field>
-            <Field label="Longitude">
-              <Input
-                value={form.lng}
-                onChange={(e) => setForm({ ...form, lng: e.target.value })}
-              />
-            </Field>
-          </div>
+
+          <Field label="Location (search an address, click the map, or use current location)">
+            <MapPicker
+              value={{ lat: Number(form.lat) || 0, lng: Number(form.lng) || 0, address: form.address }}
+              onChange={(loc) =>
+                setForm({
+                  ...form,
+                  lat: String(loc.lat),
+                  lng: String(loc.lng),
+                  // Fill the address from the picked place if the field is empty.
+                  address: form.address.trim() ? form.address : loc.address || form.address,
+                })
+              }
+            />
+            <div className="mt-2 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Field label="Latitude">
+                <Input value={form.lat} onChange={(e) => setForm({ ...form, lat: e.target.value })} className="bg-gray-50" />
+              </Field>
+              <Field label="Longitude">
+                <Input value={form.lng} onChange={(e) => setForm({ ...form, lng: e.target.value })} className="bg-gray-50" />
+              </Field>
+            </div>
+          </Field>
           <label className="flex items-center gap-2 text-sm text-gray-700">
             <input
               type="checkbox"

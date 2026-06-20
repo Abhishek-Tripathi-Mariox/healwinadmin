@@ -2139,6 +2139,27 @@ export const staffRecordsApi = {
     }),
 };
 
+// Geocoding helpers (address autocomplete + resolve to coords) for forms.
+export const geocodeApi = {
+  search: (q: string) => fetchWithAuth(`/admin/geocode/search?q=${encodeURIComponent(q)}`),
+  resolve: (opts: { placeId?: string; description?: string }) => {
+    const qs = new URLSearchParams();
+    if (opts.placeId) qs.set("placeId", opts.placeId);
+    if (opts.description) qs.set("description", opts.description);
+    return fetchWithAuth(`/admin/geocode/resolve?${qs.toString()}`);
+  },
+};
+
+// Help & Support FAQ management (patient-app Help screen).
+export const faqApi = {
+  list: () => fetchWithAuth(`/admin/faqs`),
+  create: (data: { question: string; answer: string; category?: string; sortOrder?: number; isActive?: boolean }) =>
+    fetchWithAuth(`/admin/faqs`, { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Record<string, unknown>) =>
+    fetchWithAuth(`/admin/faqs/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  remove: (id: string) => fetchWithAuth(`/admin/faqs/${id}`, { method: "DELETE" }),
+};
+
 // Patient-app commerce inbox — doctor consultations, lab bookings, pharmacy orders.
 export const patientCommerceApi = {
   consultations: (params?: Record<string, string>) =>
@@ -2153,6 +2174,11 @@ export const patientCommerceApi = {
       method: "PATCH",
       body: JSON.stringify({ date, slot }),
     }),
+  setConsultationSummary: (id: string, summary: string) =>
+    fetchWithAuth(`/admin/patient-commerce/consultations/${id}/summary`, {
+      method: "PATCH",
+      body: JSON.stringify({ summary }),
+    }),
   labBookings: (params?: Record<string, string>) =>
     fetchWithAuth(`/admin/patient-commerce/lab-bookings${qstr(params)}`),
   setLabBookingStatus: (id: string, status: string) =>
@@ -2164,6 +2190,12 @@ export const patientCommerceApi = {
     fetchWithAuth(`/admin/patient-commerce/lab-bookings/${id}/reschedule`, {
       method: "PATCH",
       body: JSON.stringify({ date, slot }),
+    }),
+  // Lab report: a file (FormData field `file`) and/or typed findings (`reportNotes`).
+  setLabReport: (id: string, form: FormData) =>
+    fetchWithAuthMultipart(`/admin/patient-commerce/lab-bookings/${id}/report`, {
+      method: "POST",
+      body: form,
     }),
   pharmacyOrders: (params?: Record<string, string>) =>
     fetchWithAuth(`/admin/patient-commerce/pharmacy-orders${qstr(params)}`),

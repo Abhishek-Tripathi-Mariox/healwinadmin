@@ -100,6 +100,7 @@ const AmbulanceStaffDetail = lazy(
 );
 const StaffAppRecords = lazy(() => import("./pages/StaffAppRecords"));
 const PatientOrders = lazy(() => import("./pages/PatientOrders"));
+const FaqManagement = lazy(() => import("./pages/FaqManagement"));
 const AmbulanceManagement = lazy(() => import("./pages/AmbulanceManagement"));
 const HospitalsManagement = lazy(() => import("./pages/HospitalsManagement"));
 const HospitalDetail = lazy(() => import("./pages/HospitalDetail"));
@@ -363,6 +364,12 @@ export const adminRoutes = [
     path: "patient-orders",
     element: PatientOrders,
     name: "Patient Orders",
+    icon: ClipboardList,
+  },
+  {
+    path: "help-faqs",
+    element: FaqManagement,
+    name: "Help FAQs",
     icon: ClipboardList,
   },
   {

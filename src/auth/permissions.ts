@@ -196,6 +196,7 @@ export const SIDEBAR_PERMISSION_MAP: Record<string, string[]> = {
   users: [PERMISSIONS.USERS_VIEW],
   bookings: [PERMISSIONS.SOS_VIEW],
   "patient-orders": [PERMISSIONS.SOS_VIEW],
+  "help-faqs": [PERMISSIONS.CMS_VIEW],
   "ambulance-pricing": [PERMISSIONS.SETTINGS_VIEW],
   "reports-bookings": [PERMISSIONS.REPORTS_VIEW],
   "reports-revenue": [PERMISSIONS.REPORTS_VIEW],
