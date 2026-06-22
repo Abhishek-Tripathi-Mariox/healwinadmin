@@ -38,6 +38,8 @@ const EVENTS: { event: string; title: string; route: string; tone: ActivityItem[
   { event: "consultation:new", title: "New consultation", route: "/admin/patient-orders", tone: "info" },
   { event: "lab-booking:new", title: "New lab booking", route: "/admin/patient-orders", tone: "info" },
   { event: "pharmacy-order:new", title: "New pharmacy order", route: "/admin/patient-orders", tone: "success" },
+  { event: "leave:new", title: "New leave request", route: "/admin/staff-records", tone: "warning" },
+  { event: "stock:new", title: "New stock request", route: "/admin/staff-records", tone: "warning" },
 ];
 
 const msgFor = (event: string, d: any): string => {
@@ -45,6 +47,8 @@ const msgFor = (event: string, d: any): string => {
   if (event === "pharmacy-order:new") return d?.totalAmount ? `Order · ₹${d.totalAmount}` : "New medicine order";
   if (event === "lab-booking:new") return d?.totalAmount ? `Tests · ₹${d.totalAmount}` : "New lab tests booking";
   if (event === "consultation:new") return name ? `Dr. ${name}` : "Doctor consultation requested";
+  if (event === "leave:new") return d?.staffName ? `${d.staffName} · ${d.type || "leave"}` : "Staff leave request";
+  if (event === "stock:new") return d?.staffName ? `${d.staffName} · stock request` : "Staff stock request";
   return name || "Tap to view";
 };
 

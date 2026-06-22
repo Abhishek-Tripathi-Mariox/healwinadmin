@@ -4,6 +4,7 @@ import { Toaster } from "react-hot-toast";
 import Sidebar from "../components/Layout/Sidebar";
 import Header from "../components/Layout/Header";
 import SosRealtime from "../components/SosRealtime";
+import StaffActivityRealtime from "../components/StaffActivityRealtime";
 
 const AdminLayout: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -13,6 +14,7 @@ const AdminLayout: React.FC = () => {
     <div className="flex h-screen bg-gradient-to-b from-sky-100 via-sky-50 to-white">
       {/* Real-time SOS/ambulance alerts (toast + chime) + toast host */}
       <SosRealtime />
+      <StaffActivityRealtime />
       <Toaster position="top-right" />
       <Sidebar
         isMobileMenuOpen={isMobileMenuOpen}

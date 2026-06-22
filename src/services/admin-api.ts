@@ -2110,6 +2110,28 @@ export const homePromoApi = {
     fetchWithAuth(`/admin/home-promos/${id}`, { method: "DELETE" }),
 };
 
+// Discount coupons (logistics + ambulance). Distinct from homePromoApi, which
+// manages the patient-app home shortcut cards.
+export const promoApi = {
+  list: (params: Record<string, string | undefined> = {}) => {
+    const clean = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v != null && v !== ""),
+    ) as Record<string, string>;
+    const q = new URLSearchParams(clean).toString();
+    return fetchWithAuth(`/admin/promos${q ? `?${q}` : ""}`);
+  },
+  get: (id: string) => fetchWithAuth(`/admin/promos/${id}`),
+  create: (data: Record<string, unknown>) =>
+    fetchWithAuth(`/admin/promos`, { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Record<string, unknown>) =>
+    fetchWithAuth(`/admin/promos/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  toggle: (id: string) =>
+    fetchWithAuth(`/admin/promos/${id}/toggle`, { method: "PATCH" }),
+  remove: (id: string) =>
+    fetchWithAuth(`/admin/promos/${id}`, { method: "DELETE" }),
+  stats: (id: string) => fetchWithAuth(`/admin/promos/${id}/stats`),
+};
+
 // Records created by the ambulance-staff (attendant) app: staff-registered
 // patients, case notes, stock requests and leave applications.
 const qstr = (params: Record<string, string | undefined> = {}) => {

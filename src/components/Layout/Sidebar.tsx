@@ -427,6 +427,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           path: "/admin/home-promos",
         },
         {
+          id: "promo-codes",
+          label: "Promo Codes",
+          icon: Image,
+          path: "/admin/promo-codes",
+        },
+        {
           id: "membership-plans",
           label: "Membership Plans",
           icon: ClipboardList,

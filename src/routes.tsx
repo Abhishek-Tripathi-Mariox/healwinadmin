@@ -30,6 +30,7 @@ import {
   Pill,
   Receipt,
   Shield,
+  TicketPercent,
   UserCog,
   Users,
   Wallet,
@@ -142,6 +143,7 @@ const CatalogManagement = lazy(() => import("./pages/CatalogManagement"));
 const AmbulanceRequestsManagement = lazy(() => import("./pages/AmbulanceRequestsManagement"));
 const MembershipPlansManagement = lazy(() => import("./pages/MembershipPlansManagement"));
 const HomePromosManagement = lazy(() => import("./pages/HomePromosManagement"));
+const PromoCodesManagement = lazy(() => import("./pages/PromoCodesManagement"));
 // Reports
 const ReportsBookings = lazy(() => import("./pages/ReportsBookings"));
 const ReportsRevenue = lazy(() => import("./pages/ReportsRevenue"));
@@ -536,6 +538,12 @@ export const adminRoutes = [
     element: HomePromosManagement,
     name: "Home Promos",
     icon: ImageIcon,
+  },
+  {
+    path: "promo-codes",
+    element: PromoCodesManagement,
+    name: "Promo Codes",
+    icon: TicketPercent,
   },
   {
     path: "reports/bookings",
