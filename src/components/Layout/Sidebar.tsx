@@ -151,12 +151,10 @@ const Sidebar: React.FC<SidebarProps> = ({
       icon: PhoneCall,
       path: "/admin/ivr-escalations",
     },
-    {
-      id: "bookings",
-      label: "Bookings",
-      icon: ClipboardList,
-      path: "/admin/bookings",
-    },
+    // Legacy ride-hailing "Bookings" (Booking model) — hidden from the nav.
+    // The current ambulance flow lives entirely under "Ambulance Requests"
+    // (+ SOS Dashboard). The /admin/bookings route still exists for any old
+    // enterprise/cab records, just not surfaced in the sidebar.
     {
       id: "patient-orders",
       label: "Patient Orders",

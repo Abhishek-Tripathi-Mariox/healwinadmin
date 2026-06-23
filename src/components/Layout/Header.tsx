@@ -40,6 +40,9 @@ const EVENTS: { event: string; title: string; route: string; tone: ActivityItem[
   { event: "pharmacy-order:new", title: "New pharmacy order", route: "/admin/patient-orders", tone: "success" },
   { event: "leave:new", title: "New leave request", route: "/admin/staff-records", tone: "warning" },
   { event: "stock:new", title: "New stock request", route: "/admin/staff-records", tone: "warning" },
+  // Only patient/driver replies reach the admin room (emitToAdmin), so this
+  // never fires for the admin's own replies.
+  { event: "support:message", title: "Support ticket reply", route: "/admin/support-tickets", tone: "info" },
 ];
 
 const msgFor = (event: string, d: any): string => {
@@ -49,6 +52,7 @@ const msgFor = (event: string, d: any): string => {
   if (event === "consultation:new") return name ? `Dr. ${name}` : "Doctor consultation requested";
   if (event === "leave:new") return d?.staffName ? `${d.staffName} · ${d.type || "leave"}` : "Staff leave request";
   if (event === "stock:new") return d?.staffName ? `${d.staffName} · stock request` : "Staff stock request";
+  if (event === "support:message") return d?.message ? `${d.ticketId ? d.ticketId + " · " : ""}${String(d.message).slice(0, 40)}` : "New reply on a ticket";
   return name || "Tap to view";
 };
 

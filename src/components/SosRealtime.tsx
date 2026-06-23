@@ -41,14 +41,20 @@ const getCtx = (): AudioContext | null => {
  */
 export const unlockAlarmAudio = () => {
   const c = getCtx();
-  if (c && c.state === "suspended") void c.resume();
+  if (c && c.state !== "running") void c.resume();
 };
 
-const beep = () => {
+const beep = async () => {
   try {
     const c = getCtx();
     if (!c) return;
-    if (c.state === "suspended") void c.resume();
+    // Browsers suspend the AudioContext after inactivity. AWAIT the resume so
+    // tones are scheduled on a RUNNING context — scheduling on a suspended one
+    // (the old fire-and-forget `void resume()`) produced no sound.
+    if (c.state !== "running") {
+      await c.resume();
+      if (c.state !== "running") return;
+    }
     ctx = c;
     const tone = (freq: number, start: number, dur: number) => {
       const osc = ctx!.createOscillator();
@@ -59,13 +65,17 @@ const beep = () => {
       osc.frequency.value = freq;
       const t0 = ctx!.currentTime + start;
       gain.gain.setValueAtTime(0.0001, t0);
-      gain.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.6, t0 + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
       osc.start(t0);
       osc.stop(t0 + dur);
     };
-    tone(880, 0, 0.22);
-    tone(660, 0.25, 0.28);
+    // Louder two-tone "hi-lo" siren, repeated twice so each ring lasts ~1.3s
+    // and is clearly audible across the room.
+    tone(1000, 0, 0.28);
+    tone(740, 0.3, 0.3);
+    tone(1000, 0.65, 0.28);
+    tone(740, 0.95, 0.3);
   } catch {
     /* audio unavailable */
   }
@@ -80,11 +90,12 @@ export const SosRealtime: React.FC = () => {
   // alarm can sound by itself when an SOS arrives (browsers block autoplay
   // until a user gesture has happened).
   useEffect(() => {
+    // Keep the audio context warm on EVERY interaction (not just the first) —
+    // browsers re-suspend it after idle, and a one-shot unlock then went silent.
     const unlock = () => unlockAlarmAudio();
-    const opts = { once: true } as AddEventListenerOptions;
-    window.addEventListener("pointerdown", unlock, opts);
-    window.addEventListener("keydown", unlock, opts);
-    window.addEventListener("touchstart", unlock, opts);
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    window.addEventListener("touchstart", unlock);
     return () => {
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
@@ -133,8 +144,8 @@ export const SosRealtime: React.FC = () => {
   useEffect(() => {
     if (items.length > 0) {
       if (!alarm.current) {
-        beep();
-        alarm.current = setInterval(beep, 1800);
+        void beep();
+        alarm.current = setInterval(() => void beep(), 1500);
       }
     } else if (alarm.current) {
       clearInterval(alarm.current);

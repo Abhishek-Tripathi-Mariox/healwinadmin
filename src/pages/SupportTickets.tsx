@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supportApi } from "../services/admin-api";
+import { adminSocket } from "../services/socket";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
 } from "../components/ui";
@@ -78,6 +79,19 @@ export default function SupportTickets() {
   }, [statusFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Live: a patient/driver reply pushes `support:message` to the admin room —
+  // refresh the list, and the open thread if it's the same ticket.
+  useEffect(() => {
+    adminSocket.connect();
+    const off = adminSocket.on("support:message", (d: { ticketId?: string }) => {
+      load();
+      if (active && d?.ticketId === active.ticketId) {
+        supportApi.ticket(active.ticketId).then((res) => setMessages(res.data?.messages || []));
+      }
+    });
+    return off;
+  }, [load, active]);
 
   const openTicket = async (t: Ticket) => {
     setActive(t);
