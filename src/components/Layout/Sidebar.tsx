@@ -13,6 +13,7 @@ import {
   CalendarDays,
   ChevronDown,
   ClipboardList,
+  LifeBuoy,
   Clock,
   FileText,
   FolderOpen,
@@ -167,6 +168,12 @@ const Sidebar: React.FC<SidebarProps> = ({
       label: "Help FAQs",
       icon: ClipboardList,
       path: "/admin/help-faqs",
+    },
+    {
+      id: "support-tickets",
+      label: "Support Tickets",
+      icon: LifeBuoy,
+      path: "/admin/support-tickets",
     },
     {
       id: "users-group",

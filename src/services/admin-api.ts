@@ -2142,7 +2142,27 @@ const qstr = (params: Record<string, string | undefined> = {}) => {
   return q ? `?${q}` : "";
 };
 
+export const supportApi = {
+  tickets: (params?: Record<string, string>) =>
+    fetchWithAuth(`/admin/support/tickets${qstr(params)}`),
+  ticket: (ticketId: string) =>
+    fetchWithAuth(`/admin/support/tickets/${ticketId}`),
+  stats: () => fetchWithAuth(`/admin/support/stats`),
+  reply: (ticketId: string, message: string) =>
+    fetchWithAuth(`/admin/support/tickets/${ticketId}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }),
+  setStatus: (ticketId: string, status: string, resolution?: string) =>
+    fetchWithAuth(`/admin/support/tickets/${ticketId}/status`, {
+      method: "PUT",
+      body: JSON.stringify({ status, resolution }),
+    }),
+};
+
 export const staffRecordsApi = {
+  patients: (params?: Record<string, string>) =>
+    fetchWithAuth(`/admin/staff-records/patients${qstr(params)}`),
   caseNotes: (params?: Record<string, string>) =>
     fetchWithAuth(`/admin/staff-records/case-notes${qstr(params)}`),
   stockRequests: (params?: Record<string, string>) =>

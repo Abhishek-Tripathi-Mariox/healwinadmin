@@ -13,6 +13,7 @@ import {
   Car,
   IndianRupee,
   ClipboardList,
+  LifeBuoy,
   Clock,
   FileText,
   FolderOpen,
@@ -100,6 +101,7 @@ const AmbulanceStaffDetail = lazy(
   () => import("./pages/AmbulanceStaffDetail"),
 );
 const StaffAppRecords = lazy(() => import("./pages/StaffAppRecords"));
+const SupportTickets = lazy(() => import("./pages/SupportTickets"));
 const PatientOrders = lazy(() => import("./pages/PatientOrders"));
 const FaqManagement = lazy(() => import("./pages/FaqManagement"));
 const AmbulanceManagement = lazy(() => import("./pages/AmbulanceManagement"));
@@ -361,6 +363,12 @@ export const adminRoutes = [
     element: StaffAppRecords,
     name: "Staff App Records",
     icon: ClipboardList,
+  },
+  {
+    path: "support-tickets",
+    element: SupportTickets,
+    name: "Support Tickets",
+    icon: LifeBuoy,
   },
   {
     path: "patient-orders",

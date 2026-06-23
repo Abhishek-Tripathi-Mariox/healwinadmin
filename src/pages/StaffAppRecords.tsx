@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { staffRecordsApi } from "../services/admin-api";
+import { adminSocket } from "../services/socket";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
 } from "../components/ui";
@@ -14,12 +15,21 @@ import {
  * (tagged source: ambulance_staff).
  */
 
-type Tab = "case-notes" | "stock-requests" | "leaves";
+type Tab = "patients" | "case-notes" | "stock-requests" | "leaves";
 
 interface Staff {
   _id?: string;
   fullName?: string;
   mobileNumber?: string;
+}
+interface PatientRow {
+  _id: string;
+  patientId?: string;
+  fullName?: string;
+  phone?: string;
+  gender?: string;
+  registeredByStaffId?: Staff | string;
+  createdAt?: string;
 }
 interface CaseNoteRow {
   _id: string;
@@ -51,6 +61,7 @@ interface LeaveRow {
 }
 
 const TABS: { key: Tab; label: string }[] = [
+  { key: "patients", label: "Patients" },
   { key: "case-notes", label: "Case Notes" },
   { key: "stock-requests", label: "Stock Requests" },
   { key: "leaves", label: "Leaves" },
@@ -71,8 +82,9 @@ const fmtDate = (d?: string) =>
   d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 export default function StaffAppRecords() {
-  const [tab, setTab] = useState<Tab>("case-notes");
+  const [tab, setTab] = useState<Tab>("patients");
   const [loading, setLoading] = useState(false);
+  const [patients, setPatients] = useState<PatientRow[]>([]);
   const [caseNotes, setCaseNotes] = useState<CaseNoteRow[]>([]);
   const [stock, setStock] = useState<StockRow[]>([]);
   const [leaves, setLeaves] = useState<LeaveRow[]>([]);
@@ -80,7 +92,8 @@ export default function StaffAppRecords() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      if (tab === "case-notes") setCaseNotes((await staffRecordsApi.caseNotes()).data?.items || []);
+      if (tab === "patients") setPatients((await staffRecordsApi.patients()).data?.items || []);
+      else if (tab === "case-notes") setCaseNotes((await staffRecordsApi.caseNotes()).data?.items || []);
       else if (tab === "stock-requests") setStock((await staffRecordsApi.stockRequests()).data?.items || []);
       else if (tab === "leaves") setLeaves((await staffRecordsApi.leaves()).data?.items || []);
     } finally {
@@ -90,6 +103,21 @@ export default function StaffAppRecords() {
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  // Live refresh: the staff app emits leave:new / stock:new when a record is
+  // submitted, plus a 20s poll so the current tab never goes stale without a
+  // manual Refresh.
+  useEffect(() => {
+    adminSocket.connect();
+    const offLeave = adminSocket.on("leave:new", load);
+    const offStock = adminSocket.on("stock:new", load);
+    const poll = setInterval(load, 20000);
+    return () => {
+      offLeave();
+      offStock();
+      clearInterval(poll);
+    };
   }, [load]);
 
   const setStockStatus = async (id: string, status: string) => {
@@ -116,6 +144,35 @@ export default function StaffAppRecords() {
           </Button>
         ))}
       </div>
+
+      {tab === "patients" && (
+        <Table>
+          <THead>
+            <Th>Patient ID</Th><Th>Name</Th><Th>Phone</Th><Th>Gender</Th><Th>Registered by</Th><Th>Date</Th>
+          </THead>
+          <TBody>
+            {loading && patients.length === 0 ? (
+              <TableState colSpan={6}>Loading…</TableState>
+            ) : patients.length === 0 ? (
+              <TableState colSpan={6}>No patients registered from the staff app.</TableState>
+            ) : (
+              patients.map((p) => (
+                <TR key={p._id}>
+                  <Td className="text-xs text-gray-500">{p.patientId || "—"}</Td>
+                  <Td className="text-sm text-gray-800">{p.fullName || "—"}</Td>
+                  <Td className="text-xs text-gray-600">{p.phone || "—"}</Td>
+                  <Td className="text-xs text-gray-600 capitalize">{p.gender || "—"}</Td>
+                  <Td className="text-xs text-gray-500">
+                    {staffName(p.registeredByStaffId)}
+                    {staffPhone(p.registeredByStaffId) && <div className="text-gray-400">{staffPhone(p.registeredByStaffId)}</div>}
+                  </Td>
+                  <Td className="text-xs text-gray-500">{fmtDate(p.createdAt)}</Td>
+                </TR>
+              ))
+            )}
+          </TBody>
+        </Table>
+      )}
 
       {tab === "case-notes" && (
         <Table>
