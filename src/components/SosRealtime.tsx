@@ -87,6 +87,8 @@ export const SosRealtime: React.FC = () => {
   const navigate = useNavigate();
   const [items, setItems] = useState<SosItem[]>([]);
   const alarm = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const alarming = useRef(false);
 
   // Unlock audio on the dispatcher's first interaction with the page so the
   // alarm can sound by itself when an SOS arrives (browsers block autoplay
@@ -94,7 +96,17 @@ export const SosRealtime: React.FC = () => {
   useEffect(() => {
     // Keep the audio context warm on EVERY interaction (not just the first) —
     // browsers re-suspend it after idle, and a one-shot unlock then went silent.
-    const unlock = () => unlockAlarmAudio();
+    const unlock = () => {
+      unlockAlarmAudio();
+      // Prime the <audio> element too so it can play on its own when an SOS
+      // arrives (autoplay needs a prior user gesture). Muted play+pause primes
+      // it without making noise.
+      const a = audioRef.current;
+      if (a && a.paused && !alarming.current) {
+        a.muted = true;
+        a.play().then(() => { a.pause(); a.currentTime = 0; a.muted = false; }).catch(() => { a.muted = false; });
+      }
+    };
     window.addEventListener("pointerdown", unlock);
     window.addEventListener("keydown", unlock);
     window.addEventListener("touchstart", unlock);
@@ -142,26 +154,32 @@ export const SosRealtime: React.FC = () => {
     };
   }, []);
 
-  // Loop the alarm while any alert is unacknowledged.
+  // Loop the alarm while any alert is unacknowledged. Primary = the looping
+  // siren <audio>; if that's blocked/missing, fall back to Web Audio beeps.
   useEffect(() => {
-    if (items.length > 0) {
-      if (!alarm.current) {
-        void beep();
-        alarm.current = setInterval(() => void beep(), 1500);
-      }
-    } else if (alarm.current) {
-      clearInterval(alarm.current);
-      alarm.current = null;
-    }
-    return () => {
-      if (items.length === 0 && alarm.current) {
-        clearInterval(alarm.current);
-        alarm.current = null;
-      }
+    const startBeeps = () => {
+      if (alarm.current) return;
+      void beep();
+      alarm.current = setInterval(() => void beep(), 1500);
     };
+    if (items.length > 0 && !alarming.current) {
+      alarming.current = true;
+      const a = audioRef.current;
+      if (a) {
+        a.muted = false;
+        a.currentTime = 0;
+        a.loop = true;
+        a.play().catch(startBeeps); // autoplay blocked / file missing → beeps
+      } else {
+        startBeeps();
+      }
+    } else if (items.length === 0 && alarming.current) {
+      alarming.current = false;
+      const a = audioRef.current;
+      if (a) { a.pause(); a.currentTime = 0; }
+      if (alarm.current) { clearInterval(alarm.current); alarm.current = null; }
+    }
   }, [items]);
-
-  if (items.length === 0) return null;
 
   const dismiss = (id: string) => setItems((prev) => prev.filter((p) => p.id !== id));
   const dispatch = (id: string) => {
@@ -170,6 +188,10 @@ export const SosRealtime: React.FC = () => {
   };
 
   return (
+    <>
+      {/* Always mounted so a user gesture can prime it before any SOS arrives. */}
+      <audio ref={audioRef} src="/sos-alarm.wav" loop preload="auto" />
+      {items.length > 0 && (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
       role="alertdialog"
@@ -227,6 +249,8 @@ export const SosRealtime: React.FC = () => {
         </div>
       </div>
     </div>
+      )}
+    </>
   );
 };
 
