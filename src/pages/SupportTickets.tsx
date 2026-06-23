@@ -84,7 +84,8 @@ export default function SupportTickets() {
   // refresh the list, and the open thread if it's the same ticket.
   useEffect(() => {
     adminSocket.connect();
-    const off = adminSocket.on("support:message", (d: { ticketId?: string }) => {
+    const off = adminSocket.on("support:message", (data: unknown) => {
+      const d = (data || {}) as { ticketId?: string };
       load();
       if (active && d?.ticketId === active.ticketId) {
         supportApi.ticket(active.ticketId).then((res) => setMessages(res.data?.messages || []));

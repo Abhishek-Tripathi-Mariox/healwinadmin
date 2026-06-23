@@ -51,9 +51,11 @@ const beep = async () => {
     // Browsers suspend the AudioContext after inactivity. AWAIT the resume so
     // tones are scheduled on a RUNNING context — scheduling on a suspended one
     // (the old fire-and-forget `void resume()`) produced no sound.
-    if (c.state !== "running") {
+    // Cast to string so TS doesn't narrow `state` across the await (the union
+    // has no "running" overlap otherwise, which fails the build).
+    if ((c.state as string) !== "running") {
       await c.resume();
-      if (c.state !== "running") return;
+      if ((c.state as string) !== "running") return;
     }
     ctx = c;
     const tone = (freq: number, start: number, dur: number) => {
