@@ -747,6 +747,34 @@ const UserDetailDrawer: React.FC<{
           </div>
         </div>
 
+        {!loading && (
+          <div>
+            <h3 className="flex items-center gap-2 mb-2 text-sm font-semibold text-gray-700">
+              <Phone className="w-4 h-4" />
+              Emergency Contacts ({detail?.emergencyContacts?.length ?? 0})
+            </h3>
+            <div className="space-y-2">
+              {(detail?.emergencyContacts ?? []).length === 0 ? (
+                <p className="text-xs text-gray-400">No emergency contacts added in the app.</p>
+              ) : (
+                (detail?.emergencyContacts ?? []).map((c: any) => (
+                  <div key={c._id} className="flex items-center justify-between p-3 text-xs border rounded-lg text-gray-700">
+                    <div>
+                      <p className="font-medium text-gray-800">{c.name}</p>
+                      <p className="text-gray-400">{c.phone}</p>
+                    </div>
+                    {c.relationship && (
+                      <span className="inline-block px-2 py-0.5 text-[10px] font-medium rounded-full bg-healwin-50 text-healwin-700 capitalize">
+                        {String(c.relationship).toLowerCase()}
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <p className="flex items-center gap-2 text-xs text-gray-400">
             <Spinner className="h-4 w-4" />
