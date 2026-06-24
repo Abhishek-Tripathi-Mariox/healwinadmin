@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supportApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
@@ -11,12 +11,13 @@ import {
  * (POST /support/tickets). Lets ops read the thread, reply, and change status.
  */
 
-interface Person { fullName?: string; mobileNumber?: string }
+interface Person { fullName?: string; mobileNumber?: string; role?: string }
 interface Ticket {
   _id: string;
   ticketId: string;
   userId?: Person | string;
   driverId?: Person | string;
+  staffId?: Person | string;
   category: string;
   subject: string;
   description?: string;
@@ -54,6 +55,23 @@ const priorityTone: Record<string, "warning" | "info" | "success" | "neutral" | 
 
 const who = (p?: Person | string) =>
   p && typeof p === "object" ? p.fullName || p.mobileNumber || "—" : "—";
+
+// Which app raised the ticket — patient (userId), driver (driverId) or
+// ambulance staff (staffId). Returns the name plus a human role label.
+const requester = (t: Pick<Ticket, "userId" | "driverId" | "staffId">) => {
+  if (who(t.userId) !== "—") return { name: who(t.userId), role: "Patient" };
+  if (who(t.driverId) !== "—") return { name: who(t.driverId), role: "Driver" };
+  if (who(t.staffId) !== "—") {
+    const sub = typeof t.staffId === "object" ? t.staffId.role : "";
+    return { name: who(t.staffId), role: sub ? `Staff · ${sub}` : "Staff" };
+  }
+  return { name: "—", role: "" };
+};
+const roleTone: Record<string, "info" | "warning" | "success" | "neutral"> = {
+  Patient: "info",
+  Driver: "warning",
+  Staff: "success",
+};
 const fmt = (d?: string) =>
   d ? new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
 
@@ -63,6 +81,12 @@ export default function SupportTickets() {
   const [statusFilter, setStatusFilter] = useState("");
   const [active, setActive] = useState<Ticket | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  // Keep the thread pinned to the newest message (on open + on every new reply).
+  const threadRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = threadRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, active?._id]);
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
   // Status-change prompt (resolve/close/reopen) that captures a reason.
@@ -191,7 +215,19 @@ export default function SupportTickets() {
             tickets.map((t) => (
               <TR key={t._id} className="cursor-pointer hover:bg-gray-50" onClick={() => openTicket(t)}>
                 <Td className="text-xs font-medium text-gray-700">{t.ticketId}</Td>
-                <Td className="text-xs text-gray-600">{who(t.userId) !== "—" ? who(t.userId) : who(t.driverId)}</Td>
+                <Td className="text-xs text-gray-600">
+                  {(() => {
+                    const r = requester(t);
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        <span>{r.name}</span>
+                        {r.role && (
+                          <Badge tone={roleTone[r.role.split(" ")[0]] || "neutral"}>{r.role}</Badge>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </Td>
                 <Td className="text-xs text-gray-500">{t.category}</Td>
                 <Td className="text-sm text-gray-800 max-w-xs truncate">{t.subject}</Td>
                 <Td><Badge tone={priorityTone[t.priority] || "neutral"}>{t.priority}</Badge></Td>
@@ -210,7 +246,12 @@ export default function SupportTickets() {
               <div className="min-w-0">
                 <p className="text-xs text-gray-400">{active.ticketId} · {active.category}</p>
                 <p className="truncate font-semibold text-gray-900">{active.subject}</p>
-                <p className="mt-1 text-xs text-gray-500">{who(active.userId) !== "—" ? who(active.userId) : who(active.driverId)}</p>
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">
+                  <span>{requester(active).name}</span>
+                  {requester(active).role && (
+                    <Badge tone={roleTone[requester(active).role.split(" ")[0]] || "neutral"}>{requester(active).role}</Badge>
+                  )}
+                </p>
               </div>
               <button onClick={() => setActive(null)} className="rounded-full p-1 text-gray-400 hover:bg-gray-100">✕</button>
             </div>
@@ -260,7 +301,7 @@ export default function SupportTickets() {
               )}
             </div>
 
-            <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+            <div ref={threadRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
               {active.description && (
                 <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700">{active.description}</div>
               )}
