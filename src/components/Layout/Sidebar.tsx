@@ -197,7 +197,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             },
             {
               id: "ambulance-staff",
-              label: "Drivers",
+              label: "Drivers & Attendants",
               icon: Users,
               path: "/admin/ambulance-staff",
             },

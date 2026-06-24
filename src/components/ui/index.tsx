@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 
 /**
  * Healwin Admin — shared UI kit (Modern SaaS look, Healwin-blue accent).
@@ -362,9 +363,11 @@ export const Modal: React.FC<{
   children: React.ReactNode;
 }> = ({ open, onClose, title, subtitle, size = "md", footer, children }) => {
   if (!open) return null;
-  return (
+  // Render to <body> so the overlay escapes the scrollable <main> container —
+  // otherwise the sticky page header paints over the modal's top edge.
+  return createPortal(
     <div
-      className="animate-backdrop-in fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-gray-900/50 p-4 backdrop-blur-sm"
+      className="animate-backdrop-in fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-gray-900/50 p-4 backdrop-blur-sm"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
@@ -401,6 +404,7 @@ export const Modal: React.FC<{
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
