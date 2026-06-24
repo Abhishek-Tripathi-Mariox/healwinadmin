@@ -106,7 +106,12 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
               title: e.title,
               message: msgFor(e.event, d),
               tone: e.tone,
-              route: e.route,
+              // For a support reply, deep-link to the exact ticket so clicking
+              // the notification opens that chat window (not just the list).
+              route:
+                e.event === "support:message" && d?.ticketId
+                  ? `/admin/support-tickets?ticket=${encodeURIComponent(d.ticketId)}`
+                  : e.route,
               at: Date.now(),
             },
             ...prev,

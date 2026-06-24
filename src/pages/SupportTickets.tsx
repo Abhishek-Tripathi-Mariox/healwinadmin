@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supportApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
 import {
@@ -104,6 +105,19 @@ export default function SupportTickets() {
     setMessages(res.data?.messages || []);
     if (res.data?.ticket) setActive(res.data.ticket);
   };
+
+  // Deep-link: opening /admin/support-tickets?ticket=TKT… (e.g. from the bell
+  // notification) auto-opens that ticket's chat window.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const tid = searchParams.get("ticket");
+    if (!tid) return;
+    void openTicket({ ticketId: tid } as Ticket);
+    // Clear the param so it doesn't re-open on every refresh.
+    searchParams.delete("ticket");
+    setSearchParams(searchParams, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const sendReply = async () => {
     if (!active || !reply.trim()) return;

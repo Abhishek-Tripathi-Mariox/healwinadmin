@@ -29,7 +29,8 @@ interface Row {
   slotLabel?: string;
   slotTime?: string;
   summary?: string; // consultation
-  reportUrl?: string; // lab
+  reportUrl?: string; // lab (legacy single-file)
+  reportFiles?: { url: string; label?: string; uploadedAt?: string }[]; // lab (multi-page)
   reportNotes?: string; // lab
   // consultation
   doctorName?: string;
@@ -93,7 +94,7 @@ export default function PatientOrders() {
   const [rsTime, setRsTime] = useState("");
   const [summary, setSummary] = useState("");
   const [reportNotes, setReportNotes] = useState("");
-  const [reportFile, setReportFile] = useState<File | null>(null);
+  const [reportFiles, setReportFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
 
   const canSchedule = tab === "consultations" || tab === "lab-bookings";
@@ -161,7 +162,7 @@ export default function PatientOrders() {
     setRsTime("");
     setSummary(r.summary || "");
     setReportNotes(r.reportNotes || "");
-    setReportFile(null);
+    setReportFiles([]);
   };
 
   const saveSummary = async (id: string) => {
@@ -177,15 +178,15 @@ export default function PatientOrders() {
   };
 
   const saveReport = async (id: string) => {
-    if ((!reportNotes.trim() && !reportFile) || saving) return;
+    if ((!reportNotes.trim() && reportFiles.length === 0) || saving) return;
     setSaving(true);
     try {
       const form = new FormData();
       if (reportNotes.trim()) form.append("reportNotes", reportNotes.trim());
-      if (reportFile) form.append("file", reportFile);
+      reportFiles.forEach((f) => form.append("file", f));
       const res = await patientCommerceApi.setLabReport(id, form);
       if (res.data?.item) setSelected(res.data.item as Row);
-      setReportFile(null);
+      setReportFiles([]);
       load();
     } finally {
       setSaving(false);
@@ -373,11 +374,29 @@ export default function PatientOrders() {
             {tab === "lab-bookings" && (
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="mb-1 text-sm font-medium text-gray-700">Lab report</div>
-                {selected.reportUrl && (
-                  <a href={selected.reportUrl} target="_blank" rel="noreferrer" className="mb-2 block text-sm text-blue-600 underline">
-                    View current report
-                  </a>
-                )}
+                {(() => {
+                  const current =
+                    selected.reportFiles && selected.reportFiles.length > 0
+                      ? selected.reportFiles
+                      : selected.reportUrl
+                        ? [{ url: selected.reportUrl, label: "Report" }]
+                        : [];
+                  return current.length > 0 ? (
+                    <div className="mb-2 space-y-1">
+                      {current.map((f, i) => (
+                        <a
+                          key={i}
+                          href={f.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block text-sm text-blue-600 underline"
+                        >
+                          📄 {f.label || `Page ${i + 1}`}
+                        </a>
+                      ))}
+                    </div>
+                  ) : null;
+                })()}
                 <textarea
                   value={reportNotes}
                   onChange={(e) => setReportNotes(e.target.value)}
@@ -388,11 +407,17 @@ export default function PatientOrders() {
                 <input
                   type="file"
                   accept="image/*,application/pdf"
-                  onChange={(e) => setReportFile(e.target.files?.[0] || null)}
+                  multiple
+                  onChange={(e) => setReportFiles(Array.from(e.target.files || []))}
                   className="mt-2 block w-full text-sm"
                 />
+                {reportFiles.length > 0 && (
+                  <div className="mt-1 text-xs text-gray-500">
+                    {reportFiles.length} file{reportFiles.length > 1 ? "s" : ""} selected — uploading replaces the current report.
+                  </div>
+                )}
                 <button
-                  disabled={(!reportNotes.trim() && !reportFile) || saving}
+                  disabled={(!reportNotes.trim() && reportFiles.length === 0) || saving}
                   onClick={() => saveReport(selected._id)}
                   className="mt-2 h-9 rounded-lg bg-green-600 px-4 text-sm font-medium text-white disabled:opacity-50"
                 >

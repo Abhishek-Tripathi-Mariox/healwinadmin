@@ -4,10 +4,16 @@
 // deployed admin.healwin.in) falls back to the production API instead of
 // localhost:9050 — so a build that missed .env.production still works.
 const resolveApiUrl = (): string => {
-  const fromEnv = import.meta.env.VITE_API_URL as string | undefined;
-  if (fromEnv) return fromEnv;
   const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
   const isLocal = host === "localhost" || host === "127.0.0.1";
+  const fromEnv = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+  // An explicit env URL wins — EXCEPT a localhost URL baked into a DEPLOYED
+  // (non-localhost) build. That happens when `vite build` picked up `.env`
+  // instead of `.env.production`, and would make the live admin try to reach
+  // the developer's machine on :9050 ("Cannot connect to backend"). In that
+  // case ignore the bad env and fall back to the production API.
+  const envIsLocalhost = !!fromEnv && /localhost|127\.0\.0\.1/.test(fromEnv);
+  if (fromEnv && !(envIsLocalhost && !isLocal)) return fromEnv;
   return isLocal ? "http://localhost:9050/v1/api" : "https://apis.healwin.in/v1/api";
 };
 const API_URL = resolveApiUrl();
