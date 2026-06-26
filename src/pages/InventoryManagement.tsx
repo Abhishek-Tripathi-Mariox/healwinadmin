@@ -31,6 +31,7 @@ interface Item {
   unit: string;
   currentStock: number;
   reorderThreshold: number;
+  sellingPrice?: number;
   expiryDate?: string;
   maintenanceStatus?: string;
   location?: string;
@@ -54,6 +55,7 @@ const emptyForm = {
   currentStock: 0,
   reorderThreshold: 0,
   unitCost: "",
+  sellingPrice: "",
   expiryDate: "",
   batchNo: "",
   maintenanceStatus: "operational",
@@ -124,6 +126,7 @@ export default function InventoryManagement() {
       unit: it.unit,
       currentStock: it.currentStock,
       reorderThreshold: it.reorderThreshold,
+      sellingPrice: it.sellingPrice != null ? String(it.sellingPrice) : "",
       expiryDate: it.expiryDate ? it.expiryDate.substring(0, 10) : "",
       maintenanceStatus: it.maintenanceStatus || "operational",
       location: it.location || "",
@@ -404,6 +407,13 @@ export default function InventoryManagement() {
                     reorderThreshold: Number(e.target.value),
                   })
                 }
+              />
+            </Field>
+            <Field label="Selling price ₹ (patient billing)">
+              <Input
+                type="number"
+                value={form.sellingPrice}
+                onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })}
               />
             </Field>
             {form.category !== "equipment" && (

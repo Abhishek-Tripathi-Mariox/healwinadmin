@@ -1809,6 +1809,17 @@ export const opdApi = {
 
 // IPD — beds & admissions
 export const ipdApi = {
+  // Wards (managed picklist the bed form draws from).
+  listWards: (params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return fetchWithAuth(`/admin/ipd/wards${qs ? `?${qs}` : ""}`);
+  },
+  createWard: (data: { name: string; description?: string }) =>
+    fetchWithAuth("/admin/ipd/wards", { method: "POST", body: JSON.stringify(data) }),
+  updateWard: (id: string, data: { name?: string; description?: string; isActive?: boolean }) =>
+    fetchWithAuth(`/admin/ipd/wards/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteWard: (id: string) =>
+    fetchWithAuth(`/admin/ipd/wards/${id}`, { method: "DELETE" }),
   listBeds: (params: Record<string, string> = {}) => {
     const qs = new URLSearchParams(params).toString();
     return fetchWithAuth(`/admin/ipd/beds${qs ? `?${qs}` : ""}`);
@@ -2087,6 +2098,22 @@ export const ambulanceRequestApi = {
     fetchWithAuth(`/admin/ambulance-requests/${id}/status`, {
       method: "POST",
       body: JSON.stringify({ status }),
+    }),
+  // In-transit medical expenses (oxygen, medicines, procedures) billed on top
+  // of the ambulance fare. The full list replaces the previous one.
+  setExpenses: (
+    id: string,
+    expenses: { inventoryItemId?: string; item: string; qty: number; rate: number }[],
+  ) =>
+    fetchWithAuth(`/admin/ambulance-requests/${id}/expenses`, {
+      method: "PUT",
+      body: JSON.stringify({ expenses }),
+    }),
+  // Mark the bill collected (e.g. crew took Cash/UPI on the spot).
+  markPaid: (id: string, method = "CASH") =>
+    fetchWithAuth(`/admin/ambulance-requests/${id}/payment`, {
+      method: "POST",
+      body: JSON.stringify({ method }),
     }),
 };
 

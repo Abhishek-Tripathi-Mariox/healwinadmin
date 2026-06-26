@@ -111,6 +111,12 @@ const ShiftManagement: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
+  // Assign / reassign staff to a shift.
+  const [assignFor, setAssignFor] = useState<ShiftRow | null>(null);
+  const [assignStaffId, setAssignStaffId] = useState("");
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignErr, setAssignErr] = useState("");
+
   const [filters, setFilters] = useState({
     providerId: "",
     ambulanceId: "",
@@ -172,6 +178,35 @@ const ShiftManagement: React.FC = () => {
       await fetchShifts();
     } catch (e: any) {
       window.alert(e?.message || "Failed to cancel");
+    }
+  };
+
+  const openAssign = (s: ShiftRow) => {
+    setAssignFor(s);
+    setAssignStaffId(s.staffId?._id || "");
+    setAssignErr("");
+  };
+  const saveAssign = async () => {
+    if (!assignFor || !assignStaffId || assignBusy) return;
+    setAssignBusy(true);
+    setAssignErr("");
+    try {
+      await shiftApi.assignStaff(assignFor._id, assignStaffId);
+      setAssignFor(null);
+      await fetchShifts();
+    } catch (e: any) {
+      setAssignErr(e?.message || "Failed to assign");
+    } finally {
+      setAssignBusy(false);
+    }
+  };
+  const unassignShift = async (s: ShiftRow) => {
+    if (!window.confirm("Unassign staff from this shift?")) return;
+    try {
+      await shiftApi.unassignStaff(s._id);
+      await fetchShifts();
+    } catch (e: any) {
+      window.alert(e?.message || "Failed to unassign");
     }
   };
 
@@ -306,15 +341,27 @@ const ShiftManagement: React.FC = () => {
                 <Td className="capitalize">{s.role}</Td>
                 <Td>{s.providerId?.name || "—"}</Td>
                 <Td className="text-right whitespace-nowrap">
-                  {(s.status === "scheduled" || s.status === "active") && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                      onClick={() => cancelShift(s._id)}
-                    >
-                      Cancel
-                    </Button>
+                  {s.status === "scheduled" || s.status === "active" ? (
+                    <div className="flex justify-end gap-1">
+                      <Button size="sm" variant="secondary" onClick={() => openAssign(s)}>
+                        {s.staffId ? "Reassign" : "Assign"}
+                      </Button>
+                      {s.staffId && (
+                        <Button size="sm" variant="ghost" onClick={() => unassignShift(s)}>
+                          Unassign
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                        onClick={() => cancelShift(s._id)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-400">—</span>
                   )}
                 </Td>
               </TR>
@@ -335,6 +382,42 @@ const ShiftManagement: React.FC = () => {
           }}
         />
       )}
+
+      {/* Assign / reassign staff to a shift. Only same-role crew are offered —
+          a shift's role (driver/attendant) is fixed at creation. */}
+      <Modal
+        open={!!assignFor}
+        onClose={() => setAssignFor(null)}
+        title={assignFor?.staffId ? "Reassign shift" : "Assign shift"}
+        subtitle={assignFor ? formatRange(assignFor.startAt, assignFor.endAt) : undefined}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setAssignFor(null)}>Cancel</Button>
+            <Button onClick={saveAssign} disabled={assignBusy || !assignStaffId}>
+              {assignBusy ? "Saving…" : "Assign"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {assignErr && <Alert tone="danger">{assignErr}</Alert>}
+          <Field label={`Select ${assignFor?.role || "staff"}`}>
+            <Select value={assignStaffId} onChange={(e) => setAssignStaffId(e.target.value)}>
+              <option value="">— Select —</option>
+              {staff
+                .filter((m) => !assignFor || m.role === assignFor.role)
+                .map((m) => (
+                  <option key={m._id} value={m._id}>
+                    {m.fullName} · {m.mobileNumber}
+                  </option>
+                ))}
+            </Select>
+          </Field>
+          <p className="text-xs text-gray-500">
+            Only {assignFor?.role || "matching"}s are shown — a shift's role is fixed.
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 };

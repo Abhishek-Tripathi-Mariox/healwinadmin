@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { patientCommerceApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
 import {
-  PageHeader, Table, THead, TBody, TR, Th, Td, TableState, Select, Modal, Badge,
+  PageHeader, Table, THead, TBody, TR, Th, Td, TableState, Select, Modal, Badge, Button,
 } from "../components/ui";
 
 /**
@@ -228,12 +228,13 @@ export default function PatientOrders() {
           <Th>Amount</Th>
           <Th>Date</Th>
           <Th>Status</Th>
+          <Th className="text-right">Action</Th>
         </THead>
         <TBody>
           {loading && rows.length === 0 ? (
-            <TableState colSpan={6}>Loading…</TableState>
+            <TableState colSpan={7}>Loading…</TableState>
           ) : rows.length === 0 ? (
-            <TableState colSpan={6}>Nothing here yet.</TableState>
+            <TableState colSpan={7}>Nothing here yet.</TableState>
           ) : (
             rows.map((r) => (
               <TR key={r._id} clickable onClick={() => openDetail(r)}>
@@ -254,6 +255,11 @@ export default function PatientOrders() {
                       <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
                     ))}
                   </Select>
+                </Td>
+                <Td className="text-right" onClick={(e) => e.stopPropagation()}>
+                  <Button size="sm" variant="secondary" onClick={() => openDetail(r)}>
+                    Details
+                  </Button>
                 </Td>
               </TR>
             ))

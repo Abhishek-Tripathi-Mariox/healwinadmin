@@ -99,6 +99,14 @@ export default function DispatchPanel({ sosId }: { sosId: string }) {
   if (!data) return <p className="p-4">No data</p>;
 
   const { patient, ambulances } = data;
+  // `current` is the SOS's MOST RECENT dispatch regardless of status, so a past
+  // COMPLETED/CANCELLED one would otherwise keep every Dispatch button disabled
+  // (and hide the Cancel button) — leaving the admin unable to re-dispatch. Only
+  // a still-running dispatch should block dispatching.
+  const activeDispatch =
+    current && !["COMPLETED", "CANCELLED"].includes(current.status)
+      ? current
+      : null;
   // The patient marker (and map centre) needs a real GPS pin. Many SOS rows
   // come in without one (reason: "no_location") — guard so the panel still
   // shows the dispatchable ambulance list instead of crashing on the map.
@@ -154,27 +162,25 @@ export default function DispatchPanel({ sosId }: { sosId: string }) {
         )}
       </div>
       <div className="overflow-y-auto">
-        {current ? (
+        {activeDispatch ? (
           <div className="border rounded p-3 bg-amber-50 mb-3">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-semibold">
-                  Active dispatch — {current.status}
+                  Active dispatch — {activeDispatch.status}
                 </p>
                 <p className="text-sm">
-                  Ambulance {current.ambulanceId?.registrationNumber} · ETA{" "}
-                  {current.etaMinutes} min
+                  Ambulance {activeDispatch.ambulanceId?.registrationNumber} · ETA{" "}
+                  {activeDispatch.etaMinutes} min
                 </p>
               </div>
-              {!["COMPLETED", "CANCELLED"].includes(current.status) && (
-                <button
-                  onClick={doCancel}
-                  disabled={cancelling}
-                  className="shrink-0 rounded border border-red-300 bg-white px-3 py-1 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-                >
-                  {cancelling ? "Cancelling…" : "Cancel / Reassign"}
-                </button>
-              )}
+              <button
+                onClick={doCancel}
+                disabled={cancelling}
+                className="shrink-0 rounded border border-red-300 bg-white px-3 py-1 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              >
+                {cancelling ? "Cancelling…" : "Cancel / Reassign"}
+              </button>
             </div>
           </div>
         ) : null}
@@ -206,7 +212,7 @@ export default function DispatchPanel({ sosId }: { sosId: string }) {
                 </p>
               </div>
               <button
-                disabled={!!current || dispatching === a.ambulanceId}
+                disabled={!!activeDispatch || dispatching === a.ambulanceId}
                 onClick={() => doDispatch(a.ambulanceId)}
                 className="bg-blue-600 text-white px-3 py-1 rounded disabled:opacity-50"
               >

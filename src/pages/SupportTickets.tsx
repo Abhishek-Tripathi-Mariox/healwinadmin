@@ -204,13 +204,13 @@ export default function SupportTickets() {
 
       <Table>
         <THead>
-          <Th>Ticket</Th><Th>From</Th><Th>Category</Th><Th>Subject</Th><Th>Priority</Th><Th>Status</Th><Th>Created</Th>
+          <Th>Ticket</Th><Th>From</Th><Th>Category</Th><Th>Subject</Th><Th>Priority</Th><Th>Status</Th><Th>Created</Th><Th className="text-right">Action</Th>
         </THead>
         <TBody>
           {loading && tickets.length === 0 ? (
-            <TableState colSpan={7}>Loading…</TableState>
+            <TableState colSpan={8}>Loading…</TableState>
           ) : tickets.length === 0 ? (
-            <TableState colSpan={7}>No support tickets.</TableState>
+            <TableState colSpan={8}>No support tickets.</TableState>
           ) : (
             tickets.map((t) => (
               <TR key={t._id} className="cursor-pointer hover:bg-gray-50" onClick={() => openTicket(t)}>
@@ -233,6 +233,11 @@ export default function SupportTickets() {
                 <Td><Badge tone={priorityTone[t.priority] || "neutral"}>{t.priority}</Badge></Td>
                 <Td><Badge tone={statusTone[t.status] || "neutral"}>{t.status.replace(/_/g, " ")}</Badge></Td>
                 <Td className="text-xs text-gray-500">{fmt(t.createdAt)}</Td>
+                <Td className="text-right" onClick={(e) => e.stopPropagation()}>
+                  <Button size="sm" variant="secondary" onClick={() => openTicket(t)}>
+                    Open chat
+                  </Button>
+                </Td>
               </TR>
             ))
           )}

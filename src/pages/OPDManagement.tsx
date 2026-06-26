@@ -131,8 +131,12 @@ export default function OPDManagement() {
   const book = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr("");
-    if (!selectedPatient || !doctorId) {
-      setErr("Patient and doctor are required.");
+    if (!selectedPatient) {
+      setErr("Please search and pick a registered patient from the list. Typing a name isn't enough — register the patient under Patients first if they're not found.");
+      return;
+    }
+    if (!doctorId) {
+      setErr("Please select a doctor.");
       return;
     }
     try {
@@ -323,6 +327,12 @@ export default function OPDManagement() {
                     </button>
                   ))}
                 </div>
+              )}
+              {patientSearch.trim().length >= 2 && patientResults.length === 0 && (
+                <p className="mt-1 text-xs text-amber-600">
+                  No registered patient matches “{patientSearch.trim()}”. Register them first under{" "}
+                  <span className="font-medium">Doctor Panel → Patients</span>, then search here.
+                </p>
               )}
             </div>
           )}

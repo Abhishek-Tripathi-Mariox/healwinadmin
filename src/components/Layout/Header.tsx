@@ -38,8 +38,8 @@ const EVENTS: { event: string; title: string; route: string; tone: ActivityItem[
   { event: "consultation:new", title: "New consultation", route: "/admin/patient-orders", tone: "info" },
   { event: "lab-booking:new", title: "New lab booking", route: "/admin/patient-orders", tone: "info" },
   { event: "pharmacy-order:new", title: "New pharmacy order", route: "/admin/patient-orders", tone: "success" },
-  { event: "leave:new", title: "New leave request", route: "/admin/staff-records", tone: "warning" },
-  { event: "stock:new", title: "New stock request", route: "/admin/staff-records", tone: "warning" },
+  { event: "leave:new", title: "New leave request", route: "/admin/staff-records?tab=leaves", tone: "warning" },
+  { event: "stock:new", title: "New stock request", route: "/admin/staff-records?tab=stock-requests", tone: "warning" },
   // Only patient/driver replies reach the admin room (emitToAdmin), so this
   // never fires for the admin's own replies.
   { event: "support:message", title: "Support ticket reply", route: "/admin/support-tickets", tone: "info" },
@@ -62,6 +62,11 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
   const [items, setItems] = useState<AlertItem[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [unseen, setUnseen] = useState(0);
+  // Clinical alerts that have already been seen (badge ignores these until a
+  // genuinely new alert id appears). Without this, opening the bell cleared the
+  // socket-activity count but the alert count kept the badge lit — so it looked
+  // like notifications were never marked read.
+  const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
 
   // Clinical alerts (low stock / expiry / follow-ups) — polled.
   useEffect(() => {
@@ -130,12 +135,18 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
 
   const toggle = () => {
     setShowNotifications((s) => {
-      if (!s) setUnseen(0); // opening clears the unseen badge
+      if (!s) {
+        setUnseen(0); // opening clears the new-activity badge
+        // …and marks every currently-shown alert as read, so the badge drops to
+        // 0 on open and only re-lights when a brand-new alert arrives.
+        setSeenAlertIds(new Set(items.map((i) => i.id)));
+      }
       return !s;
     });
   };
 
-  const badge = unseen + items.length;
+  const unseenAlerts = items.filter((i) => !seenAlertIds.has(i.id)).length;
+  const badge = unseen + unseenAlerts;
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/60 bg-white/70 backdrop-blur-xl">

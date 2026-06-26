@@ -1324,9 +1324,17 @@ const SOSDashboard: React.FC = () => {
                               </div>
                             </div>
 
-                            {/* Dispatch status actions */}
+                            {/* Dispatch status actions. Forward steps only
+                                appear AFTER the crew accepts (ACKNOWLEDGED) —
+                                a never-accepted (DISPATCHED) ride can only be
+                                cancelled/reassigned, never advanced. */}
                             <div className="flex flex-col gap-1 shrink-0">
                               {d.status === "DISPATCHED" && (
+                                <span className="text-[10px] px-2 py-1 rounded-md bg-gray-100 text-gray-500 text-center">
+                                  Waiting for driver to accept…
+                                </span>
+                              )}
+                              {d.status === "ACKNOWLEDGED" && (
                                 <button
                                   onClick={() =>
                                     handleUpdateDispatchStatus(
@@ -1344,8 +1352,7 @@ const SOSDashboard: React.FC = () => {
                                   )}
                                 </button>
                               )}
-                              {(d.status === "DISPATCHED" ||
-                                d.status === "EN_ROUTE") && (
+                              {d.status === "EN_ROUTE" && (
                                 <button
                                   onClick={() =>
                                     handleUpdateDispatchStatus(
@@ -1359,8 +1366,9 @@ const SOSDashboard: React.FC = () => {
                                   On Scene
                                 </button>
                               )}
-                              {d.status !== "COMPLETED" &&
-                                d.status !== "CANCELLED" && (
+                              {["ACKNOWLEDGED", "EN_ROUTE", "ON_SCENE"].includes(
+                                d.status,
+                              ) && (
                                   <button
                                     onClick={() =>
                                       handleUpdateDispatchStatus(

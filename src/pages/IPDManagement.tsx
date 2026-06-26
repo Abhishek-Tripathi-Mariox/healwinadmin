@@ -5,6 +5,7 @@ import {
   staffApi,
   billingApi,
 } from "../services/admin-api";
+import { Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
 import {
@@ -36,6 +37,13 @@ interface Bed {
   status: "available" | "occupied" | "maintenance";
   currentAdmissionId?: any;
 }
+interface Ward {
+  _id: string;
+  name: string;
+  description?: string;
+  isActive?: boolean;
+  bedCount?: number;
+}
 interface Admission {
   _id: string;
   admissionNo: string;
@@ -52,14 +60,16 @@ export default function IPDManagement() {
   const canManage = hasPermission(PERMISSIONS.IPD_MANAGE);
   const canBeds = hasPermission(PERMISSIONS.BEDS_MANAGE);
 
-  const [tab, setTab] = useState<"admissions" | "beds">("admissions");
+  const [tab, setTab] = useState<"admissions" | "beds" | "wards">("admissions");
   const [admissions, setAdmissions] = useState<Admission[]>([]);
   const [beds, setBeds] = useState<Bed[]>([]);
+  const [wards, setWards] = useState<Ward[]>([]);
   const [loading, setLoading] = useState(false);
   const [doctors, setDoctors] = useState<any[]>([]);
 
   const [showAdmit, setShowAdmit] = useState(false);
   const [showBed, setShowBed] = useState(false);
+  const [wardForm, setWardForm] = useState<Ward | null | "new">(null);
   const [detail, setDetail] = useState<any>(null);
 
   const loadAdmissions = useCallback(async () => {
@@ -77,9 +87,25 @@ export default function IPDManagement() {
     setBeds(res.data?.beds || []);
   }, []);
 
+  const loadWards = useCallback(async () => {
+    const res = await ipdApi.listWards();
+    setWards(res.data?.wards || []);
+  }, []);
+
+  const deleteWard = async (w: Ward) => {
+    if (!window.confirm(`Delete ward "${w.name}"?`)) return;
+    try {
+      await ipdApi.deleteWard(w._id);
+      loadWards();
+    } catch (e: any) {
+      window.alert(e?.message || "Failed to delete ward");
+    }
+  };
+
   useEffect(() => {
     loadAdmissions();
     loadBeds();
+    loadWards();
     staffApi
       .getAll({ limit: 200 })
       .then((res) => {
@@ -92,7 +118,7 @@ export default function IPDManagement() {
         );
       })
       .catch(() => setDoctors([]));
-  }, [loadAdmissions, loadBeds]);
+  }, [loadAdmissions, loadBeds, loadWards]);
 
   const availableBeds = beds.filter((b) => b.status === "available");
 
@@ -109,12 +135,15 @@ export default function IPDManagement() {
             {tab === "beds" && canBeds && (
               <Button onClick={() => setShowBed(true)}>+ Add Bed</Button>
             )}
+            {tab === "wards" && canBeds && (
+              <Button onClick={() => setWardForm("new")}>+ Add Ward</Button>
+            )}
           </>
         }
       />
 
       <div className="flex gap-4 mb-4 border-b">
-        {(["admissions", "beds"] as const).map((t) => (
+        {(["admissions", "beds", "wards"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -127,7 +156,9 @@ export default function IPDManagement() {
           >
             {t === "beds"
               ? `Beds (${beds.filter((b) => b.status === "available").length} free)`
-              : `Current Admissions (${admissions.length})`}
+              : t === "wards"
+                ? `Wards (${wards.length})`
+                : `Current Admissions (${admissions.length})`}
           </button>
         ))}
       </div>
@@ -172,6 +203,58 @@ export default function IPDManagement() {
                     >
                       Manage
                     </Button>
+                  </Td>
+                </TR>
+              ))
+            )}
+          </TBody>
+        </Table>
+      ) : tab === "wards" ? (
+        <Table>
+          <THead>
+            <Th>Ward</Th>
+            <Th>Description</Th>
+            <Th>Beds</Th>
+            <Th>Status</Th>
+            <Th className="text-right">Actions</Th>
+          </THead>
+          <TBody>
+            {wards.length === 0 ? (
+              <TableState colSpan={5}>No wards yet — add one to group beds under it.</TableState>
+            ) : (
+              wards.map((w) => (
+                <TR key={w._id}>
+                  <Td className="font-medium text-gray-900">{w.name}</Td>
+                  <Td className="text-gray-500">{w.description || "—"}</Td>
+                  <Td>{w.bedCount ?? 0}</Td>
+                  <Td>
+                    <Badge tone={w.isActive === false ? "neutral" : "success"}>
+                      {w.isActive === false ? "inactive" : "active"}
+                    </Badge>
+                  </Td>
+                  <Td className="text-right whitespace-nowrap">
+                    {canBeds && (
+                      <div className="flex justify-end gap-1">
+                        <button
+                          type="button"
+                          title="Edit ward"
+                          aria-label="Edit ward"
+                          onClick={() => setWardForm(w)}
+                          className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Delete ward"
+                          aria-label="Delete ward"
+                          onClick={() => deleteWard(w)}
+                          className="rounded-md p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
                   </Td>
                 </TR>
               ))
@@ -240,10 +323,21 @@ export default function IPDManagement() {
       )}
       {showBed && (
         <BedModal
+          wards={wards}
           onClose={() => setShowBed(false)}
           onDone={() => {
             setShowBed(false);
             loadBeds();
+          }}
+        />
+      )}
+      {wardForm !== null && (
+        <WardModal
+          ward={wardForm === "new" ? null : wardForm}
+          onClose={() => setWardForm(null)}
+          onDone={() => {
+            setWardForm(null);
+            loadWards();
           }}
         />
       )}
@@ -425,9 +519,11 @@ function AdmitModal({
 }
 
 function BedModal({
+  wards,
   onClose,
   onDone,
 }: {
+  wards: Ward[];
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -470,11 +566,20 @@ function BedModal({
       <form onSubmit={submit} className="space-y-4">
         {err && <Alert tone="danger">{err}</Alert>}
         <Field label="Ward">
-          <Input
-            placeholder="Ward"
-            value={form.ward}
-            onChange={(e) => setForm({ ...form, ward: e.target.value })}
-          />
+          {wards.length === 0 ? (
+            <p className="text-xs text-amber-600">
+              No wards yet — add one from the “Wards” tab first.
+            </p>
+          ) : (
+            <Select value={form.ward} onChange={(e) => setForm({ ...form, ward: e.target.value })}>
+              <option value="">— Select ward —</option>
+              {wards.map((w) => (
+                <option key={w._id} value={w.name}>
+                  {w.name}
+                </option>
+              ))}
+            </Select>
+          )}
         </Field>
         <Field label="Bed number">
           <Input
@@ -735,5 +840,63 @@ function AdmissionDrawer({
         </div>
       </div>
     </div>
+  );
+}
+
+function WardModal({
+  ward,
+  onClose,
+  onDone,
+}: {
+  ward: Ward | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [name, setName] = useState(ward?.name || "");
+  const [description, setDescription] = useState(ward?.description || "");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || busy) return;
+    setErr("");
+    setBusy(true);
+    try {
+      if (ward) await ipdApi.updateWard(ward._id, { name: name.trim(), description: description.trim() });
+      else await ipdApi.createWard({ name: name.trim(), description: description.trim() || undefined });
+      onDone();
+    } catch (e2: any) {
+      setErr(e2.message || "Failed to save ward");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={ward ? "Edit Ward" : "Add Ward"}
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button onClick={submit} disabled={busy || !name.trim()}>
+            {busy ? "Saving…" : ward ? "Save" : "Add"}
+          </Button>
+        </>
+      }
+    >
+      <form onSubmit={submit} className="space-y-4">
+        {err && <Alert tone="danger">{err}</Alert>}
+        <Field label="Ward name">
+          <Input placeholder="e.g. General Ward, ICU" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Description (optional)">
+          <Input placeholder="Short note" value={description} onChange={(e) => setDescription(e.target.value)} />
+        </Field>
+      </form>
+    </Modal>
   );
 }

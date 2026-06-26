@@ -1,10 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
-import { ambulanceRequestApi, ambulanceStaffApi } from "../services/admin-api";
+import { ambulanceRequestApi, ambulanceStaffApi, inventoryApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
 } from "../components/ui";
+
+interface ExpenseLine {
+  inventoryItemId?: string;
+  item: string;
+  qty: number;
+  rate: number;
+  amount?: number;
+}
+
+interface InvItem {
+  _id: string;
+  name: string;
+  unit?: string;
+  sellingPrice?: number;
+  currentStock?: number;
+}
 
 interface ReqRow {
   _id: string;
@@ -22,7 +38,15 @@ interface ReqRow {
   otp?: string;
   createdAt?: string;
   userId?: { fullName?: string; mobileNumber?: string };
+  // Billing
+  amount?: number;
+  inTransitExpenses?: ExpenseLine[];
+  inTransitTotal?: number;
+  grandTotal?: number;
+  paymentStatus?: "PENDING" | "PAID";
 }
+
+const money = (n?: number) => `₹${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
 
 const statusTone: Record<string, "warning" | "info" | "success" | "neutral" | "danger"> = {
   SEARCHING: "warning",
@@ -45,6 +69,13 @@ export default function AmbulanceRequestsManagement() {
   const [crew, setCrew] = useState<any[]>([]);
   const [nearby, setNearby] = useState<any[]>([]);
   const [nearbyLoading, setNearbyLoading] = useState(false);
+
+  // In-transit medical expense editor.
+  const [billFor, setBillFor] = useState<ReqRow | null>(null);
+  const [lines, setLines] = useState<ExpenseLine[]>([]);
+  const [billSaving, setBillSaving] = useState(false);
+  const [billError, setBillError] = useState("");
+  const [invItems, setInvItems] = useState<InvItem[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -161,6 +192,71 @@ export default function AmbulanceRequestsManagement() {
     load();
   };
 
+  // ----- In-transit medical expenses -----
+  const openBill = (r: ReqRow) => {
+    setBillFor(r);
+    setBillError("");
+    const existing = (r.inTransitExpenses || []).map((e) => ({
+      inventoryItemId: (e as any).inventoryItemId ? String((e as any).inventoryItemId) : undefined,
+      item: e.item,
+      qty: e.qty,
+      rate: e.rate,
+    }));
+    setLines(existing.length ? existing : [{ item: "", qty: 1, rate: 0 }]);
+    // Active HMS inventory items (medicine/consumable) drive the picker + price.
+    inventoryApi
+      .list({ isActive: "true" })
+      .then((res: any) => setInvItems(res?.data?.items || res?.data || []))
+      .catch(() => setInvItems([]));
+  };
+  const addLine = () => setLines((ls) => [...ls, { item: "", qty: 1, rate: 0 }]);
+  const removeLine = (i: number) => setLines((ls) => ls.filter((_, idx) => idx !== i));
+  const updateLine = (i: number, patch: Partial<ExpenseLine>) =>
+    setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  // Pick an inventory item for a line → snapshot its name + selling price.
+  const pickItem = (i: number, invId: string) => {
+    if (!invId) {
+      updateLine(i, { inventoryItemId: undefined, item: "", rate: 0 });
+      return;
+    }
+    const it = invItems.find((x) => x._id === invId);
+    updateLine(i, {
+      inventoryItemId: invId,
+      item: it?.name || "",
+      rate: Number(it?.sellingPrice) || 0,
+    });
+  };
+  const expensesTotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.rate) || 0), 0);
+  const grandTotal = (Number(billFor?.amount) || 0) + expensesTotal;
+
+  const saveBill = async () => {
+    if (!billFor || billSaving) return;
+    const clean = lines
+      .map((l) => ({
+        inventoryItemId: l.inventoryItemId,
+        item: l.item.trim(),
+        qty: Number(l.qty) || 0,
+        rate: Number(l.rate) || 0,
+      }))
+      .filter((l) => l.item && l.qty > 0);
+    setBillSaving(true);
+    setBillError("");
+    try {
+      await ambulanceRequestApi.setExpenses(billFor._id, clean);
+      setBillFor(null);
+      load();
+    } catch (e: any) {
+      setBillError(e.message || "Failed to save expenses");
+    } finally {
+      setBillSaving(false);
+    }
+  };
+
+  const markPaid = async (r: ReqRow) => {
+    await ambulanceRequestApi.markPaid(r._id, "CASH").catch(() => undefined);
+    load();
+  };
+
   return (
     <div className="p-6">
       <PageHeader
@@ -217,6 +313,17 @@ export default function AmbulanceRequestsManagement() {
                   {r.status === "ON_TRIP" && (
                     <Button size="sm" variant="secondary" onClick={() => advance(r, "COMPLETED")}>Complete</Button>
                   )}
+                  {["ASSIGNED", "ARRIVED", "ON_TRIP", "COMPLETED"].includes(r.status) && (
+                    <Button size="sm" variant="secondary" onClick={() => openBill(r)}>
+                      Expenses{r.inTransitTotal ? ` · ${money(r.inTransitTotal)}` : ""}
+                    </Button>
+                  )}
+                  {["ASSIGNED", "ARRIVED", "ON_TRIP", "COMPLETED"].includes(r.status) &&
+                    (r.paymentStatus === "PAID" ? (
+                      <Badge tone="success">Paid</Badge>
+                    ) : (
+                      <Button size="sm" variant="ghost" onClick={() => markPaid(r)}>Mark paid</Button>
+                    ))}
                   {["SEARCHING", "ASSIGNED"].includes(r.status) && (
                     <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => advance(r, "CANCELLED")}>Cancel</Button>
                   )}
@@ -300,6 +407,65 @@ export default function AmbulanceRequestsManagement() {
           </div>
           <p className="text-xs text-gray-500">On assign, the patient gets a push notification + live tracking opens with the driver, vehicle and OTP.</p>
         </form>
+      </Modal>
+
+      {/* In-transit medical expenses — billed on top of the ambulance fare and
+          shown to the patient as a separate section + new grand total. */}
+      <Modal
+        open={!!billFor}
+        onClose={() => setBillFor(null)}
+        title="In-Transit Medical Expenses"
+        subtitle={billFor ? (billFor.recipientName || billFor.userId?.fullName || billFor.patientName || "Patient") : undefined}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setBillFor(null)}>Cancel</Button>
+            <Button onClick={saveBill} disabled={billSaving}>{billSaving ? "Saving…" : "Save & bill patient"}</Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {billError && <Alert tone="danger">{billError}</Alert>}
+
+          <div className="grid grid-cols-[1fr_64px_84px_84px_28px] items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            <span>Item</span><span>Qty</span><span>Rate ₹</span><span className="text-right">Amount</span><span />
+          </div>
+          {lines.map((l, i) => (
+            <div key={i} className="grid grid-cols-[1fr_64px_84px_84px_28px] items-center gap-2">
+              <div className="space-y-1">
+                <select
+                  value={l.inventoryItemId || ""}
+                  onChange={(e) => pickItem(i, e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-2 py-2 text-sm focus:border-sky-500 focus:outline-none"
+                >
+                  <option value="">— Custom item —</option>
+                  {invItems.map((it) => (
+                    <option key={it._id} value={it._id}>
+                      {it.name}{it.sellingPrice != null ? ` · ₹${it.sellingPrice}` : ""}
+                      {it.currentStock != null ? ` · ${it.currentStock} ${it.unit || ""} left` : ""}
+                    </option>
+                  ))}
+                </select>
+                {/* Free-text name only when no inventory item is picked. */}
+                {!l.inventoryItemId && (
+                  <Input value={l.item} placeholder="Item name" onChange={(e) => updateLine(i, { item: e.target.value })} />
+                )}
+              </div>
+              <Input type="number" value={String(l.qty)} onChange={(e) => updateLine(i, { qty: Number(e.target.value) })} />
+              <Input type="number" value={String(l.rate)} onChange={(e) => updateLine(i, { rate: Number(e.target.value) })} />
+              <span className="text-right text-sm text-gray-700">{money((Number(l.qty) || 0) * (Number(l.rate) || 0))}</span>
+              <button type="button" className="text-gray-400 hover:text-red-600" onClick={() => removeLine(i)} aria-label="Remove">×</button>
+            </div>
+          ))}
+          <Button size="sm" variant="secondary" onClick={addLine}>+ Add item</Button>
+          <p className="text-xs text-gray-500">Pick from HMS inventory (price auto-fills, stock deducts) or choose “Custom item” for a one-off.</p>
+
+          <div className="mt-2 space-y-1 border-t border-gray-200 pt-3 text-sm">
+            <div className="flex justify-between text-gray-600"><span>Ambulance Charge</span><span>{money(billFor?.amount)}</span></div>
+            <div className="flex justify-between text-gray-600"><span>In-Transit Medical Expense</span><span>{money(expensesTotal)}</span></div>
+            <div className="flex justify-between font-semibold text-gray-900"><span>Grand Total</span><span>{money(grandTotal)}</span></div>
+          </div>
+          <p className="text-xs text-gray-500">Saving updates the patient's bill on their tracking screen in real time.</p>
+        </div>
       </Modal>
     </div>
   );

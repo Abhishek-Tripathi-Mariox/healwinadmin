@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { staffRecordsApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
 import {
@@ -82,7 +83,19 @@ const fmtDate = (d?: string) =>
   d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 export default function StaffAppRecords() {
-  const [tab, setTab] = useState<Tab>("patients");
+  // Open the tab requested via ?tab= (e.g. the bell's "New leave request"
+  // notification deep-links to ?tab=leaves), and keep it in sync if the URL
+  // changes while this page is already mounted.
+  const [searchParams] = useSearchParams();
+  const tabFromUrl = (): Tab => {
+    const t = searchParams.get("tab");
+    return TABS.some((x) => x.key === t) ? (t as Tab) : "patients";
+  };
+  const [tab, setTab] = useState<Tab>(tabFromUrl);
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t && TABS.some((x) => x.key === t)) setTab(t as Tab);
+  }, [searchParams]);
   const [loading, setLoading] = useState(false);
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [caseNotes, setCaseNotes] = useState<CaseNoteRow[]>([]);
