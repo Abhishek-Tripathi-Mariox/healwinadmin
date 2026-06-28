@@ -11,6 +11,10 @@ import {
 interface LeaveType { _id: string; name: string; code: string; annualQuota: number; isPaid: boolean; isActive: boolean }
 interface LeaveRequest {
   _id: string;
+  subjectType?: "hr_employee" | "ambulance_staff";
+  subjectName?: string;
+  subjectRef?: string;
+  typeName?: string;
   employeeId?: { fullName: string; employeeCode: string };
   leaveTypeId?: { name: string; code: string };
   fromDate: string;
@@ -166,21 +170,26 @@ export default function LeaveManagement() {
       {tab === "requests" ? (
         <Table>
           <THead>
-            <Th>Employee</Th><Th>Type</Th><Th>From → To</Th><Th>Days</Th><Th>Status</Th><Th className="text-right">Actions</Th>
+            <Th>Person</Th><Th>Kind</Th><Th>Type</Th><Th>From → To</Th><Th>Days</Th><Th>Status</Th><Th className="text-right">Actions</Th>
           </THead>
           <TBody>
             {loading ? (
-              <TableState colSpan={6}>Loading…</TableState>
+              <TableState colSpan={7}>Loading…</TableState>
             ) : requests.length === 0 ? (
-              <TableState colSpan={6}>No leave requests.</TableState>
+              <TableState colSpan={7}>No leave requests.</TableState>
             ) : (
               requests.map((r) => (
                 <TR key={r._id}>
                   <Td className="font-medium text-gray-900">
-                    {r.employeeId?.fullName || "—"}
-                    <div className="text-xs text-gray-400">{r.employeeId?.employeeCode}</div>
+                    {r.subjectName || r.employeeId?.fullName || "—"}
+                    <div className="text-xs text-gray-400">{r.subjectRef || r.employeeId?.employeeCode}</div>
                   </Td>
-                  <Td>{r.leaveTypeId?.code || "—"}</Td>
+                  <Td>
+                    <Badge tone={r.subjectType === "ambulance_staff" ? "info" : "neutral"}>
+                      {r.subjectType === "ambulance_staff" ? "Ambulance" : "Employee"}
+                    </Badge>
+                  </Td>
+                  <Td>{r.typeName || r.leaveTypeId?.code || "—"}</Td>
                   <Td className="text-xs">
                     {new Date(r.fromDate).toLocaleDateString("en-IN")} → {new Date(r.toDate).toLocaleDateString("en-IN")}
                   </Td>

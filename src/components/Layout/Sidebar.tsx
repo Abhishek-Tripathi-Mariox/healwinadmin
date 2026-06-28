@@ -505,16 +505,46 @@ const Sidebar: React.FC<SidebarProps> = ({
           path: "/admin/patients",
         },
         {
+          id: "hms-reports",
+          label: "Hospital MIS",
+          icon: ClipboardList,
+          path: "/admin/hms-reports",
+        },
+        {
           id: "opd",
           label: "OPD",
           icon: ClipboardList,
           path: "/admin/opd",
         },
         {
+          id: "doctor-schedules",
+          label: "Doctor Availability",
+          icon: ClipboardList,
+          path: "/admin/doctor-schedules",
+        },
+        {
+          id: "doctor-roster",
+          label: "Doctor Roster",
+          icon: ClipboardList,
+          path: "/admin/doctor-roster",
+        },
+        {
           id: "ipd",
           label: "IPD",
           icon: BedDouble,
           path: "/admin/ipd",
+        },
+        {
+          id: "ot",
+          label: "Operation Theatre",
+          icon: BedDouble,
+          path: "/admin/ot",
+        },
+        {
+          id: "procurement",
+          label: "Procurement",
+          icon: Boxes,
+          path: "/admin/procurement",
         },
         {
           id: "inventory",
@@ -527,6 +557,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           label: "Billing",
           icon: Receipt,
           path: "/admin/billing",
+        },
+        {
+          id: "insurance",
+          label: "Insurance & TPA",
+          icon: Receipt,
+          path: "/admin/insurance",
         },
         {
           id: "catalog",
@@ -552,6 +588,18 @@ const Sidebar: React.FC<SidebarProps> = ({
           label: "Employees",
           icon: Users,
           path: "/admin/employees",
+        },
+        {
+          id: "staff-directory",
+          label: "Staff Directory",
+          icon: Users,
+          path: "/admin/staff-directory",
+        },
+        {
+          id: "employee-shifts",
+          label: "Employee Shifts",
+          icon: CalendarCheck,
+          path: "/admin/employee-shifts",
         },
         {
           id: "attendance",

@@ -397,6 +397,51 @@ export default function AmbulanceStaffManagement() {
               />
             </Field>
           )}
+
+          {/* Monthly salary — when set (CTC > 0), this crew member is included in
+              the central HR payroll run, paid by present days from attendance. */}
+          <div className="pt-2 border-t border-gray-100">
+            <p className="mb-2 text-sm font-semibold text-gray-700">Monthly Salary (payroll)</p>
+            <div className="grid grid-cols-2 gap-3">
+              {([
+                ["ctcAnnual", "Annual CTC"],
+                ["basic", "Basic (monthly)"],
+                ["hra", "HRA (monthly)"],
+                ["specialAllowance", "Special allowance"],
+              ] as const).map(([key, label]) => (
+                <Field key={key} label={label}>
+                  <Input
+                    type="number"
+                    value={form.salaryStructure?.[key] ?? ""}
+                    onChange={(e) =>
+                      setForm((f: any) => ({
+                        ...f,
+                        salaryStructure: { ...(f.salaryStructure || {}), [key]: Number(e.target.value) || 0 },
+                      }))
+                    }
+                  />
+                </Field>
+              ))}
+            </div>
+            <div className="mt-2 flex gap-4 text-sm text-gray-600">
+              {([["pfApplicable", "PF"], ["esiApplicable", "ESI"], ["ptApplicable", "PT"]] as const).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={form.salaryStructure?.[key] ?? true}
+                    onChange={(e) =>
+                      setForm((f: any) => ({
+                        ...f,
+                        salaryStructure: { ...(f.salaryStructure || {}), [key]: e.target.checked },
+                      }))
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-gray-400">Leave CTC at 0 to keep this crew member off payroll.</p>
+          </div>
         </form>
       </Modal>
     </div>

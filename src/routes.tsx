@@ -120,6 +120,12 @@ const PatientDetail = lazy(() => import("./pages/PatientDetail"));
 const InventoryManagement = lazy(() => import("./pages/InventoryManagement"));
 const BillingManagement = lazy(() => import("./pages/BillingManagement"));
 const OPDManagement = lazy(() => import("./pages/OPDManagement"));
+const DoctorScheduleManagement = lazy(() => import("./pages/DoctorScheduleManagement"));
+const InsuranceManagement = lazy(() => import("./pages/InsuranceManagement"));
+const OTManagement = lazy(() => import("./pages/OTManagement"));
+const ProcurementManagement = lazy(() => import("./pages/ProcurementManagement"));
+const HMSReportsDashboard = lazy(() => import("./pages/HMSReportsDashboard"));
+const DoctorRosterManagement = lazy(() => import("./pages/DoctorRosterManagement"));
 const IPDManagement = lazy(() => import("./pages/IPDManagement"));
 const PharmaciesManagement = lazy(() => import("./pages/PharmaciesManagement"));
 const IvrEscalationsManagement = lazy(
@@ -133,6 +139,8 @@ const AmbulancePricingManagement = lazy(
 // HR & Payroll
 const HRDashboard = lazy(() => import("./pages/hr/HRDashboard"));
 const EmployeeManagement = lazy(() => import("./pages/hr/EmployeeManagement"));
+const StaffDirectory = lazy(() => import("./pages/StaffDirectory"));
+const EmployeeShiftManagement = lazy(() => import("./pages/EmployeeShiftManagement"));
 const EmployeeDetail = lazy(() => import("./pages/hr/EmployeeDetail"));
 const AttendanceManagement = lazy(
   () => import("./pages/hr/AttendanceManagement"),
@@ -443,9 +451,33 @@ export const adminRoutes = [
     icon: Receipt,
   },
   {
+    path: "insurance",
+    element: InsuranceManagement,
+    name: "Insurance & TPA",
+    icon: Receipt,
+  },
+  {
+    path: "hms-reports",
+    element: HMSReportsDashboard,
+    name: "Hospital MIS",
+    icon: ClipboardList,
+  },
+  {
     path: "opd",
     element: OPDManagement,
     name: "OPD",
+    icon: ClipboardList,
+  },
+  {
+    path: "doctor-schedules",
+    element: DoctorScheduleManagement,
+    name: "Doctor Availability",
+    icon: ClipboardList,
+  },
+  {
+    path: "doctor-roster",
+    element: DoctorRosterManagement,
+    name: "Doctor Roster",
     icon: ClipboardList,
   },
   {
@@ -453,6 +485,18 @@ export const adminRoutes = [
     element: IPDManagement,
     name: "IPD",
     icon: BedDouble,
+  },
+  {
+    path: "ot",
+    element: OTManagement,
+    name: "Operation Theatre",
+    icon: BedDouble,
+  },
+  {
+    path: "procurement",
+    element: ProcurementManagement,
+    name: "Procurement",
+    icon: Boxes,
   },
   {
     path: "pharmacies",
@@ -489,6 +533,18 @@ export const adminRoutes = [
     path: "employees",
     element: EmployeeManagement,
     name: "Employees",
+    icon: UserCog,
+  },
+  {
+    path: "staff-directory",
+    element: StaffDirectory,
+    name: "Staff Directory",
+    icon: UserCog,
+  },
+  {
+    path: "employee-shifts",
+    element: EmployeeShiftManagement,
+    name: "Employee Shifts",
     icon: UserCog,
   },
   // Drill-in: employee profile, attendance, leaves, payslips. Hidden from sidebar.

@@ -1784,6 +1784,97 @@ export const billingApi = {
 };
 
 // OPD — appointments & queue
+export const doctorScheduleApi = {
+  // Doctors + whether they have a published OPD availability schedule.
+  listDoctors: () => fetchWithAuth("/admin/doctor-schedules"),
+  get: (doctorId: string) => fetchWithAuth(`/admin/doctor-schedules/${doctorId}`),
+  save: (
+    doctorId: string,
+    data: {
+      slotMinutes: number;
+      windows: { weekday: number; start: string; end: string }[];
+      isActive?: boolean;
+    },
+  ) =>
+    fetchWithAuth(`/admin/doctor-schedules/${doctorId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+};
+
+export const insuranceApi = {
+  // Payers (insurer/TPA)
+  listPayers: () => fetchWithAuth("/admin/insurance/payers"),
+  createPayer: (data: any) =>
+    fetchWithAuth("/admin/insurance/payers", { method: "POST", body: JSON.stringify(data) }),
+  updatePayer: (id: string, data: any) =>
+    fetchWithAuth(`/admin/insurance/payers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deletePayer: (id: string) => fetchWithAuth(`/admin/insurance/payers/${id}`, { method: "DELETE" }),
+  // Policies
+  listPolicies: (patientId?: string) =>
+    fetchWithAuth(`/admin/insurance/policies${patientId ? `?patientId=${patientId}` : ""}`),
+  createPolicy: (data: any) =>
+    fetchWithAuth("/admin/insurance/policies", { method: "POST", body: JSON.stringify(data) }),
+  updatePolicy: (id: string, data: any) =>
+    fetchWithAuth(`/admin/insurance/policies/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  // Claims
+  listClaims: (status?: string) =>
+    fetchWithAuth(`/admin/insurance/claims${status ? `?status=${status}` : ""}`),
+  createClaim: (data: any) =>
+    fetchWithAuth("/admin/insurance/claims", { method: "POST", body: JSON.stringify(data) }),
+  updateClaimStatus: (id: string, data: any) =>
+    fetchWithAuth(`/admin/insurance/claims/${id}/status`, { method: "POST", body: JSON.stringify(data) }),
+};
+
+export const hmsReportsApi = {
+  summary: () => fetchWithAuth("/admin/hms-reports/summary"),
+};
+
+export const staffDirectoryApi = {
+  list: (params: { type?: string; q?: string } = {}) => {
+    const qs = new URLSearchParams(params as any).toString();
+    return fetchWithAuth(`/admin/staff-directory${qs ? `?${qs}` : ""}`);
+  },
+  attendance: (date: string) => fetchWithAuth(`/admin/staff-directory/attendance?date=${date}`),
+};
+
+export const doctorRosterApi = {
+  list: (date: string) => fetchWithAuth(`/admin/doctor-roster?date=${date}`),
+  add: (data: { doctorId: string; date: string; shift: string; isOnCall?: boolean; department?: string; notes?: string }) =>
+    fetchWithAuth("/admin/doctor-roster", { method: "POST", body: JSON.stringify(data) }),
+  remove: (id: string) => fetchWithAuth(`/admin/doctor-roster/${id}`, { method: "DELETE" }),
+};
+
+export const employeeShiftApi = {
+  list: (date: string) => fetchWithAuth(`/admin/employee-shifts?date=${date}`),
+  employees: () => fetchWithAuth("/admin/employee-shifts/employees"),
+  add: (data: { employeeId: string; date: string; shift: string; startTime?: string; endTime?: string; department?: string; section?: string; notes?: string }) =>
+    fetchWithAuth("/admin/employee-shifts", { method: "POST", body: JSON.stringify(data) }),
+  remove: (id: string) => fetchWithAuth(`/admin/employee-shifts/${id}`, { method: "DELETE" }),
+};
+
+export const otApi = {
+  listTheatres: () => fetchWithAuth("/admin/ot/theatres"),
+  createTheatre: (data: any) => fetchWithAuth("/admin/ot/theatres", { method: "POST", body: JSON.stringify(data) }),
+  updateTheatre: (id: string, data: any) => fetchWithAuth(`/admin/ot/theatres/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteTheatre: (id: string) => fetchWithAuth(`/admin/ot/theatres/${id}`, { method: "DELETE" }),
+  listSurgeries: (status?: string) => fetchWithAuth(`/admin/ot/surgeries${status ? `?status=${status}` : ""}`),
+  createSurgery: (data: any) => fetchWithAuth("/admin/ot/surgeries", { method: "POST", body: JSON.stringify(data) }),
+  updateSurgeryStatus: (id: string, status: string) =>
+    fetchWithAuth(`/admin/ot/surgeries/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+};
+
+export const procurementApi = {
+  listSuppliers: () => fetchWithAuth("/admin/procurement/suppliers"),
+  createSupplier: (data: any) => fetchWithAuth("/admin/procurement/suppliers", { method: "POST", body: JSON.stringify(data) }),
+  updateSupplier: (id: string, data: any) => fetchWithAuth(`/admin/procurement/suppliers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteSupplier: (id: string) => fetchWithAuth(`/admin/procurement/suppliers/${id}`, { method: "DELETE" }),
+  listPurchaseOrders: (status?: string) => fetchWithAuth(`/admin/procurement/purchase-orders${status ? `?status=${status}` : ""}`),
+  createPurchaseOrder: (data: any) => fetchWithAuth("/admin/procurement/purchase-orders", { method: "POST", body: JSON.stringify(data) }),
+  updatePurchaseOrderStatus: (id: string, status: string) =>
+    fetchWithAuth(`/admin/procurement/purchase-orders/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+};
+
 export const opdApi = {
   list: (params: Record<string, string> = {}) => {
     const qs = new URLSearchParams(params).toString();
