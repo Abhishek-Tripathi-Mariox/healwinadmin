@@ -1469,6 +1469,12 @@ export const ambulanceStaffApi = {
     }),
   deactivate: (id: string) =>
     fetchWithAuth(`/admin/ambulance-staff/${id}/deactivate`, { method: "POST" }),
+  // Control-centre remote on/off-duty toggle.
+  setDuty: (id: string, isDutyOn: boolean, reasonLabel?: string) =>
+    fetchWithAuth(`/admin/ambulance-staff/${id}/duty`, {
+      method: "POST",
+      body: JSON.stringify({ isDutyOn, reasonLabel }),
+    }),
   remove: (id: string) =>
     fetchWithAuth(`/admin/ambulance-staff/${id}`, { method: "DELETE" }),
 };
@@ -1607,10 +1613,27 @@ export interface EncounterPayload {
     assessment?: string;
     plan?: string;
   };
+  subjectiveDetail?: {
+    symptoms?: string;
+    duration?: string;
+    painLevel?: number;
+    complaints?: string;
+    lifestyle?: string;
+  };
+  objectiveDetail?: { examFindings?: string; deviceData?: string };
   diagnoses?: string[];
+  icdDiagnoses?: { code?: string; text: string }[];
+  severity?: "mild" | "moderate" | "severe" | "critical";
+  differentialDiagnoses?: string[];
+  treatmentPlan?: string;
   prescriptions?: Prescription[];
   labOrders?: string[];
   imagingOrders?: string[];
+  referrals?: { department?: string; reason?: string; urgency?: "routine" | "urgent" | "emergency" }[];
+  followUpAt?: string;
+  followUpNotes?: string;
+  admissionRecommended?: boolean;
+  admissionNote?: string;
   notes?: string;
   status?: "draft" | "finalized";
 }
@@ -1709,7 +1732,9 @@ export interface InvoiceLineItem {
   section:
     | "consultation"
     | "procedure"
+    | "nursing"
     | "room"
+    | "bed"
     | "pharmacy"
     | "diagnostics"
     | "other";
@@ -1764,6 +1789,29 @@ export const billingApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  advance: (id: string, data: { method: string; amount: number; reference?: string }) =>
+    fetchWithAuth(`/admin/billing/${id}/advance`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  audits: (id: string) => fetchWithAuth(`/admin/billing/${id}/audits`),
+  // Stream a PDF (invoice or receipt) with the auth header and download it.
+  downloadPdf: async (id: string, kind: "pdf" | "receipt") => {
+    const token = getAuthToken();
+    const res = await fetch(`${API_URL}/admin/billing/${id}/${kind}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("Failed to download PDF");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${kind === "receipt" ? "receipt" : "invoice"}-${id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   // Cross-module auto-generated invoice (bed charges / diagnostics / consultation).
   generate: (data: {
     patientId: string;
@@ -1828,6 +1876,17 @@ export const insuranceApi = {
 
 export const hmsReportsApi = {
   summary: () => fetchWithAuth("/admin/hms-reports/summary"),
+};
+
+export const fleetHealthApi = {
+  summary: () => fetchWithAuth("/admin/fleet-health"),
+};
+
+export const firstAidApi = {
+  list: () => fetchWithAuth("/admin/first-aid"),
+  create: (data: any) => fetchWithAuth("/admin/first-aid", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: any) => fetchWithAuth(`/admin/first-aid/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  remove: (id: string) => fetchWithAuth(`/admin/first-aid/${id}`, { method: "DELETE" }),
 };
 
 export const staffDirectoryApi = {

@@ -28,6 +28,7 @@ type Staff = {
   providerId: string | { _id: string; name: string };
   isActive: boolean;
   isOnline: boolean;
+  isDutyOn?: boolean;
   licenseNumber?: string;
   certifications?: string[];
 };
@@ -250,6 +251,19 @@ export default function AmbulanceStaffManagement() {
                     }}
                   >
                     <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className={`px-2 text-xs ${s.isDutyOn ? "text-green-600 hover:bg-green-50" : "text-gray-500 hover:bg-gray-100"}`}
+                    title={s.isDutyOn ? "Set Off Duty" : "Set On Duty"}
+                    aria-label="Toggle duty"
+                    onClick={async () => {
+                      await ambulanceStaffApi.setDuty(s._id, !s.isDutyOn);
+                      load();
+                    }}
+                  >
+                    {s.isDutyOn ? "On Duty" : "Off Duty"}
                   </Button>
                   <Button
                     size="sm"

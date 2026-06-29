@@ -310,6 +310,9 @@ export default function PatientDetail() {
         labOrders: csvToArray(labText),
         imagingOrders: csvToArray(imagingText),
         prescriptions: (form.prescriptions || []).filter((p) => p.drug.trim()),
+        // Drop an empty referral row.
+        referrals: (form.referrals || []).filter((r) => r.department || r.reason),
+        followUpAt: form.followUpAt || undefined,
       });
       // If this consult came from an OPD appointment, link the encounter and
       // mark the appointment completed.
@@ -892,6 +895,58 @@ export default function PatientDetail() {
                 </Field>
               ))}
             </div>
+          </section>
+
+          {/* Structured S / O detail */}
+          <section className="grid grid-cols-2 gap-3">
+            <Field label="Symptoms (S)">
+              <Input value={form.subjectiveDetail?.symptoms || ""} onChange={(e) => setForm({ ...form, subjectiveDetail: { ...form.subjectiveDetail, symptoms: e.target.value } })} />
+            </Field>
+            <Field label="Duration (S)">
+              <Input value={form.subjectiveDetail?.duration || ""} onChange={(e) => setForm({ ...form, subjectiveDetail: { ...form.subjectiveDetail, duration: e.target.value } })} />
+            </Field>
+            <Field label="Pain level (0-10)">
+              <Input type="number" value={form.subjectiveDetail?.painLevel ?? ""} onChange={(e) => setForm({ ...form, subjectiveDetail: { ...form.subjectiveDetail, painLevel: e.target.value ? Number(e.target.value) : undefined } })} />
+            </Field>
+            <Field label="Lifestyle (S)">
+              <Input value={form.subjectiveDetail?.lifestyle || ""} onChange={(e) => setForm({ ...form, subjectiveDetail: { ...form.subjectiveDetail, lifestyle: e.target.value } })} />
+            </Field>
+            <Field label="Examination findings (O)">
+              <Input value={form.objectiveDetail?.examFindings || ""} onChange={(e) => setForm({ ...form, objectiveDetail: { ...form.objectiveDetail, examFindings: e.target.value } })} />
+            </Field>
+            <Field label="Device data — ambulance vitals (O)">
+              <Input value={form.objectiveDetail?.deviceData || ""} onChange={(e) => setForm({ ...form, objectiveDetail: { ...form.objectiveDetail, deviceData: e.target.value } })} />
+            </Field>
+          </section>
+
+          {/* Assessment extras + Plan extras */}
+          <section className="grid grid-cols-2 gap-3">
+            <Field label="Severity (A)">
+              <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.severity || ""} onChange={(e) => setForm({ ...form, severity: (e.target.value || undefined) as any })}>
+                <option value="">—</option>
+                {["mild", "moderate", "severe", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </Field>
+            <Field label="Differential diagnoses (comma)">
+              <Input value={(form.differentialDiagnoses || []).join(", ")} onChange={(e) => setForm({ ...form, differentialDiagnoses: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })} />
+            </Field>
+            <Field label="Treatment plan (P)">
+              <Input value={form.treatmentPlan || ""} onChange={(e) => setForm({ ...form, treatmentPlan: e.target.value })} />
+            </Field>
+            <Field label="Follow-up date (P)">
+              <Input type="date" value={form.followUpAt || ""} onChange={(e) => setForm({ ...form, followUpAt: e.target.value })} />
+            </Field>
+            <Field label="Referral — department">
+              <Input value={form.referrals?.[0]?.department || ""} onChange={(e) => setForm({ ...form, referrals: [{ ...(form.referrals?.[0] || {}), department: e.target.value }] })} />
+            </Field>
+            <Field label="Referral — reason">
+              <Input value={form.referrals?.[0]?.reason || ""} onChange={(e) => setForm({ ...form, referrals: [{ ...(form.referrals?.[0] || {}), reason: e.target.value }] })} />
+            </Field>
+            <Field label="Admission recommended (P)">
+              <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.admissionRecommended ? "1" : "0"} onChange={(e) => setForm({ ...form, admissionRecommended: e.target.value === "1" })}>
+                <option value="0">No</option><option value="1">Yes</option>
+              </select>
+            </Field>
           </section>
 
           {/* Orders */}

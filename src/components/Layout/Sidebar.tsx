@@ -140,6 +140,12 @@ const Sidebar: React.FC<SidebarProps> = ({
       path: "/admin/sos",
     },
     {
+      id: "fleet-health",
+      label: "Fleet Health",
+      icon: AlertTriangle,
+      path: "/admin/fleet-health",
+    },
+    {
       id: "ambulance-requests",
       label: "Ambulance Requests",
       icon: AlertTriangle,
@@ -472,6 +478,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           label: "News Articles",
           icon: Newspaper,
           path: "/admin/news",
+        },
+        {
+          id: "first-aid",
+          label: "First Aid Guides",
+          icon: Newspaper,
+          path: "/admin/first-aid",
         },
         {
           id: "gallery",

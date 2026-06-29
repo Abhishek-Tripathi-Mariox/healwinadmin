@@ -38,7 +38,9 @@ interface InvoiceRow {
 const SECTIONS: InvoiceLineItem["section"][] = [
   "consultation",
   "procedure",
+  "nursing",
   "room",
+  "bed",
   "pharmacy",
   "diagnostics",
   "other",
@@ -190,7 +192,7 @@ export default function BillingManagement() {
 
   const submitRefund = async () => {
     if (!detail) return;
-    const amount = window.prompt("Refund amount?");
+    const amount = window.prompt("Refund amount? (refunds to original method)");
     if (!amount) return;
     try {
       const res = await billingApi.refund(detail._id, { amount: Number(amount) });
@@ -198,6 +200,20 @@ export default function BillingManagement() {
       load();
     } catch (err: any) {
       alert(err.message || "Failed to refund");
+    }
+  };
+
+  const submitAdvance = async () => {
+    if (!detail) return;
+    const amount = window.prompt("Advance deposit amount?");
+    if (!amount) return;
+    const method = window.prompt("Method (cash/card/upi/insurance/wallet)?", "cash") || "cash";
+    try {
+      const res = await billingApi.advance(detail._id, { amount: Number(amount), method });
+      setDetail(res.data?.invoice);
+      load();
+    } catch (err: any) {
+      alert(err.message || "Failed to record advance");
     }
   };
 
@@ -567,6 +583,15 @@ ${pays ? `<div style="margin-top:16px;font-size:12px;color:#444"><b>Payments</b>
                 Refund
               </Button>
             )}
+            <Button variant="secondary" onClick={() => billingApi.downloadPdf(detail._id, "pdf").catch((e: any) => alert(e.message))}>
+              Invoice PDF
+            </Button>
+            <Button variant="secondary" onClick={() => billingApi.downloadPdf(detail._id, "receipt").catch((e: any) => alert(e.message))}>
+              Receipt
+            </Button>
+            <Button variant="secondary" onClick={submitAdvance}>
+              + Advance
+            </Button>
             <Button variant="secondary" onClick={() => printInvoice(detail)}>
               Print
             </Button>
@@ -696,10 +721,21 @@ function ReportsPanel({ report }: { report: any }) {
           "border-red-200 bg-red-50 text-red-800",
         )}
       </div>
+      {report.taxSummary && (
+        <Card padded>
+          <h3 className="mb-3 text-sm font-semibold text-gray-700">GST tax summary</h3>
+          <div className="grid grid-cols-2 gap-2 text-sm lg:grid-cols-4">
+            <div className="flex justify-between"><span className="text-gray-600">Taxable</span><span>₹{report.taxSummary.taxableValue.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-600">CGST</span><span>₹{report.taxSummary.cgst.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-600">SGST</span><span>₹{report.taxSummary.sgst.toFixed(2)}</span></div>
+            <div className="flex justify-between font-semibold"><span className="text-gray-600">Total GST</span><span>₹{report.taxSummary.totalTax.toFixed(2)}</span></div>
+          </div>
+        </Card>
+      )}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card padded>
           <h3 className="mb-3 text-sm font-semibold text-gray-700">
-            Revenue by section
+            Revenue by section (service-wise)
           </h3>
           {Object.entries(report.sectionRevenue || {}).map(([k, v]) => (
             <div key={k} className="flex justify-between py-1 text-sm">
@@ -718,6 +754,32 @@ function ReportsPanel({ report }: { report: any }) {
               <span>₹{(v as number).toFixed(2)}</span>
             </div>
           ))}
+        </Card>
+        <Card padded>
+          <h3 className="mb-3 text-sm font-semibold text-gray-700">Doctor-wise revenue</h3>
+          {(report.doctorRevenue || []).length === 0 ? (
+            <div className="text-sm text-gray-400">No doctor-tagged invoices.</div>
+          ) : (
+            (report.doctorRevenue || []).map((d: any) => (
+              <div key={d.doctorId} className="flex justify-between py-1 text-sm">
+                <span className="text-gray-600">{d.name}</span>
+                <span>₹{d.amount.toFixed(2)}</span>
+              </div>
+            ))
+          )}
+        </Card>
+        <Card padded>
+          <h3 className="mb-3 text-sm font-semibold text-gray-700">Department-wise revenue</h3>
+          {(report.departmentRevenue || []).length === 0 ? (
+            <div className="text-sm text-gray-400">No department-tagged invoices.</div>
+          ) : (
+            (report.departmentRevenue || []).map((d: any) => (
+              <div key={d.departmentId} className="flex justify-between py-1 text-sm">
+                <span className="text-gray-600">{d.name}</span>
+                <span>₹{d.amount.toFixed(2)}</span>
+              </div>
+            ))
+          )}
         </Card>
       </div>
       <Card padded>

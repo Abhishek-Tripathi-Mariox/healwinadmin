@@ -45,6 +45,7 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 
 // Admin Pages
 const SOSDashboard = lazy(() => import("./pages/SOSDashboard"));
+const FleetHealthDashboard = lazy(() => import("./pages/FleetHealthDashboard"));
 const StaffManagement = lazy(() => import("./pages/StaffManagement"));
 const CareersManagement = lazy(() => import("./pages/CareersManagement"));
 const ApplicationsManagement = lazy(
@@ -78,6 +79,7 @@ const LegalContentManagement = lazy(
 const ContactManagement = lazy(() => import("./pages/ContactManagement"));
 const HomeManagement = lazy(() => import("./pages/HomeManagement"));
 const NewsManagement = lazy(() => import("./pages/NewsManagement"));
+const FirstAidManagement = lazy(() => import("./pages/FirstAidManagement"));
 const GalleryManagement = lazy(() => import("./pages/GalleryManagement"));
 const ArticleSubmissions = lazy(() => import("./pages/ArticleSubmissions"));
 const LogoManagement = lazy(() => import("./pages/LogoManagement"));
@@ -175,6 +177,12 @@ export const adminRoutes = [
     path: "sos",
     element: SOSDashboard,
     name: "SOS Dashboard",
+    icon: AlertTriangle,
+  },
+  {
+    path: "fleet-health",
+    element: FleetHealthDashboard,
+    name: "Fleet Health",
     icon: AlertTriangle,
   },
   {
@@ -313,6 +321,12 @@ export const adminRoutes = [
     path: "gallery",
     element: GalleryManagement,
     name: "Gallery",
+    icon: FileText,
+  },
+  {
+    path: "first-aid",
+    element: FirstAidManagement,
+    name: "First Aid Guides",
     icon: FileText,
   },
   {
