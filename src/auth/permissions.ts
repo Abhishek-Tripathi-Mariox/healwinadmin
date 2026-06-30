@@ -231,4 +231,16 @@ export const SIDEBAR_PERMISSION_MAP: Record<string, string[]> = {
   holidays: [PERMISSIONS.HOLIDAYS_VIEW],
   payroll: [PERMISSIONS.PAYROLL_VIEW],
   catalog: [PERMISSIONS.CATALOG_VIEW],
+  // Newer modules — without these keys the items stay hidden for everyone
+  // (canAccessModule treats unmapped ids as inaccessible).
+  "first-aid": [PERMISSIONS.CMS_VIEW],
+  "fleet-health": [PERMISSIONS.TRACKING_VIEW, PERMISSIONS.SOS_VIEW],
+  "staff-directory": [PERMISSIONS.EMPLOYEES_VIEW],
+  "employee-shifts": [PERMISSIONS.EMPLOYEES_VIEW],
+  "doctor-schedules": [PERMISSIONS.OPD_VIEW],
+  "doctor-roster": [PERMISSIONS.OPD_VIEW],
+  "hms-reports": [PERMISSIONS.BILLING_REPORTS],
+  insurance: [PERMISSIONS.BILLING_VIEW],
+  ot: [PERMISSIONS.IPD_VIEW],
+  procurement: [PERMISSIONS.INVENTORY_VIEW],
 };
