@@ -234,7 +234,7 @@ export const SIDEBAR_PERMISSION_MAP: Record<string, string[]> = {
   // Newer modules — without these keys the items stay hidden for everyone
   // (canAccessModule treats unmapped ids as inaccessible).
   "first-aid": [PERMISSIONS.CMS_VIEW],
-  "fleet-health": [PERMISSIONS.TRACKING_VIEW, PERMISSIONS.SOS_VIEW],
+  "fleet-health": [PERMISSIONS.SOS_VIEW],
   "staff-directory": [PERMISSIONS.EMPLOYEES_VIEW],
   "employee-shifts": [PERMISSIONS.EMPLOYEES_VIEW],
   "doctor-schedules": [PERMISSIONS.OPD_VIEW],
