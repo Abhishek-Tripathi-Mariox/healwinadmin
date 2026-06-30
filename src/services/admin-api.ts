@@ -1491,6 +1491,11 @@ export const sosAlertApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  updateStatus: (id: string, status: string, resolutionNotes?: string) =>
+    fetchWithAuth(`/admin/sos-alerts/${id}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status, resolutionNotes }),
+    }),
 };
 
 // ==================== AMBULANCE DISPATCH API ====================

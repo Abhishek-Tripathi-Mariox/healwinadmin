@@ -376,8 +376,12 @@ export default function PatientOrders() {
               </div>
             )}
 
-            {/* Lab report — upload a file and/or type findings */}
-            {tab === "lab-bookings" && (
+            {/* Lab report — upload a file and/or type findings. Only available
+                once the sample has actually been collected; at the BOOKED stage
+                the admin is still scheduling/rescheduling, so there's nothing to
+                upload yet and the option is hidden. */}
+            {tab === "lab-bookings" &&
+              ["SAMPLE_COLLECTED", "PROCESSING", "REPORT_READY"].includes(selected.status) && (
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="mb-1 text-sm font-medium text-gray-700">Lab report</div>
                 {(() => {

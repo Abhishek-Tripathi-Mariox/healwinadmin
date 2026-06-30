@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { sosAlertApi } from "../services/admin-api";
+import { adminSocket } from "../services/socket";
 import DispatchPanel from "../components/DispatchPanel";
 import {
   PageHeader,
@@ -24,6 +25,9 @@ type Alert = {
   location: { coordinates: [number, number] };
   createdAt: string;
   userId?: { firstName?: string; lastName?: string; phone?: string };
+  source?: "patient" | "crew";
+  crewName?: string;
+  crewPhone?: string;
 };
 
 export default function SOSAlertsDashboard() {
@@ -49,7 +53,14 @@ export default function SOSAlertsDashboard() {
   useEffect(() => {
     load();
     const t = setInterval(load, 10000);
-    return () => clearInterval(t);
+    // Instant pop: a crew (or patient) SOS reloads the list immediately instead
+    // of waiting for the 10s poll. Backend emits `sos-alert:new` to the admin room.
+    adminSocket.connect();
+    const off = adminSocket.on("sos-alert:new", load);
+    return () => {
+      clearInterval(t);
+      off();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
@@ -94,33 +105,58 @@ export default function SOSAlertsDashboard() {
       <Table>
         <THead>
           <Th>Created</Th>
-          <Th>User</Th>
-          <Th>Address</Th>
+          <Th>Source</Th>
+          <Th>Who</Th>
+          <Th>Location</Th>
           <Th>Status</Th>
           <Th className="text-right">Actions</Th>
         </THead>
         <TBody>
           {loading ? (
-            <TableState colSpan={5}>Loading…</TableState>
+            <TableState colSpan={6}>Loading…</TableState>
           ) : items.length === 0 ? (
-            <TableState colSpan={5}>No alerts found.</TableState>
+            <TableState colSpan={6}>No alerts found.</TableState>
           ) : (
             items.map((a) => {
-              const user =
-                a.userId && typeof a.userId === "object"
-                  ? `${a.userId.firstName || ""} ${a.userId.lastName || ""}`.trim() ||
-                    a.userId.phone ||
-                    "-"
-                  : "-";
+              const isCrew = a.source === "crew";
+              const lat = a.location?.coordinates?.[1];
+              const lng = a.location?.coordinates?.[0];
+              const hasGps = !!lat && !!lng && !(lat === 0 && lng === 0);
+              const who = isCrew
+                ? a.crewName || "Crew member"
+                : (a.userId && typeof a.userId === "object"
+                    ? `${a.userId.firstName || ""} ${a.userId.lastName || ""}`.trim() || a.userId.phone || "-"
+                    : "-");
+              const phone = isCrew ? a.crewPhone : a.userId?.phone;
+              const resolve = async () => {
+                await sosAlertApi.updateStatus(a._id, "RESOLVED");
+                load();
+              };
               return (
                 <TR key={a._id}>
                   <Td className="text-gray-500 whitespace-nowrap">
                     {new Date(a.createdAt).toLocaleString()}
                   </Td>
-                  <Td className="font-medium text-gray-900">{user}</Td>
+                  <Td>
+                    <Badge tone={isCrew ? "warning" : "info"}>{isCrew ? "CREW" : "Patient"}</Badge>
+                  </Td>
+                  <Td className="font-medium text-gray-900">
+                    {who}
+                    {phone && <div className="text-xs text-gray-400">{phone}</div>}
+                  </Td>
                   <Td className="text-gray-500">
-                    {a.address ||
-                      `${a.location.coordinates[1].toFixed(4)}, ${a.location.coordinates[0].toFixed(4)}`}
+                    {hasGps ? (
+                      <a
+                        className="text-sky-600 hover:underline"
+                        href={`https://www.google.com/maps?q=${lat},${lng}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {a.address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`} — Map
+                      </a>
+                    ) : (
+                      a.address || "Location unavailable"
+                    )}
                   </Td>
                   <Td>
                     <Badge
@@ -137,14 +173,25 @@ export default function SOSAlertsDashboard() {
                     </Badge>
                   </Td>
                   <Td className="text-right whitespace-nowrap">
-                    {(a.status === "ACTIVE" || a.status === "RESPONDED") && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setSelected(a)}
-                      >
-                        Open Dispatch
-                      </Button>
+                    {isCrew ? (
+                      <>
+                        {phone && (
+                          <a href={`tel:${phone}`}>
+                            <Button size="sm" variant="secondary">Call Crew</Button>
+                          </a>
+                        )}
+                        {(a.status === "ACTIVE" || a.status === "RESPONDED") && (
+                          <Button size="sm" variant="ghost" className="text-green-600 hover:bg-green-50" onClick={resolve}>
+                            Resolve
+                          </Button>
+                        )}
+                      </>
+                    ) : (
+                      (a.status === "ACTIVE" || a.status === "RESPONDED") && (
+                        <Button size="sm" variant="ghost" onClick={() => setSelected(a)}>
+                          Open Dispatch
+                        </Button>
+                      )
                     )}
                   </Td>
                 </TR>

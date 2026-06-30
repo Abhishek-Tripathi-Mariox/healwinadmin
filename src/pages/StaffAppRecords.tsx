@@ -65,7 +65,8 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "patients", label: "Patients" },
   { key: "case-notes", label: "Case Notes" },
   { key: "stock-requests", label: "Stock Requests" },
-  { key: "leaves", label: "Leaves" },
+  // Leaves intentionally live ONLY in HR → Leave Management now (central leave
+  // store). Showing them here too was a confusing duplicate.
 ];
 
 const statusTone: Record<string, "warning" | "info" | "success" | "neutral" | "danger"> = {
