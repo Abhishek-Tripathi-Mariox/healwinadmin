@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Phone, MapPin, X } from "lucide-react";
 import { adminSocket } from "../services/socket";
+import { sosAlertApi } from "../services/admin-api";
 
 /**
  * Real-time emergency alerter. When a patient triggers SOS (or a new ambulance
@@ -16,6 +17,11 @@ interface SosItem {
   patientName: string;
   address: string;
   at: number;
+  // Crew SOS (a driver/attendant pressed SOS in their app) — actioned by
+  // calling the crew + resolving, not by dispatching another ambulance.
+  crew?: boolean;
+  phone?: string;
+  alertId?: string;
 }
 
 // One shared AudioContext (browsers cap the total count).
@@ -146,11 +152,40 @@ export const SosRealtime: React.FC = () => {
             ],
       );
     };
+    // Crew SOS (driver/attendant pressed SOS) — a distinct actionable card.
+    const addCrew = (raw: unknown) => {
+      const d = (raw || {}) as {
+        alertId?: string;
+        crewName?: string | null;
+        crewPhone?: string | null;
+      };
+      seq += 1;
+      const id = String(d.alertId || `crew-${seq}`);
+      setItems((prev) =>
+        prev.some((p) => p.id === id)
+          ? prev
+          : [
+              ...prev,
+              {
+                id,
+                emergency: true,
+                crew: true,
+                alertId: d.alertId,
+                patientName: d.crewName || "A crew member",
+                phone: d.crewPhone || "",
+                address: "Crew emergency — call & resolve",
+                at: seq,
+              },
+            ],
+      );
+    };
     const offSos = adminSocket.on("sos:new", (d) => add(d, true));
     const offReq = adminSocket.on("ambulance-request:new", (d) => add(d, false));
+    const offCrew = adminSocket.on("sos-alert:new", (d) => addCrew(d));
     return () => {
       offSos();
       offReq();
+      offCrew();
     };
   }, []);
 
@@ -186,6 +221,11 @@ export const SosRealtime: React.FC = () => {
     dismiss(id);
     navigate("/admin/sos");
   };
+  // Resolve a crew SOS straight from the alarm card.
+  const resolveCrew = async (it: SosItem) => {
+    if (it.alertId) await sosAlertApi.updateStatus(it.alertId, "RESOLVED").catch(() => undefined);
+    dismiss(it.id);
+  };
 
   return (
     <>
@@ -214,13 +254,20 @@ export const SosRealtime: React.FC = () => {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-semibold text-gray-900">
-                    {it.emergency ? "🚨 " : ""}
+                    {it.crew ? "🚑 CREW SOS — " : it.emergency ? "🚨 " : ""}
                     {it.patientName}
                   </p>
-                  <p className="mt-1 flex items-center gap-1 text-sm text-gray-600">
-                    <MapPin className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{it.address}</span>
-                  </p>
+                  {it.crew && it.phone ? (
+                    <p className="mt-1 flex items-center gap-1 text-sm text-gray-600">
+                      <Phone className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{it.phone}</span>
+                    </p>
+                  ) : (
+                    <p className="mt-1 flex items-center gap-1 text-sm text-gray-600">
+                      <MapPin className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{it.address}</span>
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={() => dismiss(it.id)}
@@ -230,20 +277,39 @@ export const SosRealtime: React.FC = () => {
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={() => dispatch(it.id)}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
-                >
-                  <Phone className="h-4 w-4" /> Dispatch now
-                </button>
-                <button
-                  onClick={() => dismiss(it.id)}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Acknowledge
-                </button>
-              </div>
+              {it.crew ? (
+                <div className="mt-3 flex gap-2">
+                  {it.phone && (
+                    <a
+                      href={`tel:${it.phone}`}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                    >
+                      <Phone className="h-4 w-4" /> Call Crew
+                    </a>
+                  )}
+                  <button
+                    onClick={() => void resolveCrew(it)}
+                    className="rounded-lg border border-green-500 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-50"
+                  >
+                    Resolve
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => dispatch(it.id)}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                  >
+                    <Phone className="h-4 w-4" /> Dispatch now
+                  </button>
+                  <button
+                    onClick={() => dismiss(it.id)}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Acknowledge
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

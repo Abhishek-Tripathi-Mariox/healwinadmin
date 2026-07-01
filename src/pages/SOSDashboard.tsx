@@ -522,6 +522,15 @@ const SOSDashboard: React.FC = () => {
     return `${Math.floor(hours / 24)}d ago`;
   };
 
+  const humanizeCancelReason = (reason: string): string => {
+    const map: Record<string, string> = {
+      no_response: "Not answered — no crew response",
+      driver_rejected: "Driver rejected",
+      admin_cancelled: "Cancelled by admin",
+    };
+    return map[reason] || reason.replace(/_/g, " ");
+  };
+
   const getStatusBadge = (status: string) => {
     const s: Record<string, string> = {
       PENDING: "bg-red-100 text-red-800 animate-pulse",
@@ -1307,6 +1316,7 @@ const SOSDashboard: React.FC = () => {
                                   Dispatched {getTimeAgo(d.dispatchedAt)}
                                   {d.dispatchedBy &&
                                     typeof d.dispatchedBy === "object" &&
+                                    d.dispatchedBy.name &&
                                     ` by ${d.dispatchedBy.name}`}
                                   {d.estimatedArrival &&
                                     ` • ETA: ${d.estimatedArrival} min`}
@@ -1318,7 +1328,9 @@ const SOSDashboard: React.FC = () => {
                                 )}
                                 {d.cancelReason && (
                                   <p className="mt-1 text-xs text-red-700">
-                                    Cancelled: {d.cancelReason}
+                                    {d.cancelReason === "no_response"
+                                      ? "⏱ Not answered — no crew response"
+                                      : `Cancelled: ${humanizeCancelReason(d.cancelReason)}`}
                                   </p>
                                 )}
                               </div>
