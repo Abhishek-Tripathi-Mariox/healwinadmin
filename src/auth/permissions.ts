@@ -217,6 +217,7 @@ export const SIDEBAR_PERMISSION_MAP: Record<string, string[]> = {
   // Doctor Panel / HMS
   patients: [PERMISSIONS.HMS_PATIENTS_VIEW],
   inventory: [PERMISSIONS.INVENTORY_VIEW],
+  "ambulance-inventory": [PERMISSIONS.INVENTORY_VIEW],
   billing: [PERMISSIONS.BILLING_VIEW],
   opd: [PERMISSIONS.OPD_VIEW],
   ipd: [PERMISSIONS.IPD_VIEW],

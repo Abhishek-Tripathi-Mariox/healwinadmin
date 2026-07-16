@@ -19,6 +19,7 @@ import {
   FolderOpen,
   Globe,
   Heart,
+  Package,
   HeartPulse,
   ImageIcon,
   LayoutDashboard,
@@ -120,6 +121,7 @@ const PatientRegistrationManagement = lazy(
 );
 const PatientDetail = lazy(() => import("./pages/PatientDetail"));
 const InventoryManagement = lazy(() => import("./pages/InventoryManagement"));
+const AmbulanceInventory = lazy(() => import("./pages/AmbulanceInventory"));
 const BillingManagement = lazy(() => import("./pages/BillingManagement"));
 const OPDManagement = lazy(() => import("./pages/OPDManagement"));
 const DoctorScheduleManagement = lazy(() => import("./pages/DoctorScheduleManagement"));
@@ -409,6 +411,12 @@ export const adminRoutes = [
     element: AmbulanceManagement,
     name: "Ambulances",
     icon: Heart,
+  },
+  {
+    path: "ambulance-inventory",
+    element: AmbulanceInventory,
+    name: "Ambulance Inventory",
+    icon: Package,
   },
   {
     path: "shifts",

@@ -2436,6 +2436,13 @@ export const patientCommerceApi = {
     }),
 };
 
+// Ambulance inventory — per-vehicle on-hand stock + spend reports.
+export const ambulanceStockApi = {
+  reports: () => fetchWithAuth("/admin/ambulance-stock/reports"),
+  ambulance: (ambulanceId: string) =>
+    fetchWithAuth(`/admin/ambulance-stock/${ambulanceId}`),
+};
+
 export default {
   staffRecords: staffRecordsApi,
   sosSubmissions: sosSubmissionApi,

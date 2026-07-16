@@ -219,7 +219,9 @@ export const SosRealtime: React.FC = () => {
   const dismiss = (id: string) => setItems((prev) => prev.filter((p) => p.id !== id));
   const dispatch = (id: string) => {
     dismiss(id);
-    navigate("/admin/sos");
+    // Open THIS SOS's detail (with the dispatch panel) directly, not just the
+    // listing — SOSDashboard reads ?open=<id> and auto-opens that submission.
+    navigate(`/admin/sos?open=${encodeURIComponent(id)}`);
   };
   // Resolve a crew SOS straight from the alarm card.
   const resolveCrew = async (it: SosItem) => {

@@ -19,6 +19,7 @@ import {
   FolderOpen,
   Globe,
   Heart,
+  Package,
   HeartPulse,
   Home,
   Image,
@@ -218,6 +219,12 @@ const Sidebar: React.FC<SidebarProps> = ({
               label: "Ambulances",
               icon: Heart,
               path: "/admin/ambulances",
+            },
+            {
+              id: "ambulance-inventory",
+              label: "Ambulance Inventory",
+              icon: Package,
+              path: "/admin/ambulance-inventory",
             },
             {
               id: "shifts",

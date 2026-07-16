@@ -1,5 +1,6 @@
 // src/pages/SOSDashboard.tsx
 import React, { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   Phone,
@@ -140,6 +141,7 @@ const SOSDashboard: React.FC = () => {
   // Tab & Submissions
   const [activeTab, setActiveTab] = useState<TabType>("CALL");
   const [submissions, setSubmissions] = useState<SOSSubmission[]>([]);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [stats, setStats] = useState<SOSSubmissionStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -342,6 +344,21 @@ const SOSDashboard: React.FC = () => {
     setShowDetailModal(true);
     fetchSubmissionDispatches(sub._id);
   };
+
+  // Deep-link: the realtime SOS alarm's "Dispatch now" navigates here with
+  // ?open=<sosId> — auto-open that submission's detail (with the dispatch panel)
+  // instead of dropping the dispatcher on the plain listing.
+  useEffect(() => {
+    const openId = searchParams.get("open");
+    if (!openId || submissions.length === 0) return;
+    const sub = submissions.find((s) => s._id === openId);
+    if (sub) {
+      handleViewDetails(sub);
+      searchParams.delete("open");
+      setSearchParams(searchParams, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submissions, searchParams]);
 
   const handleOpenDispatch = (sub: SOSSubmission) => {
     setSelectedSubmission(sub);
