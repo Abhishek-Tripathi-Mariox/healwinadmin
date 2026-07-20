@@ -23,7 +23,9 @@ export const StaffActivityRealtime: React.FC = () => {
           <button
             onClick={() => {
               toast.dismiss(t.id);
-              navigate("/admin/staff-records");
+              // Leaves live in HR → Leave Management (they were removed from the
+              // Staff App Records tabs), so deep-link straight there.
+              navigate("/admin/leave");
             }}
             className="flex items-start gap-3 text-left"
           >
@@ -47,7 +49,9 @@ export const StaffActivityRealtime: React.FC = () => {
           <button
             onClick={() => {
               toast.dismiss(t.id);
-              navigate("/admin/staff-records");
+              // Open the Stock Requests tab directly — without ?tab= the page
+              // falls back to "Patients", which is what looked broken.
+              navigate("/admin/staff-records?tab=stock-requests");
             }}
             className="flex items-start gap-3 text-left"
           >

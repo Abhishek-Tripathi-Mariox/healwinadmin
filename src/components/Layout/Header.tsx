@@ -38,7 +38,7 @@ const EVENTS: { event: string; title: string; route: string; tone: ActivityItem[
   { event: "consultation:new", title: "New consultation", route: "/admin/patient-orders", tone: "info" },
   { event: "lab-booking:new", title: "New lab booking", route: "/admin/patient-orders", tone: "info" },
   { event: "pharmacy-order:new", title: "New pharmacy order", route: "/admin/patient-orders", tone: "success" },
-  { event: "leave:new", title: "New leave request", route: "/admin/staff-records?tab=leaves", tone: "warning" },
+  { event: "leave:new", title: "New leave request", route: "/admin/leave", tone: "warning" },
   { event: "stock:new", title: "New stock request", route: "/admin/staff-records?tab=stock-requests", tone: "warning" },
   // Only patient/driver replies reach the admin room (emitToAdmin), so this
   // never fires for the admin's own replies.
