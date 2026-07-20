@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { staffRecordsApi } from "../services/admin-api";
+import { staffRecordsApi, ambulanceApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
 import {
-  PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
+  PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge, Modal, Field, Select,
 } from "../components/ui";
 
 /**
@@ -102,6 +102,12 @@ export default function StaffAppRecords() {
   const [caseNotes, setCaseNotes] = useState<CaseNoteRow[]>([]);
   const [stock, setStock] = useState<StockRow[]>([]);
   const [leaves, setLeaves] = useState<LeaveRow[]>([]);
+  // Fulfil flow: pick which ambulance the requested stock is loaded onto.
+  const [fulfillId, setFulfillId] = useState<string | null>(null);
+  const [ambulances, setAmbulances] = useState<{ _id: string; reg: string }[]>([]);
+  const [pickedAmbulance, setPickedAmbulance] = useState("");
+  const [fulfilling, setFulfilling] = useState(false);
+  const [fulfillMsg, setFulfillMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -133,6 +139,51 @@ export default function StaffAppRecords() {
       clearInterval(poll);
     };
   }, [load]);
+
+  // Fulfilling loads the stock onto an ambulance — the admin picks which one
+  // (defaults to the crew's assigned vehicle when the backend can resolve it).
+  const openFulfill = async (id: string) => {
+    setFulfillId(id);
+    setFulfillMsg(null);
+    if (ambulances.length === 0) {
+      try {
+        const res: any = await ambulanceApi.list({ limit: "200" } as any);
+        const list = res.data?.items || res.data?.ambulances || res.items || [];
+        setAmbulances(
+          list.map((a: any) => ({ _id: String(a._id), reg: a.registrationNumber || "Ambulance" })),
+        );
+      } catch {
+        setAmbulances([]);
+      }
+    }
+  };
+
+  const confirmFulfill = async () => {
+    if (!fulfillId || fulfilling) return;
+    setFulfilling(true);
+    try {
+      const res: any = await staffRecordsApi.setStockRequestStatus(
+        fulfillId,
+        "Fulfilled",
+        pickedAmbulance || undefined,
+      );
+      const d = res.data ?? res.rData ?? res;
+      if (d?.restockError) {
+        setFulfillMsg({ ok: false, text: d.restockError });
+      } else {
+        const r = d?.restock;
+        setFulfillMsg({
+          ok: true,
+          text: r
+            ? `Loaded ${r.moved} item(s) onto ${r.registrationNumber || "the ambulance"}.${r.skipped?.length ? ` Skipped: ${r.skipped.join(", ")}.` : ""}`
+            : "Marked fulfilled.",
+        });
+      }
+      load();
+    } finally {
+      setFulfilling(false);
+    }
+  };
 
   const setStockStatus = async (id: string, status: string) => {
     await staffRecordsApi.setStockRequestStatus(id, status);
@@ -248,7 +299,7 @@ export default function StaffAppRecords() {
                   <Td className="text-right whitespace-nowrap">
                     {s.status === "Pending" && (
                       <>
-                        <Button size="sm" onClick={() => setStockStatus(s._id, "Fulfilled")}>Fulfill</Button>
+                        <Button size="sm" onClick={() => openFulfill(s._id)}>Fulfill</Button>
                         <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => setStockStatus(s._id, "Rejected")}>Reject</Button>
                       </>
                     )}
@@ -302,6 +353,46 @@ export default function StaffAppRecords() {
           </TBody>
         </Table>
       )}
+
+      {/* Fulfil → load the requested stock onto an ambulance */}
+      <Modal
+        open={!!fulfillId}
+        onClose={() => { setFulfillId(null); setFulfillMsg(null); setPickedAmbulance(""); }}
+        title="Fulfil stock request"
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setFulfillId(null); setFulfillMsg(null); setPickedAmbulance(""); }}>
+              Close
+            </Button>
+            {!fulfillMsg?.ok && (
+              <Button disabled={fulfilling} onClick={confirmFulfill}>
+                {fulfilling ? "Loading…" : "Fulfil & load stock"}
+              </Button>
+            )}
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">
+            The requested items will be moved from central inventory onto the chosen
+            ambulance. Leave blank to use the crew's assigned vehicle.
+          </p>
+          <Field label="Load onto ambulance">
+            <Select value={pickedAmbulance} onChange={(e) => setPickedAmbulance(e.target.value)}>
+              <option value="">Crew's assigned ambulance (auto)</option>
+              {ambulances.map((a) => (
+                <option key={a._id} value={a._id}>{a.reg}</option>
+              ))}
+            </Select>
+          </Field>
+          {fulfillMsg && (
+            <div className={`rounded-lg p-3 text-sm ${fulfillMsg.ok ? "bg-green-50 text-green-800" : "bg-amber-50 text-amber-800"}`}>
+              {fulfillMsg.text}
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

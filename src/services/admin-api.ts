@@ -2355,10 +2355,12 @@ export const staffRecordsApi = {
     fetchWithAuth(`/admin/staff-records/case-notes${qstr(params)}`),
   stockRequests: (params?: Record<string, string>) =>
     fetchWithAuth(`/admin/staff-records/stock-requests${qstr(params)}`),
-  setStockRequestStatus: (id: string, status: string) =>
+  // `ambulanceId` (optional) tells the backend which vehicle to load the stock
+  // onto when fulfilling — needed when the crew isn't assigned to one.
+  setStockRequestStatus: (id: string, status: string, ambulanceId?: string) =>
     fetchWithAuth(`/admin/staff-records/stock-requests/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, ambulanceId }),
     }),
   leaves: (params?: Record<string, string>) =>
     fetchWithAuth(`/admin/staff-records/leaves${qstr(params)}`),
