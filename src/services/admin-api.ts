@@ -18,6 +18,20 @@ const resolveApiUrl = (): string => {
 };
 const API_URL = resolveApiUrl();
 
+// `new URLSearchParams({ foo: undefined })` stringifies the value to the
+// literal text "undefined" (not an omitted key) — so callers that pass
+// optional filters as `foo: value || undefined` end up sending `?foo=undefined`
+// on the wire, which servers then treat as a real (non-matching) filter value
+// instead of "no filter". Every `new URLSearchParams(params)` call below runs
+// through this first so undefined/null keys are dropped instead of stringified.
+const sanitizeParams = (params: Record<string, any> = {}): Record<string, string> => {
+  const out: Record<string, string> = {};
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) out[k] = String(v);
+  });
+  return out;
+};
+
 // Helper function to get auth token
 const getAuthToken = () => localStorage.getItem("adminToken");
 
@@ -493,7 +507,7 @@ export const configApi = {
 // ==================== BOOKING MANAGEMENT API ====================
 export const bookingsApi = {
   getAll: (params: Record<string, string> = {}) => {
-    const qs = new URLSearchParams(params).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/bookings${qs ? `?${qs}` : ""}`);
   },
   drivers: () => fetchWithAuth("/admin/bookings/drivers"),
@@ -1266,7 +1280,7 @@ export const usersApi = {
   restore: (id: string) =>
     fetchWithAuth(`/admin/users/${id}/restore`, { method: "POST" }),
   bookings: (id: string, params: Record<string, string | number> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/users/${id}/bookings${qs ? `?${qs}` : ""}`);
   },
   wallet: (id: string) => fetchWithAuth(`/admin/users/${id}/wallet`),
@@ -1276,7 +1290,7 @@ export const usersApi = {
       body: JSON.stringify({ amount, reason }),
     }),
   transactions: (id: string, params: Record<string, string | number> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(
       `/admin/users/${id}/transactions${qs ? `?${qs}` : ""}`,
     );
@@ -1287,7 +1301,7 @@ export const usersApi = {
 // ==================== AMBULANCE SERVICE PROVIDERS API ====================
 export const providerApi = {
   list: (params: Record<string, string | number | boolean> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/service-providers${qs ? `?${qs}` : ""}`);
   },
   detail: (id: string) => fetchWithAuth(`/admin/service-providers/${id}`),
@@ -1308,7 +1322,7 @@ export const providerApi = {
 // ==================== AMBULANCES API ====================
 export const ambulanceApi = {
   list: (params: Record<string, string | number | boolean> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/ambulances${qs ? `?${qs}` : ""}`);
   },
   detail: (id: string) => fetchWithAuth(`/admin/ambulances/${id}`),
@@ -1348,7 +1362,7 @@ export const ambulanceApi = {
 // ==================== SHIFTS API ====================
 export const shiftApi = {
   list: (params: Record<string, string | number | boolean> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/shifts${qs ? `?${qs}` : ""}`);
   },
   detail: (id: string) => fetchWithAuth(`/admin/shifts/${id}`),
@@ -1397,12 +1411,12 @@ export const shiftApi = {
 // a `staffCount` for at-a-glance triage on the listing page.
 export const hospitalApi = {
   list: (params: Record<string, string | number | boolean> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/hospitals${qs ? `?${qs}` : ""}`);
   },
   detail: (id: string) => fetchWithAuth(`/admin/hospitals/${id}`),
   staff: (id: string, params: Record<string, string | number | boolean> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/hospitals/${id}/staff${qs ? `?${qs}` : ""}`);
   },
   // Hospital staff are NOT linked to any service provider — they're
@@ -1436,7 +1450,7 @@ export const hospitalApi = {
 // ==================== OFF-DUTY REASONS API ====================
 export const offDutyReasonsApi = {
   list: (params: Record<string, string | number | boolean> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/off-duty-reasons${qs ? `?${qs}` : ""}`);
   },
   create: (data: { label: string; isActive?: boolean; sortOrder?: number }) =>
@@ -1459,7 +1473,7 @@ export const offDutyReasonsApi = {
 // ==================== AMBULANCE STAFF API ====================
 export const ambulanceStaffApi = {
   list: (params: Record<string, string | number | boolean> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/ambulance-staff${qs ? `?${qs}` : ""}`);
   },
   detail: (id: string) => fetchWithAuth(`/admin/ambulance-staff/${id}`),
@@ -1488,7 +1502,7 @@ export const ambulanceStaffApi = {
 // ==================== SOS ALERTS (LIVE) API ====================
 export const sosAlertApi = {
   list: (params: Record<string, string | number | boolean> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/sos-alerts${qs ? `?${qs}` : ""}`);
   },
   detail: (id: string) => fetchWithAuth(`/admin/sos-alerts/${id}`),
@@ -1527,7 +1541,7 @@ export const ambulanceDispatchApi = {
   cancel: (sosId: string) =>
     fetchWithAuth(`/admin/sos/${sosId}/dispatch/cancel`, { method: "POST" }),
   list: (params: Record<string, string | number | boolean> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/ambulance-dispatches${qs ? `?${qs}` : ""}`);
   },
 };
@@ -1571,7 +1585,7 @@ export interface PatientPayload {
 // Patient Registration / Demographics
 export const hospitalPatientApi = {
   list: (params: Record<string, string | number | boolean> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/patients${qs ? `?${qs}` : ""}`);
   },
   detail: (id: string) => fetchWithAuth(`/admin/patients/${id}`),
@@ -1740,7 +1754,7 @@ export const diagnosticsApi = {
 // Inventory Management
 export const inventoryApi = {
   list: (params: Record<string, string | number | boolean> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/inventory${qs ? `?${qs}` : ""}`);
   },
   alerts: (days = 30) => fetchWithAuth(`/admin/inventory/alerts?days=${days}`),
@@ -1821,7 +1835,7 @@ export interface InvoiceLineItem {
 // Billing Management
 export const billingApi = {
   list: (params: Record<string, string | number | boolean> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/billing${qs ? `?${qs}` : ""}`);
   },
   reports: (from?: string, to?: string) => {
@@ -1966,7 +1980,7 @@ export const firstAidApi = {
 
 export const staffDirectoryApi = {
   list: (params: { type?: string; q?: string } = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/staff-directory${qs ? `?${qs}` : ""}`);
   },
   attendance: (date: string) => fetchWithAuth(`/admin/staff-directory/attendance?date=${date}`),
@@ -2012,7 +2026,7 @@ export const procurementApi = {
 
 export const opdApi = {
   list: (params: Record<string, string> = {}) => {
-    const qs = new URLSearchParams(params).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/opd${qs ? `?${qs}` : ""}`);
   },
   create: (data: {
@@ -2037,7 +2051,7 @@ export const opdApi = {
 export const ipdApi = {
   // Wards (managed picklist the bed form draws from).
   listWards: (params: Record<string, string> = {}) => {
-    const qs = new URLSearchParams(params).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/ipd/wards${qs ? `?${qs}` : ""}`);
   },
   createWard: (data: { name: string; description?: string }) =>
@@ -2047,7 +2061,7 @@ export const ipdApi = {
   deleteWard: (id: string) =>
     fetchWithAuth(`/admin/ipd/wards/${id}`, { method: "DELETE" }),
   listBeds: (params: Record<string, string> = {}) => {
-    const qs = new URLSearchParams(params).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/ipd/beds${qs ? `?${qs}` : ""}`);
   },
   createBed: (data: Record<string, any>) =>
@@ -2061,7 +2075,7 @@ export const ipdApi = {
       body: JSON.stringify(data),
     }),
   listAdmissions: (params: Record<string, string | number> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/ipd/admissions${qs ? `?${qs}` : ""}`);
   },
   admissionDetail: (id: string) =>
@@ -2117,7 +2131,7 @@ export const ipdApi = {
 // Pharmacy platform
 export const pharmacyApi = {
   list: (params: Record<string, string | number> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/pharmacies${qs ? `?${qs}` : ""}`);
   },
   detail: (id: string) => fetchWithAuth(`/admin/pharmacies/${id}`),
@@ -2143,7 +2157,7 @@ export const pharmacyApi = {
 // IVR escalation
 export const ivrApi = {
   list: (params: Record<string, string | number> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/ivr-escalations${qs ? `?${qs}` : ""}`);
   },
   detail: (id: string) => fetchWithAuth(`/admin/ivr-escalations/${id}`),
@@ -2171,7 +2185,7 @@ export const ivrApi = {
 // ==================== HR — EMPLOYEES API ====================
 export const hrEmployeeApi = {
   list: (params: Record<string, string | number | boolean> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/hr/employees${qs ? `?${qs}` : ""}`);
   },
   detail: (id: string) => fetchWithAuth(`/admin/hr/employees/${id}`),
@@ -2223,11 +2237,11 @@ export const leaveApi = {
       body: JSON.stringify(data),
     }),
   balances: (params: Record<string, string | number> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/hr/leave/balances${qs ? `?${qs}` : ""}`);
   },
   listRequests: (params: Record<string, string> = {}) => {
-    const qs = new URLSearchParams(params).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/hr/leave/requests${qs ? `?${qs}` : ""}`);
   },
   createRequest: (data: Record<string, any>) =>
@@ -2297,7 +2311,7 @@ export const hrDashboardApi = {
 // ==================== PATIENT CATALOG API ====================
 const catalogResource = (base: string) => ({
   list: (params: Record<string, string | number> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/catalog/${base}${qs ? `?${qs}` : ""}`);
   },
   create: (data: Record<string, any>) =>
