@@ -5,6 +5,7 @@ import { hospitalPatientApi } from "../services/admin-api";
 import type {
   PatientPayload,
   EmergencyContact,
+  DuplicateGroup,
 } from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
@@ -78,8 +79,15 @@ export default function PatientRegistrationManagement() {
   const canCreate = hasPermission(PERMISSIONS.HMS_PATIENTS_CREATE);
   const canUpdate = hasPermission(PERMISSIONS.HMS_PATIENTS_UPDATE);
   const canDelete = hasPermission(PERMISSIONS.HMS_PATIENTS_DELETE);
+  const canMerge = canDelete; // merge soft-deletes the source record
 
   const [items, setItems] = useState<PatientRow[]>([]);
+  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [duplicatesLoading, setDuplicatesLoading] = useState(false);
+  const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
+  const [targetByGroup, setTargetByGroup] = useState<Record<number, string>>({});
+  const [merging, setMerging] = useState(false);
+  const [mergeError, setMergeError] = useState("");
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -191,15 +199,71 @@ export default function PatientRegistrationManagement() {
     load();
   };
 
+  const openDuplicates = async () => {
+    setShowDuplicates(true);
+    setMergeError("");
+    setDuplicatesLoading(true);
+    try {
+      const res = await hospitalPatientApi.duplicates();
+      const groups: DuplicateGroup[] = res.data?.groups || [];
+      setDuplicateGroups(groups);
+      // Default target = the patient with the most real records in each group.
+      const defaults: Record<number, string> = {};
+      groups.forEach((g, i) => {
+        const richest = [...g.patients].sort((a, b) => {
+          const score = (p: typeof a) =>
+            p.recordCounts.admissions + p.recordCounts.appointments + p.recordCounts.invoices;
+          return score(b) - score(a);
+        })[0];
+        defaults[i] = richest._id;
+      });
+      setTargetByGroup(defaults);
+    } finally {
+      setDuplicatesLoading(false);
+    }
+  };
+
+  const mergeGroup = async (group: DuplicateGroup, groupIndex: number) => {
+    const targetId = targetByGroup[groupIndex];
+    const sources = group.patients.filter((p) => p._id !== targetId);
+    if (!targetId || sources.length === 0) return;
+    if (
+      !window.confirm(
+        `Merge ${sources.length} record(s) into the selected patient? Merged records will be soft-deleted and all their admissions, appointments, bills, diagnostics, insurance, ambulance and surgery history will be re-pointed to the kept record. This cannot be undone from the UI.`,
+      )
+    )
+      return;
+    setMergeError("");
+    setMerging(true);
+    try {
+      for (const src of sources) {
+        await hospitalPatientApi.merge(src._id, targetId);
+      }
+      await openDuplicates();
+      load();
+    } catch (err: any) {
+      setMergeError(err.message || "Failed to merge patients");
+    } finally {
+      setMerging(false);
+    }
+  };
+
   return (
     <div className="p-6">
       <PageHeader
         title="Patient Registration"
         subtitle="Demographics & health history — Doctor Panel (HMS)"
         actions={
-          canCreate && (
-            <Button onClick={openCreate}>+ Register Patient</Button>
-          )
+          <div className="flex gap-2">
+            {canMerge && (
+              <Button variant="secondary" onClick={openDuplicates}>
+                Find Duplicates
+              </Button>
+            )}
+            {canCreate && (
+              <Button onClick={openCreate}>+ Register Patient</Button>
+            )}
+          </div>
         }
       />
 
@@ -533,6 +597,77 @@ export default function PatientRegistrationManagement() {
             </div>
           </section>
         </form>
+      </Modal>
+
+      <Modal
+        open={showDuplicates}
+        onClose={() => setShowDuplicates(false)}
+        title="Possible Duplicate Patients"
+        size="lg"
+        footer={
+          <Button variant="secondary" onClick={() => setShowDuplicates(false)}>
+            Close
+          </Button>
+        }
+      >
+        {mergeError && <Alert tone="danger" className="mb-3">{mergeError}</Alert>}
+        {duplicatesLoading ? (
+          <p className="text-sm text-gray-500">Scanning for duplicates…</p>
+        ) : duplicateGroups.length === 0 ? (
+          <p className="text-sm text-gray-500">No likely duplicates found.</p>
+        ) : (
+          <div className="space-y-5">
+            {duplicateGroups.map((group, gi) => (
+              <div key={gi} className="rounded-lg border border-gray-200 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <Badge tone={group.reason === "phone" ? "info" : "warning"}>
+                    {group.reason === "phone" ? "Same phone number" : "Same name & date of birth"}
+                  </Badge>
+                  {canMerge && (
+                    <Button
+                      size="sm"
+                      disabled={merging}
+                      onClick={() => mergeGroup(group, gi)}
+                    >
+                      {merging ? "Merging…" : "Merge into selected"}
+                    </Button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {group.patients.map((p) => (
+                    <label
+                      key={p._id}
+                      className="flex items-center gap-3 rounded border border-gray-100 p-2 text-sm hover:bg-gray-50"
+                    >
+                      <input
+                        type="radio"
+                        name={`target-${gi}`}
+                        checked={targetByGroup[gi] === p._id}
+                        onChange={() =>
+                          setTargetByGroup((t) => ({ ...t, [gi]: p._id }))
+                        }
+                      />
+                      <div className="flex-1">
+                        <span className="font-medium text-gray-900">{p.fullName}</span>{" "}
+                        <span className="font-mono text-xs text-gray-500">{p.patientId}</span>
+                        <div className="text-xs text-gray-500">
+                          {p.phone} · {p.gender}
+                          {p.dateOfBirth ? ` · DOB ${p.dateOfBirth.substring(0, 10)}` : ""} · registered{" "}
+                          {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "—"}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {p.recordCounts.admissions} admission(s) · {p.recordCounts.appointments} appointment(s) ·{" "}
+                          {p.recordCounts.invoices} invoice(s)
+                        </div>
+                      </div>
+                      {targetByGroup[gi] === p._id && <Badge tone="success">Keep</Badge>}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Modal>
     </div>
   );

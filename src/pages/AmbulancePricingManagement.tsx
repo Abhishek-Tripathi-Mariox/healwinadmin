@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Pencil, Power, Trash2 } from "lucide-react";
 import { configApi } from "../services/admin-api";
+import { useAuth } from "../auth/useAuth";
+import { PERMISSIONS } from "../auth/permissions";
 import {
   PageHeader,
   Button,
@@ -70,6 +72,9 @@ const fareFields: { key: keyof FareConfig; label: string; suffix?: string }[] = 
 ];
 
 const AmbulancePricingManagement: React.FC = () => {
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission(PERMISSIONS.AMBULANCE_CONFIG_MANAGE);
+
   const [types, setTypes] = useState<VehicleType[]>([]);
   const [fare, setFare] = useState<FareConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -188,7 +193,7 @@ const AmbulancePricingManagement: React.FC = () => {
       <PageHeader
         title="Ambulance Types & Pricing"
         subtitle="Manage ambulance vehicle types, their fares, and global fare settings"
-        actions={<Button onClick={openCreate}>+ Add Vehicle Type</Button>}
+        actions={canManage && <Button onClick={openCreate}>+ Add Vehicle Type</Button>}
       />
 
       {error && (
@@ -246,29 +251,33 @@ const AmbulancePricingManagement: React.FC = () => {
                   </Badge>
                 </Td>
                 <Td className="text-right whitespace-nowrap">
-                  <Button size="sm" variant="ghost" className="px-2" title="Edit" aria-label="Edit" onClick={() => openEdit(vt)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="px-2"
-                    title={vt.isActive ? "Disable" : "Enable"}
-                    aria-label={vt.isActive ? "Disable" : "Enable"}
-                    onClick={() => handleToggle(vt)}
-                  >
-                    <Power className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="px-2 text-red-600 hover:bg-red-50 hover:text-red-700"
-                    title="Delete"
-                    aria-label="Delete"
-                    onClick={() => handleDelete(vt._id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {canManage && (
+                    <>
+                      <Button size="sm" variant="ghost" className="px-2" title="Edit" aria-label="Edit" onClick={() => openEdit(vt)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="px-2"
+                        title={vt.isActive ? "Disable" : "Enable"}
+                        aria-label={vt.isActive ? "Disable" : "Enable"}
+                        onClick={() => handleToggle(vt)}
+                      >
+                        <Power className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="px-2 text-red-600 hover:bg-red-50 hover:text-red-700"
+                        title="Delete"
+                        aria-label="Delete"
+                        onClick={() => handleDelete(vt._id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
                 </Td>
               </TR>
             ))
@@ -294,6 +303,7 @@ const AmbulancePricingManagement: React.FC = () => {
                     step="any"
                     placeholder="0"
                     value={fare[f.key] || ""}
+                    disabled={!canManage}
                     onChange={(e) =>
                       setFare({ ...fare, [f.key]: Number(e.target.value) })
                     }
@@ -301,11 +311,13 @@ const AmbulancePricingManagement: React.FC = () => {
                 </Field>
               ))}
             </div>
-            <div className="mt-4 flex justify-end">
-              <Button type="submit" disabled={savingFare}>
-                {savingFare ? "Saving…" : "Save Fare Settings"}
-              </Button>
-            </div>
+            {canManage && (
+              <div className="mt-4 flex justify-end">
+                <Button type="submit" disabled={savingFare}>
+                  {savingFare ? "Saving…" : "Save Fare Settings"}
+                </Button>
+              </div>
+            )}
           </form>
         ) : (
           <p className="text-sm text-gray-400">

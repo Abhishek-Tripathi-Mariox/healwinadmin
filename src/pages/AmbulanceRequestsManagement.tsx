@@ -44,6 +44,11 @@ interface ReqRow {
   inTransitTotal?: number;
   grandTotal?: number;
   paymentStatus?: "PENDING" | "PAID";
+  // Photos/videos of the patient captured by the crew during transport.
+  patientMedia?: { url: string; type: "photo" | "video"; uploadedAt?: string }[];
+  // The HMS patient record the crew registered for this trip, if any (see
+  // ambulance-staff-extras.controller.ts#addPatient).
+  hospitalPatientId?: { patientId?: string; fullName?: string; phone?: string } | null;
 }
 
 const money = (n?: number) => `₹${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
@@ -76,6 +81,10 @@ export default function AmbulanceRequestsManagement() {
   const [billSaving, setBillSaving] = useState(false);
   const [billError, setBillError] = useState("");
   const [invItems, setInvItems] = useState<InvItem[]>([]);
+
+  // Patient photos/videos captured by the crew during transport.
+  const [mediaFor, setMediaFor] = useState<ReqRow | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -298,6 +307,11 @@ export default function AmbulanceRequestsManagement() {
                   {!r.recipientName && r.userId?.mobileNumber && (
                     <div className="text-xs text-gray-400">{r.userId.mobileNumber}</div>
                   )}
+                  {r.hospitalPatientId && (
+                    <div className="mt-1">
+                      <Badge tone="info">HMS: {r.hospitalPatientId.fullName || r.hospitalPatientId.patientId}</Badge>
+                    </div>
+                  )}
                 </Td>
                 <Td>{r.emergency ? <Badge tone="danger">SOS</Badge> : r.type || "—"}</Td>
                 <Td className="text-xs text-gray-500">{r.pickup?.address || "—"}</Td>
@@ -326,6 +340,11 @@ export default function AmbulanceRequestsManagement() {
                     ))}
                   {["SEARCHING", "ASSIGNED"].includes(r.status) && (
                     <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => advance(r, "CANCELLED")}>Cancel</Button>
+                  )}
+                  {!!r.patientMedia?.length && (
+                    <Button size="sm" variant="ghost" onClick={() => setMediaFor(r)}>
+                      Media · {r.patientMedia.length}
+                    </Button>
                   )}
                 </Td>
               </TR>
@@ -467,6 +486,83 @@ export default function AmbulanceRequestsManagement() {
           <p className="text-xs text-gray-500">Saving updates the patient's bill on their tracking screen in real time.</p>
         </div>
       </Modal>
+
+      {/* Patient photos/videos captured by the crew during transport. */}
+      <Modal
+        open={!!mediaFor}
+        onClose={() => setMediaFor(null)}
+        title="Patient photos/videos"
+        subtitle={mediaFor ? (mediaFor.recipientName || mediaFor.userId?.fullName || mediaFor.patientName || "Patient") : undefined}
+      >
+        <div className="grid grid-cols-4 gap-3">
+          {(mediaFor?.patientMedia || []).map((m, i) => (
+            <button
+              key={m.url}
+              type="button"
+              className="relative aspect-square overflow-hidden rounded-lg border-2 border-transparent bg-gray-100 hover:border-healwin-400"
+              onClick={() => setLightboxIndex(i)}
+            >
+              {m.type === "video" ? (
+                <>
+                  <video src={m.url} className="h-full w-full object-cover" muted />
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/30 text-lg text-white">▶</span>
+                </>
+              ) : (
+                <img src={m.url} alt={`Media ${i + 1}`} className="h-full w-full object-cover" />
+              )}
+            </button>
+          ))}
+        </div>
+      </Modal>
+
+      {/* Media lightbox — enlarged photo, or a playable video. */}
+      {mediaFor && lightboxIndex != null && mediaFor.patientMedia?.[lightboxIndex] && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          onClick={() => setLightboxIndex(null)}
+        >
+          <div
+            className="relative mx-4 w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setLightboxIndex(null)}
+              className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-lg text-white hover:bg-black/70"
+            >
+              ×
+            </button>
+            <div className="flex items-center justify-center bg-gray-100 p-4" style={{ minHeight: 300 }}>
+              {mediaFor.patientMedia[lightboxIndex].type === "video" ? (
+                <video src={mediaFor.patientMedia[lightboxIndex].url} className="max-h-[70vh] max-w-full rounded" controls autoPlay />
+              ) : (
+                <img
+                  src={mediaFor.patientMedia[lightboxIndex].url}
+                  alt={`Media ${lightboxIndex + 1}`}
+                  className="max-h-[70vh] max-w-full rounded object-contain"
+                />
+              )}
+            </div>
+            {mediaFor.patientMedia.length > 1 && (
+              <>
+                <button
+                  onClick={() =>
+                    setLightboxIndex((prev) => ((prev! - 1 + mediaFor.patientMedia!.length) % mediaFor.patientMedia!.length))
+                  }
+                  className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-xl text-white hover:bg-black/70"
+                >
+                  ‹
+                </button>
+                <button
+                  onClick={() => setLightboxIndex((prev) => (prev! + 1) % mediaFor.patientMedia!.length)}
+                  className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-xl text-white hover:bg-black/70"
+                >
+                  ›
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

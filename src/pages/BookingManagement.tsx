@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { bookingsApi } from "../services/admin-api";
 import Pagination from "../components/Pagination";
+import { useAuth } from "../auth/useAuth";
+import { PERMISSIONS } from "../auth/permissions";
 import {
   PageHeader,
   Button,
@@ -72,6 +74,10 @@ const statusTone = (
 const PAGE_LIMIT = 20;
 
 const BookingManagement: React.FC = () => {
+  const { hasPermission } = useAuth();
+  const canUpdate = hasPermission(PERMISSIONS.BOOKINGS_UPDATE);
+  const canCancelBooking = hasPermission(PERMISSIONS.BOOKINGS_CANCEL);
+
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -263,7 +269,7 @@ const BookingManagement: React.FC = () => {
                   {new Date(b.createdAt).toLocaleDateString()}
                 </Td>
                 <Td className="text-right whitespace-nowrap">
-                  {b.status === "SEARCHING" && (
+                  {canUpdate && b.status === "SEARCHING" && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -272,7 +278,7 @@ const BookingManagement: React.FC = () => {
                       Assign
                     </Button>
                   )}
-                  {canCancel(b.status) && (
+                  {canCancelBooking && canCancel(b.status) && (
                     <Button
                       size="sm"
                       variant="ghost"

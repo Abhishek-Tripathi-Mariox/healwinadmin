@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { faqApi } from "../services/admin-api";
+import { useAuth } from "../auth/useAuth";
+import { PERMISSIONS } from "../auth/permissions";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge, Modal, Field, Input,
 } from "../components/ui";
@@ -22,6 +24,9 @@ interface Faq {
 const empty = { question: "", answer: "", category: "General", sortOrder: 0, isActive: true };
 
 export default function FaqManagement() {
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission(PERMISSIONS.FAQ_MANAGE);
+
   const [items, setItems] = useState<Faq[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -87,7 +92,7 @@ export default function FaqManagement() {
       <PageHeader
         title="Help FAQs"
         subtitle="FAQs shown in the patient app's Help & Support screen"
-        actions={<Button onClick={openNew}>Add FAQ</Button>}
+        actions={canManage && <Button onClick={openNew}>Add FAQ</Button>}
       />
 
       <Table>
@@ -113,15 +118,25 @@ export default function FaqManagement() {
                 <Td>{f.category || "General"}</Td>
                 <Td>{f.sortOrder ?? 0}</Td>
                 <Td>
-                  <button onClick={() => toggleActive(f)}>
+                  {canManage ? (
+                    <button onClick={() => toggleActive(f)}>
+                      <Badge tone={f.isActive !== false ? "success" : "neutral"} dot>
+                        {f.isActive !== false ? "Active" : "Hidden"}
+                      </Badge>
+                    </button>
+                  ) : (
                     <Badge tone={f.isActive !== false ? "success" : "neutral"} dot>
                       {f.isActive !== false ? "Active" : "Hidden"}
                     </Badge>
-                  </button>
+                  )}
                 </Td>
                 <Td className="text-right whitespace-nowrap">
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(f)}>Edit</Button>
-                  <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => del(f)}>Delete</Button>
+                  {canManage && (
+                    <>
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(f)}>Edit</Button>
+                      <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => del(f)}>Delete</Button>
+                    </>
+                  )}
                 </Td>
               </TR>
             ))

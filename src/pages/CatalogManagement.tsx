@@ -5,10 +5,10 @@ import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
 import {
   PageHeader, Button, SearchInput, Table, THead, TBody, TR, Th, Td,
-  TableState, Badge, Modal, Field, Input, Alert,
+  TableState, Badge, Modal, Field, Input, Select, Alert,
 } from "../components/ui";
 
-type FieldType = "text" | "number" | "bool";
+type FieldType = "text" | "number" | "bool" | "inventoryLink";
 interface FieldDef {
   key: string;
   label: string;
@@ -16,9 +16,9 @@ interface FieldDef {
   required?: boolean;
 }
 interface TabDef {
-  key: "products" | "labTests";
+  key: "products" | "labTests" | "procedures";
   label: string;
-  resource: typeof catalogApi.doctors;
+  resource: typeof catalogApi.products;
   columns: { key: string; label: string }[];
   fields: FieldDef[];
 }
@@ -32,6 +32,7 @@ const TABS: TabDef[] = [
       { key: "category", label: "Category" },
       { key: "price", label: "Price" },
       { key: "stock", label: "Stock" },
+      { key: "linkedItemName", label: "Linked HMS item" },
     ],
     fields: [
       { key: "name", label: "Name", required: true },
@@ -39,7 +40,8 @@ const TABS: TabDef[] = [
       { key: "category", label: "Category" },
       { key: "price", label: "Price", type: "number", required: true },
       { key: "mrp", label: "MRP", type: "number" },
-      { key: "stock", label: "Stock", type: "number" },
+      { key: "itemId", label: "Link to HMS inventory item", type: "inventoryLink" },
+      { key: "stock", label: "Stock (manual — only used if not linked above)", type: "number" },
       { key: "prescriptionRequired", label: "Prescription required", type: "bool" },
       { key: "description", label: "Description" },
     ],
@@ -64,6 +66,21 @@ const TABS: TabDef[] = [
       { key: "description", label: "Description" },
     ],
   },
+  {
+    key: "procedures",
+    label: "Procedures",
+    resource: catalogApi.procedures,
+    columns: [
+      { key: "category", label: "Category" },
+      { key: "price", label: "Price" },
+    ],
+    fields: [
+      { key: "name", label: "Name", required: true },
+      { key: "category", label: "Category" },
+      { key: "price", label: "Price", type: "number", required: true },
+      { key: "description", label: "Description" },
+    ],
+  },
 ];
 
 export default function CatalogManagement() {
@@ -81,6 +98,13 @@ export default function CatalogManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, any>>({});
   const [error, setError] = useState("");
+
+  // Inventory items available to link a pharmacy product to (products tab only).
+  const [invOptions, setInvOptions] = useState<{ _id: string; name: string; sku: string; currentStock: number; unit: string }[]>([]);
+  useEffect(() => {
+    if (tabKey !== "products") return;
+    catalogApi.inventoryItems().then((res) => setInvOptions(res.data?.items || [])).catch(() => setInvOptions([]));
+  }, [tabKey]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -231,12 +255,27 @@ export default function CatalogManagement() {
                   />
                   {fd.label}
                 </label>
+              ) : fd.type === "inventoryLink" ? (
+                <Field key={fd.key} label={fd.label} className="col-span-2">
+                  <Select
+                    value={form[fd.key] ?? ""}
+                    onChange={(e) => setForm({ ...form, [fd.key]: e.target.value || undefined })}
+                  >
+                    <option value="">— Not linked (use manual stock below) —</option>
+                    {invOptions.map((it) => (
+                      <option key={it._id} value={it._id}>
+                        {it.name} ({it.sku}) — {it.currentStock} {it.unit} in stock
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
               ) : (
                 <Field key={fd.key} label={fd.required ? `${fd.label} *` : fd.label}>
                   <Input
                     type={fd.type === "number" ? "number" : "text"}
                     value={form[fd.key] ?? ""}
                     onChange={(e) => setForm({ ...form, [fd.key]: e.target.value })}
+                    disabled={fd.key === "stock" && tabKey === "products" && !!form.itemId}
                   />
                 </Field>
               ),

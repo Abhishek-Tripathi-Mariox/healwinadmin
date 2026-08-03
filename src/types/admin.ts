@@ -141,6 +141,8 @@ export interface EmergencyDispatch {
   cancelReason?: string;
   responseNotes?: string;
   estimatedArrival?: number;
+  // The HMS patient record the crew registered for this trip, if any.
+  hospitalPatientId?: { patientId?: string; fullName?: string; phone?: string } | null;
   createdAt: string;
   updatedAt: string;
 }

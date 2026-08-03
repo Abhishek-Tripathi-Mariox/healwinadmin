@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { promoApi } from "../services/admin-api";
+import { useAuth } from "../auth/useAuth";
+import { PERMISSIONS } from "../auth/permissions";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
@@ -50,6 +52,11 @@ const empty = {
 };
 
 export default function PromoCodesManagement() {
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission(PERMISSIONS.PROMOS_CREATE);
+  const canUpdate = hasPermission(PERMISSIONS.PROMOS_UPDATE);
+  const canDelete = hasPermission(PERMISSIONS.PROMOS_DELETE);
+
   const [items, setItems] = useState<PromoRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -146,7 +153,7 @@ export default function PromoCodesManagement() {
       <PageHeader
         title="Promo Codes"
         subtitle="Discount coupons for ambulance rides & logistics bookings"
-        actions={<Button onClick={openNew}>New Promo Code</Button>}
+        actions={canCreate && <Button onClick={openNew}>New Promo Code</Button>}
       />
 
       <div className="mb-4 flex items-center gap-2">
@@ -198,9 +205,9 @@ export default function PromoCodesManagement() {
                   )}
                 </Td>
                 <Td className="text-right whitespace-nowrap">
-                  <Button size="sm" variant="secondary" onClick={() => openEdit(p)}>Edit</Button>{" "}
-                  <Button size="sm" variant="ghost" onClick={() => toggle(p)}>{p.isActive ? "Disable" : "Enable"}</Button>{" "}
-                  <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => remove(p)}>Delete</Button>
+                  {canUpdate && <Button size="sm" variant="secondary" onClick={() => openEdit(p)}>Edit</Button>}{" "}
+                  {canUpdate && <Button size="sm" variant="ghost" onClick={() => toggle(p)}>{p.isActive ? "Disable" : "Enable"}</Button>}{" "}
+                  {canDelete && <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => remove(p)}>Delete</Button>}
                 </Td>
               </TR>
             ))

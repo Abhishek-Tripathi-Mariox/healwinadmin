@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { staffRecordsApi, ambulanceApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
+import { useAuth } from "../auth/useAuth";
+import { PERMISSIONS } from "../auth/permissions";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge, Modal, Field, Select,
 } from "../components/ui";
@@ -84,6 +86,9 @@ const fmtDate = (d?: string) =>
   d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 export default function StaffAppRecords() {
+  const { hasPermission } = useAuth();
+  const canUpdate = hasPermission(PERMISSIONS.STAFF_UPDATE);
+
   // Open the tab requested via ?tab= (e.g. the bell's "New leave request"
   // notification deep-links to ?tab=leaves), and keep it in sync if the URL
   // changes while this page is already mounted.
@@ -297,7 +302,7 @@ export default function StaffAppRecords() {
                   <Td><Badge tone={statusTone[s.status] || "neutral"}>{s.status}</Badge></Td>
                   <Td className="text-xs text-gray-500">{fmtDate(s.createdAt)}</Td>
                   <Td className="text-right whitespace-nowrap">
-                    {s.status === "Pending" && (
+                    {canUpdate && s.status === "Pending" && (
                       <>
                         <Button size="sm" onClick={() => openFulfill(s._id)}>Fulfill</Button>
                         <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => setStockStatus(s._id, "Rejected")}>Reject</Button>
@@ -340,7 +345,7 @@ export default function StaffAppRecords() {
                   </Td>
                   <Td><Badge tone={statusTone[l.status] || "neutral"}>{l.status}</Badge></Td>
                   <Td className="text-right whitespace-nowrap">
-                    {l.status === "Pending" && (
+                    {canUpdate && l.status === "Pending" && (
                       <>
                         <Button size="sm" onClick={() => setLeaveStatus(l._id, "Approved")}>Approve</Button>
                         <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => setLeaveStatus(l._id, "Rejected")}>Reject</Button>

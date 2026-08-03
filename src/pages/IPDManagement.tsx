@@ -633,6 +633,28 @@ function AdmissionDrawer({
   const [vital, setVital] = useState({ bloodPressure: "", pulse: "", temperature: "", spo2: "" });
   const [med, setMed] = useState({ drug: "", dose: "", route: "" });
   const [note, setNote] = useState("");
+  const [mar, setMar] = useState<any[]>([]);
+  const [marLoading, setMarLoading] = useState(false);
+
+  const loadMar = useCallback(async () => {
+    setMarLoading(true);
+    try {
+      const res = await ipdApi.mar(admission._id);
+      setMar(res.data?.doses || []);
+    } finally {
+      setMarLoading(false);
+    }
+  }, [admission._id]);
+
+  useEffect(() => {
+    loadMar();
+  }, [loadMar]);
+
+  const markDoseGiven = async (dose: any) => {
+    await ipdApi.addLog(admission._id, { kind: "medication", drug: dose.drug, dose: dose.dosage });
+    await loadMar();
+    onChanged();
+  };
 
   const addVital = async () => {
     await ipdApi.addLog(admission._id, { kind: "vital", ...vital });
@@ -735,6 +757,15 @@ function AdmissionDrawer({
               Generate Bill (bed charges)
             </Button>
           )}
+          {admission.status === "discharged" && (
+            <Button
+              variant="subtle"
+              className="w-full"
+              onClick={() => ipdApi.downloadDischargeSummary(admission._id, admission.admissionNo).catch((e: any) => alert(e.message))}
+            >
+              Download Discharge Summary (PDF)
+            </Button>
+          )}
 
           {/* Vitals */}
           <section>
@@ -774,6 +805,44 @@ function AdmissionDrawer({
                 </div>
               ))}
             </div>
+          </section>
+
+          {/* Medication Administration Record — today's real schedule, from prescriptions */}
+          <section>
+            <h3 className="mb-2 font-semibold text-gray-700">Medication Schedule (MAR) — Today</h3>
+            {marLoading ? (
+              <p className="text-xs text-gray-400">Loading…</p>
+            ) : mar.length === 0 ? (
+              <p className="text-xs text-gray-400">No scheduled doses today (no active IPD prescriptions, or none due on a fixed round).</p>
+            ) : (
+              <div className="space-y-1.5">
+                {mar.map((d, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-center justify-between rounded-lg border px-3 py-1.5 text-xs ${
+                      d.status === "given" ? "border-green-200 bg-green-50" : d.status === "overdue" ? "border-red-200 bg-red-50" : "border-gray-200 bg-gray-50"
+                    }`}
+                  >
+                    <div>
+                      <span className="font-medium text-gray-800">{d.time}</span> — {d.drug}{d.dosage ? ` ${d.dosage}` : ""}
+                      {d.prescribedBy && <span className="text-gray-400"> · Dr. {d.prescribedBy}</span>}
+                      {d.status === "given" && d.givenAt && (
+                        <span className="text-green-700"> · given {new Date(d.givenAt).toLocaleTimeString()}{d.givenBy ? ` by ${d.givenBy}` : ""}</span>
+                      )}
+                    </div>
+                    {d.status !== "given" ? (
+                      canManage && (
+                        <Button size="sm" variant={d.status === "overdue" ? "danger" : "secondary"} onClick={() => markDoseGiven(d)}>
+                          Mark given
+                        </Button>
+                      )
+                    ) : (
+                      <span className="font-medium text-green-700">✓ Given</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Medication */}

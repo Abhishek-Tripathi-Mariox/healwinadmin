@@ -572,6 +572,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           path: "/admin/inventory",
         },
         {
+          id: "ward-inventory",
+          label: "Ward Inventory",
+          icon: Boxes,
+          path: "/admin/ward-inventory",
+        },
+        {
           id: "billing",
           label: "Billing",
           icon: Receipt,

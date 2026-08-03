@@ -1343,6 +1343,11 @@ const SOSDashboard: React.FC = () => {
                                     Response: {d.responseNotes}
                                   </p>
                                 )}
+                                {d.hospitalPatientId && (
+                                  <p className="mt-1 text-xs font-medium text-blue-700">
+                                    HMS patient: {d.hospitalPatientId.fullName || d.hospitalPatientId.patientId}
+                                  </p>
+                                )}
                                 {d.cancelReason && (
                                   <p className="mt-1 text-xs text-red-700">
                                     {d.cancelReason === "no_response"

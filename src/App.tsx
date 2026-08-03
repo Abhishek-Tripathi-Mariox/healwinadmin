@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Suspense } from "react";
 import { AuthProvider } from "./auth/AuthContext";
 import PrivateRoute from "./routes/privateRoute";
+import ModuleGuard from "./routes/ModuleGuard";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 import AuthLayout from "./layouts/AuthLayout";
@@ -44,7 +45,9 @@ const App = () => {
                   element={
                     <ErrorBoundary>
                       <Suspense fallback={<LoadingSpinner />}>
-                        <route.element />
+                        <ModuleGuard routePath={route.path}>
+                          <route.element />
+                        </ModuleGuard>
                       </Suspense>
                     </ErrorBoundary>
                   }

@@ -6,6 +6,7 @@ import {
   departmentApi,
   designationApi,
   employmentTypeApi,
+  staffApi,
 } from "../../services/admin-api";
 import { useAuth } from "../../auth/useAuth";
 import { PERMISSIONS } from "../../auth/permissions";
@@ -26,7 +27,9 @@ interface Employee {
   departmentId?: Ref;
   designationId?: Ref;
   employmentTypeId?: Ref;
+  linkedAdminId?: Ref | string;
 }
+interface AdminAccountRef { _id: string; fullName: string; roleName?: string; roleId?: Ref }
 
 const STATUSES = ["active", "on_leave", "inactive", "terminated"];
 const statusTone: Record<string, "success" | "warning" | "neutral" | "danger"> = {
@@ -47,6 +50,7 @@ const emptyForm = {
   departmentId: "",
   designationId: "",
   employmentTypeId: "",
+  linkedAdminId: "",
   status: "active",
   bankName: "",
   accountNumber: "",
@@ -81,6 +85,10 @@ export default function EmployeeManagement() {
   const [departments, setDepartments] = useState<Ref[]>([]);
   const [designations, setDesignations] = useState<Ref[]>([]);
   const [employmentTypes, setEmploymentTypes] = useState<Ref[]>([]);
+  // Admin-panel logins available to link — mainly for doctors, so leave/
+  // attendance here actually affects OPD slot availability (see
+  // doctor-slots.service.ts#isDoctorOnApprovedLeave).
+  const [adminAccounts, setAdminAccounts] = useState<AdminAccountRef[]>([]);
 
   const [show, setShow] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -116,6 +124,9 @@ export default function EmployeeManagement() {
     employmentTypeApi.getAll({ status: "active" }).then((r) =>
       setEmploymentTypes(r.data?.items || r.data || []),
     );
+    staffApi.getAll({ status: "active", limit: 500 }).then((r) =>
+      setAdminAccounts(r.data?.staff || r.data?.items || r.data || []),
+    );
   }, []);
 
   const openCreate = () => {
@@ -143,6 +154,7 @@ export default function EmployeeManagement() {
       departmentId: emp.departmentId?._id || emp.departmentId || "",
       designationId: emp.designationId?._id || emp.designationId || "",
       employmentTypeId: emp.employmentTypeId?._id || emp.employmentTypeId || "",
+      linkedAdminId: emp.linkedAdminId?._id || emp.linkedAdminId || "",
       status: emp.status || "active",
       bankName: emp.bankName || "",
       accountNumber: emp.accountNumber || "",
@@ -174,6 +186,7 @@ export default function EmployeeManagement() {
     departmentId: form.departmentId || undefined,
     designationId: form.designationId || undefined,
     employmentTypeId: form.employmentTypeId || undefined,
+    linkedAdminId: form.linkedAdminId || undefined,
     status: form.status,
     bankName: form.bankName || undefined,
     accountNumber: form.accountNumber || undefined,
@@ -342,6 +355,14 @@ export default function EmployeeManagement() {
                 <Select value={form.employmentTypeId} onChange={(e) => setForm({ ...form, employmentTypeId: e.target.value })}>
                   <option value="">—</option>
                   {employmentTypes.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Linked admin/doctor login" hint="Lets approved leave actually block their OPD slots">
+                <Select value={form.linkedAdminId} onChange={(e) => setForm({ ...form, linkedAdminId: e.target.value })}>
+                  <option value="">— Not linked —</option>
+                  {adminAccounts.map((a) => (
+                    <option key={a._id} value={a._id}>{a.fullName}{(a.roleName || a.roleId?.name) ? ` (${a.roleName || a.roleId?.name})` : ""}</option>
+                  ))}
                 </Select>
               </Field>
               <Field label="Status">

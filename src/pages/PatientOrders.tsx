@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { patientCommerceApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
+import { useAuth } from "../auth/useAuth";
+import { PERMISSIONS } from "../auth/permissions";
 import {
   PageHeader, Table, THead, TBody, TR, Th, Td, TableState, Select, Modal, Badge, Button,
 } from "../components/ui";
@@ -85,6 +87,9 @@ const itemSummary = (r: Row, tab: Tab): string => {
 const amountOf = (r: Row, tab: Tab): number => (tab === "consultations" ? r.fee ?? 0 : r.totalAmount ?? 0);
 
 export default function PatientOrders() {
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission(PERMISSIONS.PATIENT_COMMERCE_MANAGE);
+
   const [tab, setTab] = useState<Tab>("consultations");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
@@ -250,7 +255,7 @@ export default function PatientOrders() {
                 <Td>₹{amountOf(r, tab)}</Td>
                 <Td className="text-xs text-gray-500">{fmtDate(r.createdAt)}</Td>
                 <Td onClick={(e) => e.stopPropagation()}>
-                  <Select value={r.status} onChange={(e) => setStatus(r._id, e.target.value)} className="w-44">
+                  <Select value={r.status} disabled={!canManage} onChange={(e) => setStatus(r._id, e.target.value)} className="w-44">
                     {STATUSES[tab].map((s) => (
                       <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
                     ))}
@@ -326,7 +331,7 @@ export default function PatientOrders() {
               </div>
             )}
 
-            {canSchedule && (
+            {canSchedule && canManage && (
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="mb-1 text-sm font-medium text-gray-700">
                   Appointment {selected.slotLabel ? `· 🕒 ${selected.slotLabel}` : "· not scheduled"}
@@ -356,7 +361,7 @@ export default function PatientOrders() {
             )}
 
             {/* Consultation summary — what the doctor advised */}
-            {tab === "consultations" && (
+            {tab === "consultations" && canManage && (
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="mb-1 text-sm font-medium text-gray-700">Consultation summary</div>
                 <textarea
@@ -380,7 +385,7 @@ export default function PatientOrders() {
                 once the sample has actually been collected; at the BOOKED stage
                 the admin is still scheduling/rescheduling, so there's nothing to
                 upload yet and the option is hidden. */}
-            {tab === "lab-bookings" &&
+            {tab === "lab-bookings" && canManage &&
               ["SAMPLE_COLLECTED", "PROCESSING", "REPORT_READY"].includes(selected.status) && (
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="mb-1 text-sm font-medium text-gray-700">Lab report</div>
@@ -438,7 +443,7 @@ export default function PatientOrders() {
 
             <div>
               <div className="mb-1 text-sm font-medium text-gray-700">Update status</div>
-              <Select value={selected.status} onChange={(e) => setStatus(selected._id, e.target.value)} className="w-full">
+              <Select value={selected.status} disabled={!canManage} onChange={(e) => setStatus(selected._id, e.target.value)} className="w-full">
                 {STATUSES[tab].map((s) => (
                   <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
                 ))}

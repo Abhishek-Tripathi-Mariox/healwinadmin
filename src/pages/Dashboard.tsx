@@ -9,6 +9,10 @@ import {
   Newspaper,
   MapPin,
   TrendingUp,
+  Ambulance,
+  BedDouble,
+  IndianRupee,
+  UserCheck,
 } from "lucide-react";
 import { dashboardApi } from "../services/admin-api";
 import { PageHeader, Card, Spinner } from "../components/ui";
@@ -22,7 +26,21 @@ interface DashboardStats {
   newsArticles: number;
   totalStates: number;
   totalDistricts: number;
+  operations?: {
+    ambulance: { ridesToday: number; revenueToday: number };
+    hms: {
+      opdToday: number;
+      occupancyPct: number;
+      occupiedBeds: number;
+      totalBeds: number;
+      revenueBilled: number;
+      revenueOutstanding: number;
+    };
+    staff: { headcount: number; presentToday: number; onLeaveToday: number };
+  };
 }
+
+const money = (n: number) => `₹${Math.round(n || 0).toLocaleString("en-IN")}`;
 
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -112,6 +130,86 @@ const Dashboard: React.FC = () => {
         title="Dashboard"
         subtitle="Overview of your healthcare platform"
       />
+
+      {/* Today's Operations — real cross-module snapshot (ambulance ops,
+          hospital/OPD/beds, staff), each linking to its full dashboard. */}
+      {stats?.operations && (
+        <div className="mb-6">
+          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Today's Operations</h3>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <a href="/admin/sos" className="block">
+              <Card className="p-5 hover:shadow-md transition-shadow">
+                <div className="mb-3 flex items-center gap-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-100 text-red-600">
+                    <Ambulance className="h-5 w-5" />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700">Ambulance</span>
+                </div>
+                <div className="flex items-baseline gap-4">
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{stats.operations.ambulance.ridesToday}</p>
+                    <p className="text-xs text-gray-500">rides today</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{money(stats.operations.ambulance.revenueToday)}</p>
+                    <p className="text-xs text-gray-500">revenue today</p>
+                  </div>
+                </div>
+              </Card>
+            </a>
+            <a href="/admin/hms-reports" className="block">
+              <Card className="p-5 hover:shadow-md transition-shadow">
+                <div className="mb-3 flex items-center gap-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                    <BedDouble className="h-5 w-5" />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700">Hospital</span>
+                </div>
+                <div className="flex items-baseline gap-4">
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{stats.operations.hms.opdToday}</p>
+                    <p className="text-xs text-gray-500">OPD today</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{stats.operations.hms.occupancyPct}%</p>
+                    <p className="text-xs text-gray-500">
+                      beds occupied ({stats.operations.hms.occupiedBeds}/{stats.operations.hms.totalBeds})
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-2 flex items-center gap-1 text-xs text-gray-500">
+                  <IndianRupee className="h-3 w-3" />
+                  {money(stats.operations.hms.revenueBilled)} billed · {money(stats.operations.hms.revenueOutstanding)} outstanding
+                </p>
+              </Card>
+            </a>
+            <a href="/admin/hr" className="block">
+              <Card className="p-5 hover:shadow-md transition-shadow">
+                <div className="mb-3 flex items-center gap-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
+                    <UserCheck className="h-5 w-5" />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700">Staff</span>
+                </div>
+                <div className="flex items-baseline gap-4">
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{stats.operations.staff.headcount}</p>
+                    <p className="text-xs text-gray-500">active headcount</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{stats.operations.staff.presentToday}</p>
+                    <p className="text-xs text-gray-500">present today</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{stats.operations.staff.onLeaveToday}</p>
+                    <p className="text-xs text-gray-500">on leave</p>
+                  </div>
+                </div>
+              </Card>
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* Primary Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

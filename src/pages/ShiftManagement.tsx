@@ -6,6 +6,8 @@ import {
   ambulanceApi,
   ambulanceStaffApi,
 } from "../services/admin-api";
+import { useAuth } from "../auth/useAuth";
+import { PERMISSIONS } from "../auth/permissions";
 import {
   PageHeader,
   Button,
@@ -103,6 +105,9 @@ const formatRange = (startISO: string, endISO: string) => {
 };
 
 const ShiftManagement: React.FC = () => {
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission(PERMISSIONS.AMBULANCE_SHIFTS_MANAGE);
+
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [ambulances, setAmbulances] = useState<AmbulanceRow[]>([]);
@@ -216,9 +221,11 @@ const ShiftManagement: React.FC = () => {
         title="Shifts"
         subtitle="Roster paramedics onto ambulances by time window. The state machine promotes scheduled → active → completed automatically."
         actions={
-          <Button icon={<Plus className="w-4 h-4" />} onClick={() => setShowCreate(true)}>
-            New Shift
-          </Button>
+          canManage && (
+            <Button icon={<Plus className="w-4 h-4" />} onClick={() => setShowCreate(true)}>
+              New Shift
+            </Button>
+          )
         }
       />
 
@@ -341,7 +348,7 @@ const ShiftManagement: React.FC = () => {
                 <Td className="capitalize">{s.role}</Td>
                 <Td>{s.providerId?.name || "—"}</Td>
                 <Td className="text-right whitespace-nowrap">
-                  {s.status === "scheduled" || s.status === "active" ? (
+                  {canManage && (s.status === "scheduled" || s.status === "active") ? (
                     <div className="flex justify-end gap-1">
                       <Button size="sm" variant="secondary" onClick={() => openAssign(s)}>
                         {s.staffId ? "Reassign" : "Assign"}

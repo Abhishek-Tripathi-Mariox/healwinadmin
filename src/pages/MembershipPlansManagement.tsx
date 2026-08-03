@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { membershipPlanApi } from "../services/admin-api";
+import { useAuth } from "../auth/useAuth";
+import { PERMISSIONS } from "../auth/permissions";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
@@ -30,6 +32,9 @@ const empty = {
 };
 
 export default function MembershipPlansManagement() {
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission(PERMISSIONS.MEMBERSHIP_PLANS_MANAGE);
+
   const [items, setItems] = useState<PlanRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<PlanRow | null>(null);
@@ -111,7 +116,7 @@ export default function MembershipPlansManagement() {
       <PageHeader
         title="Membership Plans"
         subtitle="Plans shown in the patient app's membership screen — edit pricing & benefits anytime"
-        actions={<Button onClick={openNew}>New Plan</Button>}
+        actions={canManage && <Button onClick={openNew}>New Plan</Button>}
       />
 
       <Table>
@@ -134,9 +139,13 @@ export default function MembershipPlansManagement() {
                 <Td>{p.activeSubscribers ?? 0}</Td>
                 <Td><Badge tone={p.isActive ? "success" : "neutral"}>{p.isActive ? "Active" : "Inactive"}</Badge></Td>
                 <Td className="text-right whitespace-nowrap">
-                  <Button size="sm" variant="secondary" onClick={() => openEdit(p)}>Edit</Button>{" "}
-                  <Button size="sm" variant="ghost" onClick={() => toggle(p)}>{p.isActive ? "Disable" : "Enable"}</Button>{" "}
-                  <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => remove(p)}>Delete</Button>
+                  {canManage && (
+                    <>
+                      <Button size="sm" variant="secondary" onClick={() => openEdit(p)}>Edit</Button>{" "}
+                      <Button size="sm" variant="ghost" onClick={() => toggle(p)}>{p.isActive ? "Disable" : "Enable"}</Button>{" "}
+                      <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => remove(p)}>Delete</Button>
+                    </>
+                  )}
                 </Td>
               </TR>
             ))

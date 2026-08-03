@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { homePromoApi } from "../services/admin-api";
+import { useAuth } from "../auth/useAuth";
+import { PERMISSIONS } from "../auth/permissions";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
@@ -32,6 +34,9 @@ const TARGETS = [
 const empty = { titleTop: "", titleBold: "", cta: "Book Now", target: "AmbulanceTypes", image: "", sortOrder: "0", isActive: true };
 
 export default function HomePromosManagement() {
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission(PERMISSIONS.HOME_PROMOS_MANAGE);
+
   const [items, setItems] = useState<PromoRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<PromoRow | null>(null);
@@ -105,7 +110,7 @@ export default function HomePromosManagement() {
       <PageHeader
         title="Home Promos"
         subtitle="Swipeable promo shortcut cards on the patient app home screen"
-        actions={<Button onClick={openNew}>New Promo</Button>}
+        actions={canManage && <Button onClick={openNew}>New Promo</Button>}
       />
 
       <Table>
@@ -129,9 +134,13 @@ export default function HomePromosManagement() {
                 <Td>{p.sortOrder ?? 0}</Td>
                 <Td><Badge tone={p.isActive ? "success" : "neutral"}>{p.isActive ? "Active" : "Inactive"}</Badge></Td>
                 <Td className="text-right whitespace-nowrap">
-                  <Button size="sm" variant="secondary" onClick={() => openEdit(p)}>Edit</Button>{" "}
-                  <Button size="sm" variant="ghost" onClick={() => toggle(p)}>{p.isActive ? "Disable" : "Enable"}</Button>{" "}
-                  <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => remove(p)}>Delete</Button>
+                  {canManage && (
+                    <>
+                      <Button size="sm" variant="secondary" onClick={() => openEdit(p)}>Edit</Button>{" "}
+                      <Button size="sm" variant="ghost" onClick={() => toggle(p)}>{p.isActive ? "Disable" : "Enable"}</Button>{" "}
+                      <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => remove(p)}>Delete</Button>
+                    </>
+                  )}
                 </Td>
               </TR>
             ))

@@ -122,6 +122,7 @@ const PatientRegistrationManagement = lazy(
 const PatientDetail = lazy(() => import("./pages/PatientDetail"));
 const InventoryManagement = lazy(() => import("./pages/InventoryManagement"));
 const AmbulanceInventory = lazy(() => import("./pages/AmbulanceInventory"));
+const WardInventory = lazy(() => import("./pages/WardInventory"));
 const BillingManagement = lazy(() => import("./pages/BillingManagement"));
 const OPDManagement = lazy(() => import("./pages/OPDManagement"));
 const DoctorScheduleManagement = lazy(() => import("./pages/DoctorScheduleManagement"));
@@ -416,6 +417,12 @@ export const adminRoutes = [
     path: "ambulance-inventory",
     element: AmbulanceInventory,
     name: "Ambulance Inventory",
+    icon: Package,
+  },
+  {
+    path: "ward-inventory",
+    element: WardInventory,
+    name: "Ward Inventory",
     icon: Package,
   },
   {

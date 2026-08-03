@@ -23,6 +23,8 @@ import {
   shiftApi,
 } from "../services/admin-api";
 import SearchableSelect from "../components/SearchableSelect";
+import { useAuth } from "../auth/useAuth";
+import { PERMISSIONS } from "../auth/permissions";
 import {
   Button,
   Card,
@@ -120,6 +122,11 @@ const formatShiftRange = (startISO: string, endISO: string) => {
 const HospitalDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const canCreateStaff = hasPermission(PERMISSIONS.STAFF_CREATE);
+  const canUpdateStaff = hasPermission(PERMISSIONS.STAFF_UPDATE);
+  const canDeleteStaff = hasPermission(PERMISSIONS.STAFF_DELETE);
+  const canManageShifts = hasPermission(PERMISSIONS.AMBULANCE_SHIFTS_MANAGE);
   const [hospital, setHospital] = useState<Hospital | null>(null);
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
@@ -254,9 +261,11 @@ const HospitalDetail: React.FC = () => {
         <h2 className="text-lg font-semibold text-gray-800">
           Staff ({staff.length})
         </h2>
-        <Button icon={<Plus className="w-4 h-4" />} onClick={() => setShowAdd(true)}>
-          Add Staff
-        </Button>
+        {canCreateStaff && (
+          <Button icon={<Plus className="w-4 h-4" />} onClick={() => setShowAdd(true)}>
+            Add Staff
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -302,26 +311,30 @@ const HospitalDetail: React.FC = () => {
                   >
                     <Eye className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditStaff(s);
-                    }}
-                    className="p-2 text-gray-500 rounded hover:bg-gray-100 hover:text-healwin-600"
-                    title="Edit"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeStaff(s._id);
-                    }}
-                    className="p-2 text-red-500 rounded hover:bg-red-50"
-                    title="Remove from hospital"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {canUpdateStaff && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditStaff(s);
+                      }}
+                      className="p-2 text-gray-500 rounded hover:bg-gray-100 hover:text-healwin-600"
+                      title="Edit"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
+                  {canDeleteStaff && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeStaff(s._id);
+                      }}
+                      className="p-2 text-red-500 rounded hover:bg-red-50"
+                      title="Remove from hospital"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </li>
             ))}
@@ -338,18 +351,20 @@ const HospitalDetail: React.FC = () => {
         <h2 className="text-lg font-semibold text-gray-800">
           Shifts ({shifts.length})
         </h2>
-        <Button
-          icon={<Plus className="w-4 h-4" />}
-          onClick={() => setShowAddShift(true)}
-          disabled={staff.length === 0}
-          title={
-            staff.length === 0
-              ? "Add at least one staff member first"
-              : "Schedule a shift"
-          }
-        >
-          Add Shift
-        </Button>
+        {canManageShifts && (
+          <Button
+            icon={<Plus className="w-4 h-4" />}
+            onClick={() => setShowAddShift(true)}
+            disabled={staff.length === 0}
+            title={
+              staff.length === 0
+                ? "Add at least one staff member first"
+                : "Schedule a shift"
+            }
+          >
+            Add Shift
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -395,7 +410,7 @@ const HospitalDetail: React.FC = () => {
                         </p>
                       )}
                     </div>
-                    {unassigned && (
+                    {unassigned && canManageShifts && (
                       <Button
                         size="sm"
                         variant="secondary"
@@ -444,6 +459,7 @@ const HospitalDetail: React.FC = () => {
           hospitalShifts={shifts}
           onClose={() => setOpenStaff(null)}
           onShiftsChanged={load}
+          canManageShifts={canManageShifts}
         />
       )}
 
@@ -817,6 +833,7 @@ interface StaffShiftDrawerProps {
   hospitalShifts: ShiftRow[];
   onClose: () => void;
   onShiftsChanged: () => Promise<void> | void;
+  canManageShifts: boolean;
 }
 
 /**
@@ -830,6 +847,7 @@ const StaffShiftDrawer: React.FC<StaffShiftDrawerProps> = ({
   hospitalShifts,
   onClose,
   onShiftsChanged,
+  canManageShifts,
 }) => {
   const [showBulk, setShowBulk] = useState(false);
 
@@ -870,13 +888,15 @@ const StaffShiftDrawer: React.FC<StaffShiftDrawerProps> = ({
           <p className="text-sm font-medium text-gray-700">
             Shifts ({mine.length})
           </p>
-          <Button
-            size="sm"
-            icon={<Plus className="w-3.5 h-3.5" />}
-            onClick={() => setShowBulk(true)}
-          >
-            Schedule shifts
-          </Button>
+          {canManageShifts && (
+            <Button
+              size="sm"
+              icon={<Plus className="w-3.5 h-3.5" />}
+              onClick={() => setShowBulk(true)}
+            >
+              Schedule shifts
+            </Button>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto">
           {mine.length === 0 ? (

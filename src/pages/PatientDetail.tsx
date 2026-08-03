@@ -7,8 +7,9 @@ import {
   billingApi,
   diagnosticsApi,
   opdApi,
+  catalogApi,
 } from "../services/admin-api";
-import type { EncounterPayload, Prescription } from "../services/admin-api";
+import type { EncounterPayload, Prescription, ProcedureLine } from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
 import {
@@ -66,6 +67,7 @@ interface Encounter {
   };
   diagnoses?: string[];
   prescriptions?: Prescription[];
+  procedures?: ProcedureLine[];
   labOrders?: string[];
   imagingOrders?: string[];
   notes?: string;
@@ -80,6 +82,7 @@ const emptyEncounter: EncounterPayload = {
   soap: { subjective: "", objective: "", assessment: "", plan: "" },
   diagnoses: [],
   prescriptions: [],
+  procedures: [],
   labOrders: [],
   imagingOrders: [],
   notes: "",
@@ -94,9 +97,9 @@ export default function PatientDetail() {
   const canDispense = hasPermission(PERMISSIONS.INVENTORY_ADJUST);
   const canBill = hasPermission(PERMISSIONS.BILLING_CREATE);
 
-  const dispenseRx = async (encounterId: string) => {
+  const dispenseRx = async (encounterId: string, overrideAllergyWarning = false) => {
     try {
-      const res = await emrApi.dispense(encounterId);
+      const res = await emrApi.dispense(encounterId, overrideAllergyWarning ? { overrideAllergyWarning: true } : undefined);
       const r = res.data;
       const lines = (r?.results || [])
         .map((x: any) =>
@@ -112,22 +115,36 @@ export default function PatientDetail() {
       );
       load();
     } catch (e: any) {
+      const warnings = e.data?.allergyWarnings as { drug: string; allergyTerm: string }[] | undefined;
+      if (warnings?.length) {
+        const list = warnings.map((w) => `${w.drug} — conflicts with recorded allergy "${w.allergyTerm}"`).join("\n");
+        if (window.confirm(`⚠ Allergy warning:\n\n${list}\n\nDispense anyway? This will be recorded as an overridden allergy warning.`)) {
+          await dispenseRx(encounterId, true);
+        }
+        return;
+      }
       alert(e.message || "Failed to dispense");
     }
   };
 
-  const billDiagnostics = async (encounterId: string) => {
-    const rate = window.prompt("Rate per diagnostic test (₹)?", "500");
-    if (rate === null) return;
-    const fee = window.prompt("Consultation fee to add (₹, blank to skip)?", "");
+  // Generates a real invoice from this encounter — diagnostics (rate is
+  // still manual, there's no per-test catalog price yet), procedures (real
+  // prices snapshotted on the encounter when documented) and the
+  // consultation fee (auto-resolved from the doctor's real configured rate
+  // — see billing.controller.ts#generate — no need to type it here).
+  const billEncounter = async (encounterId: string, hasDiagnostics: boolean) => {
+    let rate = 0;
+    if (hasDiagnostics) {
+      const input = window.prompt("Rate per diagnostic test (₹)?", "500");
+      if (input === null) return;
+      rate = Number(input) || 0;
+    }
     try {
       const res = await billingApi.generate({
         patientId: id,
         encounterId,
-        includeDiagnostics: true,
-        diagnosticRate: Number(rate) || 0,
-        includeConsultation: !!fee && Number(fee) > 0,
-        consultationFee: Number(fee) || 0,
+        includeDiagnostics: hasDiagnostics,
+        diagnosticRate: rate,
       });
       const inv = res.data?.invoice;
       alert(
@@ -292,6 +309,42 @@ export default function PatientDetail() {
       prescriptions: (f.prescriptions || []).filter((_, idx) => idx !== i),
     }));
 
+  // Procedure catalog — for the name <datalist> autocomplete + auto-filling
+  // price on an exact match, while still allowing a free-text procedure
+  // with a manual price for anything not in the rate list.
+  const [procedureCatalog, setProcedureCatalog] = useState<{ name: string; price: number }[]>([]);
+  useEffect(() => {
+    catalogApi.procedures.list({ limit: 200 }).then((res: any) =>
+      setProcedureCatalog((res.data?.items || []).map((p: any) => ({ name: p.name, price: p.price }))),
+    ).catch(() => setProcedureCatalog([]));
+  }, []);
+
+  const addProcedure = () =>
+    setForm((f) => ({
+      ...f,
+      procedures: [...(f.procedures || []), { name: "", price: undefined, notes: "" }],
+    }));
+
+  const updateProcedure = (i: number, key: keyof ProcedureLine, value: string) =>
+    setForm((f) => {
+      const next = [...(f.procedures || [])];
+      const line = { ...next[i], [key]: key === "price" ? (value ? Number(value) : undefined) : value };
+      // Auto-fill price from the catalog on an exact name match, but only
+      // when the price field itself hasn't been hand-edited already.
+      if (key === "name") {
+        const match = procedureCatalog.find((c) => c.name.toLowerCase() === value.trim().toLowerCase());
+        if (match && !next[i].price) line.price = match.price;
+      }
+      next[i] = line;
+      return { ...f, procedures: next };
+    });
+
+  const removeProcedure = (i: number) =>
+    setForm((f) => ({
+      ...f,
+      procedures: (f.procedures || []).filter((_, idx) => idx !== i),
+    }));
+
   const csvToArray = (s: string) =>
     s
       .split(",")
@@ -310,6 +363,7 @@ export default function PatientDetail() {
         labOrders: csvToArray(labText),
         imagingOrders: csvToArray(imagingText),
         prescriptions: (form.prescriptions || []).filter((p) => p.drug.trim()),
+        procedures: (form.procedures || []).filter((p) => p.name.trim()),
         // Drop an empty referral row.
         referrals: (form.referrals || []).filter((r) => r.department || r.reason),
         followUpAt: form.followUpAt || undefined,
@@ -330,6 +384,16 @@ export default function PatientDetail() {
       }
       setShowForm(false);
       load();
+      // Advisory only at prescribe-time (the doctor's clinical call) — the
+      // encounter is already saved; dispense() below is where a conflict
+      // actually blocks and requires an explicit override.
+      const warnings = res.data?.allergyWarnings as { drug: string; allergyTerm: string }[] | undefined;
+      if (warnings?.length) {
+        alert(
+          `⚠ Allergy warning — patient has a recorded allergy that may conflict:\n\n` +
+            warnings.map((w) => `${w.drug} — conflicts with recorded allergy "${w.allergyTerm}"`).join("\n"),
+        );
+      }
     } catch (err: any) {
       setError(err.message || "Failed to save encounter");
     } finally {
@@ -742,6 +806,14 @@ export default function PatientDetail() {
                         : ""}
                     </p>
                   )}
+                  {enc.procedures && enc.procedures.length > 0 && (
+                    <p className="mt-2 text-sm">
+                      <span className="text-gray-400">Procedures: </span>
+                      {enc.procedures
+                        .map((p) => `${p.name}${p.price ? ` (₹${p.price})` : ""}`)
+                        .join(", ")}
+                    </p>
+                  )}
                   {(canDispense || canBill) && (
                     <div className="flex gap-3 pt-3 mt-3 border-t">
                       {canDispense && enc.prescriptions?.length ? (
@@ -754,13 +826,18 @@ export default function PatientDetail() {
                       ) : null}
                       {canBill &&
                       ((enc.labOrders && enc.labOrders.length > 0) ||
-                        (enc.imagingOrders &&
-                          enc.imagingOrders.length > 0)) ? (
+                        (enc.imagingOrders && enc.imagingOrders.length > 0) ||
+                        (enc.procedures && enc.procedures.length > 0)) ? (
                         <button
-                          onClick={() => billDiagnostics(enc._id)}
+                          onClick={() =>
+                            billEncounter(
+                              enc._id,
+                              !!((enc.labOrders && enc.labOrders.length) || (enc.imagingOrders && enc.imagingOrders.length)),
+                            )
+                          }
                           className="text-xs text-healwin-700 hover:underline"
                         >
-                          Generate diagnostics bill
+                          Generate bill
                         </button>
                       ) : null}
                     </div>
@@ -1025,6 +1102,54 @@ export default function PatientDetail() {
                 <button
                   type="button"
                   onClick={() => removePrescription(i)}
+                  className="col-span-1 text-red-500"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </section>
+
+          {/* Procedures — feeds real billing lines, see billing.controller.ts */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-gray-700">
+                Procedures
+              </h3>
+              <Button type="button" size="sm" variant="ghost" onClick={addProcedure}>
+                + Add procedure
+              </Button>
+            </div>
+            <datalist id="procedure-catalog">
+              {procedureCatalog.map((p) => (
+                <option key={p.name} value={p.name} />
+              ))}
+            </datalist>
+            {(form.procedures || []).map((p, i) => (
+              <div key={i} className="grid grid-cols-12 gap-2 mb-2">
+                <Input
+                  className="col-span-6"
+                  list="procedure-catalog"
+                  placeholder="Procedure name (pick from list or type new)"
+                  value={p.name}
+                  onChange={(e) => updateProcedure(i, "name", e.target.value)}
+                />
+                <Input
+                  className="col-span-2"
+                  type="number"
+                  placeholder="Price ₹"
+                  value={p.price ?? ""}
+                  onChange={(e) => updateProcedure(i, "price", e.target.value)}
+                />
+                <Input
+                  className="col-span-3"
+                  placeholder="Notes"
+                  value={p.notes || ""}
+                  onChange={(e) => updateProcedure(i, "notes", e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeProcedure(i)}
                   className="col-span-1 text-red-500"
                 >
                   ✕

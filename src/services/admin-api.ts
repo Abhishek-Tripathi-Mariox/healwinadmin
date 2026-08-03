@@ -74,7 +74,13 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
         .catch(() => ({ message: "Request failed" }));
       const msg = error.message || error.rMsg || error.msg || "Request failed";
       console.error(`[API] Error: ${msg}`);
-      throw new Error(msg);
+      // Carry the response body's `data` (e.g. structured warnings like
+      // allergyWarnings) on the thrown error — callers that need more than
+      // the message can read err.data instead of just err.message.
+      const err: any = new Error(msg);
+      err.data = error.data;
+      err.code = error.code;
+      throw err;
     }
 
     return response.json();
@@ -1587,13 +1593,40 @@ export const hospitalPatientApi = {
       method: "POST",
       body: data,
     }),
+  duplicates: () => fetchWithAuth("/admin/patients/duplicates"),
+  merge: (sourceId: string, targetId: string) =>
+    fetchWithAuth("/admin/patients/merge", {
+      method: "POST",
+      body: JSON.stringify({ sourceId, targetId }),
+    }),
 };
+
+export interface DuplicatePatientRow {
+  _id: string;
+  patientId: string;
+  fullName: string;
+  phone?: string;
+  gender?: string;
+  dateOfBirth?: string;
+  createdAt: string;
+  recordCounts: { admissions: number; appointments: number; invoices: number };
+}
+export interface DuplicateGroup {
+  reason: "phone" | "name_dob";
+  patients: DuplicatePatientRow[];
+}
 
 export interface Prescription {
   drug: string;
   dosage?: string;
   frequency?: string;
   duration?: string;
+  notes?: string;
+}
+
+export interface ProcedureLine {
+  name: string;
+  price?: number;
   notes?: string;
 }
 
@@ -1632,6 +1665,7 @@ export interface EncounterPayload {
   differentialDiagnoses?: string[];
   treatmentPlan?: string;
   prescriptions?: Prescription[];
+  procedures?: ProcedureLine[];
   labOrders?: string[];
   imagingOrders?: string[];
   referrals?: { department?: string; reason?: string; urgency?: "routine" | "urgent" | "emergency" }[];
@@ -1659,10 +1693,16 @@ export const emrApi = {
       body: JSON.stringify(data),
     }),
   // Push an encounter's prescriptions into pharmacy inventory (stock-out).
-  dispense: (id: string, items?: { drug: string; quantity?: number }[]) =>
+  // overrideAllergyWarning must be explicitly set after the caller has shown
+  // the user a conflict returned by a first attempt (see emr.controller.ts's
+  // allergy safety gate) — never set it up front.
+  dispense: (id: string, opts?: { items?: { drug: string; quantity?: number }[]; overrideAllergyWarning?: boolean }) =>
     fetchWithAuth(`/admin/emr/${id}/dispense`, {
       method: "POST",
-      body: JSON.stringify(items ? { items } : {}),
+      body: JSON.stringify({
+        ...(opts?.items ? { items: opts.items } : {}),
+        ...(opts?.overrideAllergyWarning ? { overrideAllergyWarning: true } : {}),
+      }),
     }),
 };
 
@@ -1725,12 +1765,42 @@ export const inventoryApi = {
       reason?: string;
       issuedToType?: string;
       issuedToRef?: string;
+      // Stock IN only — tags the received quantity with a batch/lot so it's
+      // FEFO-issuable later instead of merging into one scalar balance.
+      batchNo?: string;
+      expiryDate?: string;
+      unitCost?: number;
     },
   ) =>
     fetchWithAuth(`/admin/inventory/${id}/adjust`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  batches: (id: string) => fetchWithAuth(`/admin/inventory/${id}/batches`),
+  writeOffBatch: (
+    id: string,
+    batchId: string,
+    data: { quantity: number; reason: "expired" | "damaged" | "lost" | "other"; notes?: string },
+  ) =>
+    fetchWithAuth(`/admin/inventory/${id}/batches/${batchId}/writeoff`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  valuation: () => fetchWithAuth("/admin/inventory/valuation"),
+  consumptionReport: (days = 30) => fetchWithAuth(`/admin/inventory/consumption-report?days=${days}`),
+  agingReport: () => fetchWithAuth("/admin/inventory/aging-report"),
+  adjustmentRequests: (status = "pending") => fetchWithAuth(`/admin/inventory/adjustment-requests?status=${status}`),
+  approveAdjustment: (id: string, notes?: string) =>
+    fetchWithAuth(`/admin/inventory/adjustment-requests/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ notes }),
+    }),
+  rejectAdjustment: (id: string, notes?: string) =>
+    fetchWithAuth(`/admin/inventory/adjustment-requests/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ notes }),
+    }),
+  bySku: (sku: string) => fetchWithAuth(`/admin/inventory/by-sku/${encodeURIComponent(sku)}`),
 };
 
 export interface InvoiceLineItem {
@@ -1933,6 +2003,7 @@ export const procurementApi = {
   createSupplier: (data: any) => fetchWithAuth("/admin/procurement/suppliers", { method: "POST", body: JSON.stringify(data) }),
   updateSupplier: (id: string, data: any) => fetchWithAuth(`/admin/procurement/suppliers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteSupplier: (id: string) => fetchWithAuth(`/admin/procurement/suppliers/${id}`, { method: "DELETE" }),
+  supplierPerformance: (id: string) => fetchWithAuth(`/admin/procurement/suppliers/${id}/performance`),
   listPurchaseOrders: (status?: string) => fetchWithAuth(`/admin/procurement/purchase-orders${status ? `?status=${status}` : ""}`),
   createPurchaseOrder: (data: any) => fetchWithAuth("/admin/procurement/purchase-orders", { method: "POST", body: JSON.stringify(data) }),
   updatePurchaseOrderStatus: (id: string, status: string) =>
@@ -2021,6 +2092,26 @@ export const ipdApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  // Today's (or ?date=) medication schedule derived from real prescriptions.
+  mar: (id: string, date?: string) =>
+    fetchWithAuth(`/admin/ipd/admissions/${id}/mar${date ? `?date=${date}` : ""}`),
+  // Stream the discharge summary PDF with the auth header and download it.
+  downloadDischargeSummary: async (id: string, admissionNo?: string) => {
+    const token = getAuthToken();
+    const res = await fetch(`${API_URL}/admin/ipd/admissions/${id}/discharge-summary-pdf`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("Failed to download discharge summary");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `discharge-${admissionNo || id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 };
 
 // Pharmacy platform
@@ -2218,9 +2309,12 @@ const catalogResource = (base: string) => ({
 });
 
 export const catalogApi = {
-  doctors: catalogResource("doctors"),
   products: catalogResource("products"),
   labTests: catalogResource("lab-tests"),
+  procedures: catalogResource("procedures"),
+  // Picker source for linking a pharmacy product to real HMS inventory.
+  inventoryItems: (search = "") =>
+    fetchWithAuth(`/admin/catalog/inventory-items${search ? `?search=${encodeURIComponent(search)}` : ""}`),
 };
 
 // ==================== AMBULANCE REQUESTS (patient dispatch) ====================
@@ -2443,6 +2537,34 @@ export const ambulanceStockApi = {
   reports: () => fetchWithAuth("/admin/ambulance-stock/reports"),
   ambulance: (ambulanceId: string) =>
     fetchWithAuth(`/admin/ambulance-stock/${ambulanceId}`),
+};
+
+export const wardStockApi = {
+  reports: () => fetchWithAuth("/admin/ward-stock"),
+  ward: (wardId: string) => fetchWithAuth(`/admin/ward-stock/${wardId}`),
+  catalogItems: (q?: string) =>
+    fetchWithAuth(`/admin/ward-stock/catalog/items${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  issue: (wardId: string, items: { itemId: string; qty: number }[]) =>
+    fetchWithAuth(`/admin/ward-stock/${wardId}/issue`, {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    }),
+  adjust: (
+    wardId: string,
+    data: { itemId: string; quantity: number; direction: "in" | "out"; reason?: "consumption" | "adjustment"; notes?: string },
+  ) =>
+    fetchWithAuth(`/admin/ward-stock/${wardId}/adjust`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  transfer: (
+    fromWardId: string,
+    data: { toWardId: string; itemId: string; quantity: number; notes?: string },
+  ) =>
+    fetchWithAuth(`/admin/ward-stock/${fromWardId}/transfer`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 export default {
