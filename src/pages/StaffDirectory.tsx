@@ -83,10 +83,10 @@ export default function StaffDirectory() {
             <Badge tone="success">Present {attMeta.present}/{attMeta.total}</Badge>
           </div>
           <Table>
-            <THead><Th>Name</Th><Th>Role</Th><Th>Status</Th><Th>Check-in</Th><Th>Check-out</Th></THead>
+            <THead><Th>Name</Th><Th>Role</Th><Th>Status</Th><Th>Check-in</Th><Th>Check-out</Th><Th>Check-in photo</Th></THead>
             <TBody>
-              {loading && attRows.length === 0 ? <TableState colSpan={5}>Loading…</TableState>
-                : attRows.length === 0 ? <TableState colSpan={5}>No ambulance crew.</TableState>
+              {loading && attRows.length === 0 ? <TableState colSpan={6}>Loading…</TableState>
+                : attRows.length === 0 ? <TableState colSpan={6}>No ambulance crew.</TableState>
                 : attRows.map((r) => (
                   <TR key={r.staffId}>
                     <Td className="font-medium text-gray-900">{r.name}</Td>
@@ -94,6 +94,18 @@ export default function StaffDirectory() {
                     <Td><Badge tone={r.status === "present" ? "success" : "neutral"}>{r.status}</Badge></Td>
                     <Td className="text-gray-500">{r.checkIn || "—"}</Td>
                     <Td className="text-gray-500">{r.checkOut || "—"}</Td>
+                    <Td>
+                      {r.checkInPhoto ? (
+                        <a href={r.checkInPhoto} target="_blank" rel="noreferrer" className="flex items-center gap-2">
+                          <img src={r.checkInPhoto} alt="Check-in selfie" className="h-8 w-8 rounded-full object-cover" />
+                          {r.checkInWithinGeofence === false && (
+                            <Badge tone="warning">Outside geofence</Badge>
+                          )}
+                        </a>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </Td>
                   </TR>
                 ))}
             </TBody>

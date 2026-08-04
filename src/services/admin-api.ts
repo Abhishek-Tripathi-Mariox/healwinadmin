@@ -2454,6 +2454,11 @@ export const supportApi = {
       method: "PUT",
       body: JSON.stringify({ status, resolution }),
     }),
+  setPoliceVerified: (ticketId: string, verified: boolean, note?: string) =>
+    fetchWithAuth(`/admin/support/tickets/${ticketId}/police-verify`, {
+      method: "PUT",
+      body: JSON.stringify({ verified, note }),
+    }),
 };
 
 export const staffRecordsApi = {

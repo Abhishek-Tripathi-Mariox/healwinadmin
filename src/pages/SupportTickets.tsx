@@ -28,6 +28,9 @@ interface Ticket {
   reopenReason?: string;
   reopenedAt?: string;
   createdAt?: string;
+  policeVerified?: boolean;
+  policeVerificationNote?: string;
+  policeVerifiedAt?: string;
 }
 interface Message {
   _id: string;
@@ -92,6 +95,8 @@ export default function SupportTickets() {
   // Status-change prompt (resolve/close/reopen) that captures a reason.
   const [prompt, setPrompt] = useState<{ status: string; label: string } | null>(null);
   const [note, setNote] = useState("");
+  const [policeNote, setPoliceNote] = useState("");
+  const [showPoliceNote, setShowPoliceNote] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,6 +130,8 @@ export default function SupportTickets() {
     setReply("");
     setPrompt(null);
     setNote("");
+    setShowPoliceNote(false);
+    setPoliceNote("");
     const res = await supportApi.ticket(t.ticketId);
     setMessages(res.data?.messages || []);
     if (res.data?.ticket) setActive(res.data.ticket);
@@ -186,6 +193,35 @@ export default function SupportTickets() {
     }
   };
 
+  // Record-keeping only — no external police API. Marking requires a note;
+  // clearing doesn't (e.g. "marked in error").
+  const confirmPoliceVerify = async () => {
+    if (!active) return;
+    setBusy(true);
+    try {
+      await supportApi.setPoliceVerified(active.ticketId, true, policeNote.trim() || undefined);
+      setShowPoliceNote(false);
+      setPoliceNote("");
+      const res = await supportApi.ticket(active.ticketId);
+      if (res.data?.ticket) setActive(res.data.ticket);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const clearPoliceVerify = async () => {
+    if (!active) return;
+    setBusy(true);
+    try {
+      await supportApi.setPoliceVerified(active.ticketId, false);
+      const res = await supportApi.ticket(active.ticketId);
+      if (res.data?.ticket) setActive(res.data.ticket);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="p-6">
       <PageHeader
@@ -230,7 +266,10 @@ export default function SupportTickets() {
                 </Td>
                 <Td className="text-xs text-gray-500">{t.category}</Td>
                 <Td className="text-sm text-gray-800 max-w-xs truncate">{t.subject}</Td>
-                <Td><Badge tone={priorityTone[t.priority] || "neutral"}>{t.priority}</Badge></Td>
+                <Td>
+                  <Badge tone={priorityTone[t.priority] || "neutral"}>{t.priority}</Badge>
+                  {t.policeVerified && <Badge tone="success" className="ml-1">Police Verified</Badge>}
+                </Td>
                 <Td><Badge tone={statusTone[t.status] || "neutral"}>{t.status.replace(/_/g, " ")}</Badge></Td>
                 <Td className="text-xs text-gray-500">{fmt(t.createdAt)}</Td>
                 <Td className="text-right" onClick={(e) => e.stopPropagation()}>
@@ -304,6 +343,41 @@ export default function SupportTickets() {
                   </div>
                 </div>
               )}
+
+              {/* Record-keeping only — no external police API. For emergency/urgent
+                  tickets that required a real police verification outside the app. */}
+              <div className="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3">
+                {active.policeVerified ? (
+                  <>
+                    <Badge tone="success">Police Verified</Badge>
+                    <span className="text-xs text-gray-500">
+                      {active.policeVerifiedAt ? fmt(active.policeVerifiedAt) : ""}
+                      {active.policeVerificationNote ? ` · ${active.policeVerificationNote}` : ""}
+                    </span>
+                    <Button size="sm" variant="ghost" className="ml-auto text-gray-500" onClick={clearPoliceVerify} disabled={busy}>
+                      Clear
+                    </Button>
+                  </>
+                ) : showPoliceNote ? (
+                  <div className="w-full">
+                    <textarea
+                      value={policeNote}
+                      onChange={(e) => setPoliceNote(e.target.value)}
+                      rows={2}
+                      placeholder="Verification note (optional) — e.g. station, officer, reference no."
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none"
+                    />
+                    <div className="mt-2 flex justify-end gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => { setShowPoliceNote(false); setPoliceNote(""); }}>Cancel</Button>
+                      <Button size="sm" onClick={confirmPoliceVerify} disabled={busy}>Mark Verified</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button size="sm" variant="secondary" onClick={() => setShowPoliceNote(true)}>
+                    Mark Police Verified
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div ref={threadRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-4">

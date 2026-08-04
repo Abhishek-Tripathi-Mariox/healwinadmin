@@ -55,11 +55,26 @@ const money = (n?: number) => `₹${Math.round(Number(n) || 0).toLocaleString("e
 
 const statusTone: Record<string, "warning" | "info" | "success" | "neutral" | "danger"> = {
   SEARCHING: "warning",
-  ASSIGNED: "info",
+  ASSIGNED: "warning",
+  ACCEPTED: "info",
   ARRIVED: "info",
   ON_TRIP: "info",
   COMPLETED: "success",
   CANCELLED: "danger",
+};
+
+// ASSIGNED = admin picked a driver, awaiting their acceptance. ACCEPTED = the
+// driver/attendant explicitly accepted on their app — a real, separate,
+// persisted status (see ambulance-staff-request.controller.ts#accept), not
+// just a label.
+const statusLabel: Record<string, string> = {
+  SEARCHING: "Searching",
+  ASSIGNED: "Assigned",
+  ACCEPTED: "Accepted and on the way",
+  ARRIVED: "Arrived",
+  ON_TRIP: "On Trip",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
 };
 
 export default function AmbulanceRequestsManagement() {
@@ -104,14 +119,18 @@ export default function AmbulanceRequestsManagement() {
   }, [load]);
 
   // Realtime: a new patient "Where To?" ambulance request shows up the instant
-  // it's created — and the row refreshes the moment its status changes
-  // (assigned/en-route/etc.). Backend emits `ambulance-request:new` to the
-  // "admin" room. NOTE: SOS events (`sos:new`/`sos:dispatched`) are deliberately
-  // NOT handled here — SOS belongs to the SOS Dashboard only, never the
-  // Ambulance Requests queue.
+  // it's created (`ambulance-request:new`), and the row refreshes the moment
+  // its status changes — accept/arrived/start/complete/reject, all emitted by
+  // the driver/staff app as `ambulance-request:status` — instead of waiting on
+  // the 15s poll below to catch up. NOTE: SOS events (`sos:new`/`sos:dispatched`)
+  // are deliberately NOT handled here — SOS belongs to the SOS Dashboard only,
+  // never the Ambulance Requests queue.
   useEffect(() => {
     adminSocket.connect();
-    const offs = [adminSocket.on("ambulance-request:new", load)];
+    const offs = [
+      adminSocket.on("ambulance-request:new", load),
+      adminSocket.on("ambulance-request:status", load),
+    ];
     return () => offs.forEach((off) => off());
   }, [load]);
 
@@ -275,9 +294,9 @@ export default function AmbulanceRequestsManagement() {
       />
 
       <div className="mb-4 flex gap-2">
-        {["", "SEARCHING", "ASSIGNED", "ON_TRIP", "COMPLETED", "CANCELLED"].map((s) => (
+        {["", "SEARCHING", "ASSIGNED", "ACCEPTED", "ON_TRIP", "COMPLETED", "CANCELLED"].map((s) => (
           <Button key={s || "open"} size="sm" variant={statusFilter === s ? "primary" : "secondary"} onClick={() => setStatusFilter(s)}>
-            {s || "Open"}
+            {s ? statusLabel[s] || s : "Open"}
           </Button>
         ))}
       </div>
@@ -315,30 +334,30 @@ export default function AmbulanceRequestsManagement() {
                 </Td>
                 <Td>{r.emergency ? <Badge tone="danger">SOS</Badge> : r.type || "—"}</Td>
                 <Td className="text-xs text-gray-500">{r.pickup?.address || "—"}</Td>
-                <Td><Badge tone={statusTone[r.status] || "neutral"}>{r.status}</Badge></Td>
+                <Td><Badge tone={statusTone[r.status] || "neutral"}>{statusLabel[r.status] || r.status}</Badge></Td>
                 <Td className="text-xs">{r.driverName ? `${r.driverName} · ${r.vehicleNumber || ""}` : "—"}{r.otp ? ` · OTP ${r.otp}` : ""}</Td>
                 <Td className="text-right whitespace-nowrap">
                   {r.status === "SEARCHING" && (
                     <Button size="sm" onClick={() => openAssign(r)}>Assign</Button>
                   )}
-                  {r.status === "ASSIGNED" && (
+                  {["ASSIGNED", "ACCEPTED"].includes(r.status) && (
                     <Button size="sm" variant="secondary" onClick={() => advance(r, "ON_TRIP")}>Start trip</Button>
                   )}
                   {r.status === "ON_TRIP" && (
                     <Button size="sm" variant="secondary" onClick={() => advance(r, "COMPLETED")}>Complete</Button>
                   )}
-                  {["ASSIGNED", "ARRIVED", "ON_TRIP", "COMPLETED"].includes(r.status) && (
+                  {["ASSIGNED", "ACCEPTED", "ARRIVED", "ON_TRIP", "COMPLETED"].includes(r.status) && (
                     <Button size="sm" variant="secondary" onClick={() => openBill(r)}>
                       Expenses{r.inTransitTotal ? ` · ${money(r.inTransitTotal)}` : ""}
                     </Button>
                   )}
-                  {["ASSIGNED", "ARRIVED", "ON_TRIP", "COMPLETED"].includes(r.status) &&
+                  {["ASSIGNED", "ACCEPTED", "ARRIVED", "ON_TRIP", "COMPLETED"].includes(r.status) &&
                     (r.paymentStatus === "PAID" ? (
                       <Badge tone="success">Paid</Badge>
                     ) : (
                       <Button size="sm" variant="ghost" onClick={() => markPaid(r)}>Mark paid</Button>
                     ))}
-                  {["SEARCHING", "ASSIGNED"].includes(r.status) && (
+                  {["SEARCHING", "ASSIGNED", "ACCEPTED"].includes(r.status) && (
                     <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => advance(r, "CANCELLED")}>Cancel</Button>
                   )}
                   {!!r.patientMedia?.length && (

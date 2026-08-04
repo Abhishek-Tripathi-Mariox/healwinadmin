@@ -23,6 +23,7 @@ import {
   Textarea,
   Select,
 } from "../components/ui";
+import { VoiceInput } from "../components/VoiceInput";
 
 interface Patient {
   _id: string;
@@ -1067,37 +1068,41 @@ export default function PatientDetail() {
             </div>
             {(form.prescriptions || []).map((p, i) => (
               <div key={i} className="grid grid-cols-12 gap-2 mb-2">
-                <Input
+                <VoiceInput
                   className="col-span-3"
                   placeholder="Drug"
                   value={p.drug}
                   onChange={(e) =>
                     updatePrescription(i, "drug", e.target.value)
                   }
+                  onTranscript={(text) => updatePrescription(i, "drug", text)}
                 />
-                <Input
+                <VoiceInput
                   className="col-span-3"
                   placeholder="Dosage"
                   value={p.dosage}
                   onChange={(e) =>
                     updatePrescription(i, "dosage", e.target.value)
                   }
+                  onTranscript={(text) => updatePrescription(i, "dosage", text)}
                 />
-                <Input
+                <VoiceInput
                   className="col-span-3"
                   placeholder="Freq (1-0-1)"
                   value={p.frequency}
                   onChange={(e) =>
                     updatePrescription(i, "frequency", e.target.value)
                   }
+                  onTranscript={(text) => updatePrescription(i, "frequency", text)}
                 />
-                <Input
+                <VoiceInput
                   className="col-span-2"
                   placeholder="Duration"
                   value={p.duration}
                   onChange={(e) =>
                     updatePrescription(i, "duration", e.target.value)
                   }
+                  onTranscript={(text) => updatePrescription(i, "duration", text)}
                 />
                 <button
                   type="button"
