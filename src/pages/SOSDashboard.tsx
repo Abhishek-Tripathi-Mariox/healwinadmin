@@ -1348,6 +1348,11 @@ const SOSDashboard: React.FC = () => {
                                     HMS patient: {d.hospitalPatientId.fullName || d.hospitalPatientId.patientId}
                                   </p>
                                 )}
+                                {d.otp && !["COMPLETED", "CANCELLED"].includes(d.status) && (
+                                  <p className="mt-1 text-xs font-semibold text-amber-700">
+                                    Pickup OTP: {d.otp}
+                                  </p>
+                                )}
                                 {d.cancelReason && (
                                   <p className="mt-1 text-xs text-red-700">
                                     {d.cancelReason === "no_response"

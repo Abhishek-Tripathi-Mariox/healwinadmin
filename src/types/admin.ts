@@ -143,6 +143,9 @@ export interface EmergencyDispatch {
   estimatedArrival?: number;
   // The HMS patient record the crew registered for this trip, if any.
   hospitalPatientId?: { patientId?: string; fullName?: string; phone?: string } | null;
+  // Pickup-verification code — patient reads it out to the crew, driver
+  // enters it to start the trip (same mechanism as a booked AmbulanceRequest).
+  otp?: string;
   createdAt: string;
   updatedAt: string;
 }
