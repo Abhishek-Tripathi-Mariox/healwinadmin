@@ -162,12 +162,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     // The current ambulance flow lives entirely under "Ambulance Requests"
     // (+ SOS Dashboard). The /admin/bookings route still exists for any old
     // enterprise/cab records, just not surfaced in the sidebar.
-    {
-      id: "patient-orders",
-      label: "Patient Orders",
-      icon: ClipboardList,
-      path: "/admin/patient-orders",
-    },
+    // "Patient Orders" (consultations/lab/pharmacy from the patient app)
+    // moved into the Doctor Panel group below — that's where clinical staff
+    // actually look for it, not here alongside ambulance ops.
     {
       id: "help-faqs",
       label: "Help FAQs",
@@ -522,6 +519,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           label: "Patients",
           icon: HeartPulse,
           path: "/admin/patients",
+        },
+        {
+          id: "patient-orders",
+          label: "Consultations & Orders",
+          icon: ClipboardList,
+          path: "/admin/patient-orders",
         },
         {
           id: "hms-reports",
