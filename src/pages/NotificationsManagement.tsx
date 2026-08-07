@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { notificationsApi } from "../services/admin-api";
+import Pagination from "../components/Pagination";
 import {
   PageHeader,
   Button,
@@ -90,6 +91,10 @@ const NotificationsManagement: React.FC = () => {
   const [stats, setStats] = useState<Stats | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
   const loadStats = async () => {
     try {
@@ -103,8 +108,9 @@ const NotificationsManagement: React.FC = () => {
   const loadHistory = async () => {
     setHistoryLoading(true);
     try {
-      const r = await notificationsApi.history({ page: 1, limit: 25 });
+      const r = await notificationsApi.history({ page, limit });
       setHistory(r.data?.items || []);
+      setTotal(r.data?.pagination?.total ?? (r.data?.items || []).length);
     } catch (e: any) {
       setError(e.message || "Failed to load history");
     } finally {
@@ -114,8 +120,12 @@ const NotificationsManagement: React.FC = () => {
 
   useEffect(() => {
     loadStats();
-    loadHistory();
   }, []);
+
+  useEffect(() => {
+    loadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, limit]);
 
   // Debounced user search
   useEffect(() => {
@@ -447,6 +457,22 @@ const NotificationsManagement: React.FC = () => {
           )}
         </TBody>
       </Table>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[10, 25, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination page={page} totalPages={totalPages} total={total} label="notifications" onPageChange={setPage} />
+      </div>
     </div>
   );
 };

@@ -54,6 +54,7 @@ const ActivityLogsManagement: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(30);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
@@ -91,7 +92,7 @@ const ActivityLogsManagement: React.FC = () => {
     try {
       const params: Record<string, string> = {
         page: String(page),
-        limit: "30",
+        limit: String(limit),
       };
       if (timeRange) params.timeRange = timeRange;
       if (staffFilter) params.staffId = staffFilter;
@@ -107,7 +108,7 @@ const ActivityLogsManagement: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [page, timeRange, staffFilter, moduleFilter, dateFrom, dateTo]);
+  }, [page, limit, timeRange, staffFilter, moduleFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     loadFilters();
@@ -120,7 +121,7 @@ const ActivityLogsManagement: React.FC = () => {
   // Reset to page 1 when filters change
   useEffect(() => {
     setPage(1);
-  }, [timeRange, staffFilter, moduleFilter, dateFrom, dateTo]);
+  }, [timeRange, staffFilter, moduleFilter, dateFrom, dateTo, limit]);
 
   const fmtTime = (d: string) => {
     return new Date(d).toLocaleString("en-IN", {
@@ -304,29 +305,43 @@ const ActivityLogsManagement: React.FC = () => {
       </Table>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 mt-4">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
+      <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => setLimit(Number(e.target.value))}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
           >
-            ← Prev
-          </Button>
-          <span className="text-sm text-gray-600">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-          >
-            Next →
-          </Button>
-        </div>
-      )}
+            {[10, 30, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+            >
+              ← Prev
+            </Button>
+            <span className="text-sm text-gray-600">
+              Page {page} of {totalPages} · {total} logs
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+            >
+              Next →
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

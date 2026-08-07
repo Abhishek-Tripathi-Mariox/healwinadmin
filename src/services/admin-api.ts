@@ -400,6 +400,11 @@ export const sosSubmissionApi = {
   // Get dispatches for a submission
   getDispatches: (id: string) =>
     fetchWithAuth(`/admin/sos-submissions/${id}/dispatches`),
+
+  // One-click real call to the submitter — auto-creates/reuses the IVR
+  // escalation record, no manual "Start Escalation" form needed.
+  call: (id: string) =>
+    fetchWithAuth(`/admin/sos-submissions/${id}/call`, { method: "POST" }),
 };
 
 // ==================== EMERGENCY DISPATCH API ====================
@@ -2173,6 +2178,8 @@ export const ivrApi = {
     }),
   advance: (id: string) =>
     fetchWithAuth(`/admin/ivr-escalations/${id}/advance`, { method: "POST" }),
+  callNow: (id: string, tier: number) =>
+    fetchWithAuth(`/admin/ivr-escalations/${id}/call/${tier}`, { method: "POST" }),
   acknowledge: (id: string, phone?: string) =>
     fetchWithAuth(`/admin/ivr-escalations/${id}/acknowledge`, {
       method: "POST",

@@ -3,6 +3,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { catalogApi } from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
+import Pagination from "../components/Pagination";
 import {
   PageHeader, Button, SearchInput, Table, THead, TBody, TR, Th, Td,
   TableState, Badge, Modal, Field, Input, Select, Alert,
@@ -106,22 +107,30 @@ export default function CatalogManagement() {
     catalogApi.inventoryItems().then((res) => setInvOptions(res.data?.items || [])).catch(() => setInvOptions([]));
   }, [tabKey]);
 
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string> = {};
+      const params: Record<string, string | number> = { page, limit };
       if (search.trim()) params.search = search.trim();
       const res = await tab.resource.list(params);
-      setItems(res.data?.items || []);
+      const data = res.data || res;
+      setItems(data.items || []);
+      setTotal(data.pagination?.total ?? (data.items || []).length);
     } finally {
       setLoading(false);
     }
-  }, [tab, search]);
+  }, [tab, search, page, limit]);
 
+  useEffect(() => { setPage(1); }, [tabKey]);
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabKey]);
+  }, [tabKey, page, limit]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -186,7 +195,7 @@ export default function CatalogManagement() {
         <SearchInput
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && load()}
+          onKeyDown={(e) => e.key === "Enter" && (page === 1 ? load() : setPage(1))}
           placeholder="Search by name"
           className="ml-auto w-full max-w-xs"
         />
@@ -229,6 +238,22 @@ export default function CatalogManagement() {
           )}
         </TBody>
       </Table>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination page={page} totalPages={totalPages} total={total} label="items" onPageChange={setPage} />
+      </div>
 
       <Modal
         open={show}

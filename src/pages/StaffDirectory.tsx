@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { staffDirectoryApi } from "../services/admin-api";
 import { PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge, Input } from "../components/ui";
+import Pagination from "../components/Pagination";
 
 interface Row { type: string; sourceId: string; name: string; contact: string; role: string; status: string }
 
@@ -31,6 +32,8 @@ export default function StaffDirectory() {
   const [type, setType] = useState("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
 
   // Attendance tab
   const [attDate, setAttDate] = useState(todayStr());
@@ -64,6 +67,11 @@ export default function StaffDirectory() {
     const t = setTimeout(load, q ? 300 : 0); // debounce search
     return () => clearTimeout(t);
   }, [tab, load, q, loadAttendance]);
+
+  useEffect(() => { setPage(1); }, [type, q]);
+  const totalPages = Math.max(1, Math.ceil(rows.length / limit));
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+  const pageRows = useMemo(() => rows.slice((page - 1) * limit, page * limit), [rows, page, limit]);
 
   return (
     <div className="p-6">
@@ -129,7 +137,7 @@ export default function StaffDirectory() {
         <TBody>
           {loading && rows.length === 0 ? <TableState colSpan={5}>Loading…</TableState>
             : rows.length === 0 ? <TableState colSpan={5}>No staff found.</TableState>
-            : rows.map((r) => (
+            : pageRows.map((r) => (
               <TR key={`${r.type}-${r.sourceId}`}>
                 <Td className="font-medium text-gray-900">{r.name}</Td>
                 <Td><Badge tone={typeTone[r.type] || "neutral"}>{typeLabel[r.type] || r.type}</Badge></Td>
@@ -140,6 +148,22 @@ export default function StaffDirectory() {
             ))}
         </TBody>
       </Table>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination page={page} totalPages={totalPages} total={rows.length} label="staff" onPageChange={setPage} />
+      </div>
       </>
       )}
     </div>

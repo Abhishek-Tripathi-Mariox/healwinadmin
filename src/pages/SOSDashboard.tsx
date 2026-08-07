@@ -214,6 +214,7 @@ const SOSDashboard: React.FC = () => {
   const [mapLoading, setMapLoading] = useState(false);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [callingId, setCallingId] = useState<string | null>(null);
 
   // ---------- Fetchers ----------
   const fetchSubmissions = useCallback(async () => {
@@ -337,6 +338,20 @@ const SOSDashboard: React.FC = () => {
       console.error("Failed to update status:", err);
     }
     setActionLoading(null);
+  };
+
+  // One-click real call — dials via the configured IVR provider (operator
+  // number first, then bridges to the submitter) and auto-journals a full
+  // IvrEscalation record; no manual "Start Escalation" form needed.
+  const handleCall = async (sub: SOSSubmission) => {
+    setCallingId(sub._id);
+    try {
+      const res = await sosSubmissionApi.call(sub._id);
+      if (!res.success) throw new Error(res.message || "Call failed");
+    } catch (err: any) {
+      alert(err?.message || "Failed to place call");
+    }
+    setCallingId(null);
   };
 
   const handleViewDetails = async (sub: SOSSubmission) => {
@@ -1056,13 +1071,19 @@ const SOSDashboard: React.FC = () => {
                       </Button>
                     )}
                     {sub.phone && sub.phone !== "N/A" && (
-                      <a
-                        href={`tel:${sub.phone}`}
-                        className="inline-flex items-center justify-center gap-1.5 h-8 px-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-xs font-medium"
+                      <button
+                        type="button"
+                        disabled={callingId === sub._id}
+                        onClick={() => handleCall(sub)}
+                        className="inline-flex items-center justify-center gap-1.5 h-8 px-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-xs font-medium disabled:opacity-50"
                       >
-                        <Phone className="w-3.5 h-3.5" />
-                        Call
-                      </a>
+                        {callingId === sub._id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Phone className="w-3.5 h-3.5" />
+                        )}
+                        {callingId === sub._id ? "Calling…" : "Call"}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -1118,13 +1139,22 @@ const SOSDashboard: React.FC = () => {
             <>
               {selectedSubmission.phone &&
                 selectedSubmission.phone !== "N/A" && (
-                  <a
-                    href={`tel:${selectedSubmission.phone}`}
-                    className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium text-sm"
+                  <Button
+                    disabled={callingId === selectedSubmission._id}
+                    onClick={() => handleCall(selectedSubmission)}
+                    className="bg-blue-500 text-white hover:bg-blue-600"
+                    icon={
+                      callingId === selectedSubmission._id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Phone className="w-4 h-4" />
+                      )
+                    }
                   >
-                    <Phone className="w-4 h-4" />
-                    Call User
-                  </a>
+                    {callingId === selectedSubmission._id
+                      ? "Calling…"
+                      : "Call User"}
+                  </Button>
                 )}
               {(selectedSubmission.status === "PENDING" ||
                 selectedSubmission.status === "IN_PROGRESS") && (

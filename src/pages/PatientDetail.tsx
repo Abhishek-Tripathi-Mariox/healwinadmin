@@ -173,6 +173,9 @@ export default function PatientDetail() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [mediaPreview, setMediaPreview] = useState<
+    { type: string; label?: string; url: string } | undefined
+  >(undefined);
   // Set when arriving from the OPD queue ("Consult") so the created
   // encounter is linked back to that appointment.
   const [consultAppointmentId, setConsultAppointmentId] = useState<
@@ -413,7 +416,6 @@ export default function PatientDetail() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("asPhoto", String(asPhoto));
-      if (!asPhoto) fd.append("type", "document");
       await hospitalPatientApi.uploadDocument(id, fd);
       load();
     } finally {
@@ -538,20 +540,44 @@ export default function PatientDetail() {
               Documents
             </h2>
             {patient.documents && patient.documents.length > 0 ? (
-              <ul className="space-y-2 text-sm">
-                {patient.documents.map((d, i) => (
-                  <li key={i}>
-                    <a
-                      href={d.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-healwin-700 hover:underline"
+              <div className="grid grid-cols-3 gap-2">
+                {patient.documents.map((d, i) => {
+                  const isPhoto = d.type === "photo";
+                  const isVideo = d.type === "video";
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() =>
+                        isPhoto || isVideo
+                          ? setMediaPreview(d)
+                          : window.open(d.url, "_blank", "noreferrer")
+                      }
+                      className="relative flex flex-col items-center justify-center overflow-hidden text-xs bg-gray-100 border border-gray-200 rounded aspect-square hover:opacity-90"
+                      title={d.label || d.type}
                     >
-                      {d.label || d.type}
-                    </a>
-                  </li>
-                ))}
-              </ul>
+                      {isPhoto ? (
+                        <img
+                          src={d.url}
+                          alt={d.label || "photo"}
+                          className="object-cover w-full h-full"
+                        />
+                      ) : isVideo ? (
+                        <>
+                          <video src={d.url} className="object-cover w-full h-full" muted />
+                          <span className="absolute flex items-center justify-center w-6 h-6 text-white rounded-full bg-black/50">
+                            ▶
+                          </span>
+                        </>
+                      ) : (
+                        <span className="px-1 text-center text-gray-500 truncate">
+                          {d.label || d.type}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             ) : (
               <p className="text-sm text-gray-400">No documents uploaded.</p>
             )}
@@ -1163,6 +1189,23 @@ export default function PatientDetail() {
             ))}
           </section>
         </form>
+      </Modal>
+
+      <Modal
+        open={!!mediaPreview}
+        onClose={() => setMediaPreview(undefined)}
+        title={mediaPreview?.label || mediaPreview?.type}
+        size="md"
+      >
+        {mediaPreview?.type === "video" ? (
+          <video src={mediaPreview.url} controls className="w-full rounded max-h-[70vh]" />
+        ) : (
+          <img
+            src={mediaPreview?.url}
+            alt={mediaPreview?.label || "photo"}
+            className="w-full rounded max-h-[70vh] object-contain"
+          />
+        )}
       </Modal>
     </div>
   );

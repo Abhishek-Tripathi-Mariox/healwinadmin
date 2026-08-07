@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { faqApi } from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
 import {
-  PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge, Modal, Field, Input,
+  PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge, Modal, Field, Input, Alert,
 } from "../components/ui";
+import Pagination from "../components/Pagination";
 
 /**
  * Manage the Help & Support FAQs shown in the patient app (Help & Support
@@ -33,6 +35,8 @@ export default function FaqManagement() {
   const [editing, setEditing] = useState<Faq | null>(null);
   const [form, setForm] = useState<typeof empty>(empty);
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,6 +50,15 @@ export default function FaqManagement() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const totalPages = Math.max(1, Math.ceil(items.length / limit));
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+  const pageItems = useMemo(
+    () => items.slice((page - 1) * limit, page * limit),
+    [items, page, limit],
+  );
 
   const openNew = () => {
     setEditing(null);
@@ -64,8 +77,17 @@ export default function FaqManagement() {
     setShowForm(true);
   };
 
+  const normQuestion = (q: string) => q.trim().toLowerCase().replace(/\s+/g, " ");
+  const isDuplicate = useMemo(
+    () =>
+      !!form.question.trim() &&
+      items.some((f) => f._id !== editing?._id && normQuestion(f.question) === normQuestion(form.question)),
+    [items, form.question, editing],
+  );
+
   const save = async () => {
-    if (!form.question.trim() || !form.answer.trim() || saving) return;
+    const question = form.question.trim();
+    if (!question || !form.answer.trim() || saving || isDuplicate) return;
     setSaving(true);
     try {
       if (editing) await faqApi.update(editing._id, form);
@@ -109,7 +131,7 @@ export default function FaqManagement() {
           ) : items.length === 0 ? (
             <TableState colSpan={5}>No FAQs yet. Add the first one.</TableState>
           ) : (
-            items.map((f) => (
+            pageItems.map((f) => (
               <TR key={f._id}>
                 <Td className="max-w-md">
                   <div className="font-medium text-gray-900">{f.question}</div>
@@ -133,8 +155,26 @@ export default function FaqManagement() {
                 <Td className="text-right whitespace-nowrap">
                   {canManage && (
                     <>
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(f)}>Edit</Button>
-                      <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => del(f)}>Delete</Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="px-2"
+                        title="Edit"
+                        aria-label="Edit"
+                        onClick={() => openEdit(f)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="px-2 text-red-600 hover:bg-red-50 hover:text-red-700"
+                        title="Delete"
+                        aria-label="Delete"
+                        onClick={() => del(f)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </>
                   )}
                 </Td>
@@ -144,6 +184,22 @@ export default function FaqManagement() {
         </TBody>
       </Table>
 
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination page={page} totalPages={totalPages} total={items.length} label="FAQs" onPageChange={setPage} />
+      </div>
+
       <Modal
         open={showForm}
         onClose={() => setShowForm(false)}
@@ -151,15 +207,20 @@ export default function FaqManagement() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowForm(false)}>Cancel</Button>
-            <Button onClick={save} disabled={saving || !form.question.trim() || !form.answer.trim()}>
+            <Button onClick={save} disabled={saving || !form.question.trim() || !form.answer.trim() || isDuplicate}>
               {saving ? "Saving…" : "Save"}
             </Button>
           </>
         }
       >
         <div className="space-y-3 p-6">
+          {isDuplicate && <Alert tone="danger">An FAQ with this question already exists.</Alert>}
           <Field label="Question">
-            <Input value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} placeholder="e.g. How do I cancel a booking?" />
+            <Input
+              value={form.question}
+              onChange={(e) => setForm({ ...form, question: e.target.value })}
+              placeholder="e.g. How do I cancel a booking?"
+            />
           </Field>
           <Field label="Answer">
             <textarea

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ambulanceRequestApi, ambulanceStaffApi, inventoryApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
 } from "../components/ui";
+import Pagination from "../components/Pagination";
 
 interface ExpenseLine {
   inventoryItemId?: string;
@@ -81,6 +82,8 @@ export default function AmbulanceRequestsManagement() {
   const [items, setItems] = useState<ReqRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
 
   const [assignFor, setAssignFor] = useState<ReqRow | null>(null);
   const [form, setForm] = useState({ driverName: "", driverPhone: "", vehicleNumber: "", etaMinutes: "", driverStaffId: "" });
@@ -117,6 +120,16 @@ export default function AmbulanceRequestsManagement() {
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, [load]);
+
+  useEffect(() => { setPage(1); }, [statusFilter]);
+  const totalPages = Math.max(1, Math.ceil(items.length / limit));
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+  const pageItems = useMemo(
+    () => items.slice((page - 1) * limit, page * limit),
+    [items, page, limit],
+  );
 
   // Realtime: a new patient "Where To?" ambulance request shows up the instant
   // it's created (`ambulance-request:new`), and the row refreshes the moment
@@ -311,7 +324,7 @@ export default function AmbulanceRequestsManagement() {
           ) : items.length === 0 ? (
             <TableState colSpan={6}>No requests.</TableState>
           ) : (
-            items.map((r) => (
+            pageItems.map((r) => (
               <TR key={r._id}>
                 <Td className="font-medium text-gray-900">
                   {r.recipientName || r.userId?.fullName || r.patientName || "Patient"}
@@ -347,9 +360,25 @@ export default function AmbulanceRequestsManagement() {
                     <Button size="sm" variant="secondary" onClick={() => advance(r, "COMPLETED")}>Complete</Button>
                   )}
                   {["ASSIGNED", "ACCEPTED", "ARRIVED", "ON_TRIP", "COMPLETED"].includes(r.status) && (
-                    <Button size="sm" variant="secondary" onClick={() => openBill(r)}>
-                      Expenses{r.inTransitTotal ? ` · ${money(r.inTransitTotal)}` : ""}
-                    </Button>
+                    <div className="inline-block text-left align-middle">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openBill(r)}
+                        title={
+                          `Ambulance charge: ${money(r.amount)}` +
+                          (r.inTransitTotal ? `\nIn-transit expenses: ${money(r.inTransitTotal)}` : "") +
+                          `\nGrand total: ${money(r.grandTotal ?? r.amount)}`
+                        }
+                      >
+                        Expenses · {money(r.grandTotal ?? r.amount)}
+                      </Button>
+                      {!!r.inTransitTotal && (
+                        <div className="mt-0.5 text-[11px] leading-tight text-gray-400">
+                          Fare {money(r.amount)} + Expenses {money(r.inTransitTotal)}
+                        </div>
+                      )}
+                    </div>
                   )}
                   {["ASSIGNED", "ACCEPTED", "ARRIVED", "ON_TRIP", "COMPLETED"].includes(r.status) &&
                     (r.paymentStatus === "PAID" ? (
@@ -371,6 +400,22 @@ export default function AmbulanceRequestsManagement() {
           )}
         </TBody>
       </Table>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination page={page} totalPages={totalPages} total={items.length} label="requests" onPageChange={setPage} />
+      </div>
 
       <Modal
         open={!!assignFor}

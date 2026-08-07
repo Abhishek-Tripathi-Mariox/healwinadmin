@@ -181,7 +181,7 @@ const UserManagement: React.FC = () => {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<UserStatus>("all");
   const [page, setPage] = useState(1); // 1-based for Pagination
-  const [limit] = useState(20);
+  const [limit, setLimit] = useState(20);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [selectedUser, setSelectedUser] = useState<PatientUser | null>(null);
@@ -244,6 +244,11 @@ const UserManagement: React.FC = () => {
 
   const handleStatusChange = (next: UserStatus) => {
     setStatus(next);
+    setPage(1);
+  };
+
+  const handleLimitChange = (next: number) => {
+    setLimit(next);
     setPage(1);
   };
 
@@ -596,13 +601,29 @@ const UserManagement: React.FC = () => {
         </TBody>
       </Table>
 
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        total={total}
-        label="users"
-        onPageChange={setPage}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => handleLimitChange(Number(e.target.value))}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          label="users"
+          onPageChange={setPage}
+        />
+      </div>
 
       {/* Detail drawer */}
       {selectedUser && (

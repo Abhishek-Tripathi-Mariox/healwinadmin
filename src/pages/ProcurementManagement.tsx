@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { procurementApi, inventoryApi } from "../services/admin-api";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert, Card,
 } from "../components/ui";
+import Pagination from "../components/Pagination";
 
 type Tab = "orders" | "suppliers";
 interface POItem { itemId: string; name: string; quantity: string; unitPrice: string; batchNo: string; expiryDate: string }
@@ -34,6 +35,21 @@ export default function ProcurementManagement() {
     totals: { orders: number; received: number; totalSpend: number; onTimeRate: number | null };
     priceHistory: { itemId: string; name: string; points: { date: string; unitPrice: number; quantity: number; poNumber: string }[] }[];
   } | null>(null);
+
+  const [supplierPage, setSupplierPage] = useState(1);
+  const [supplierLimit, setSupplierLimit] = useState(20);
+  const supplierTotalPages = Math.max(1, Math.ceil(suppliers.length / supplierLimit));
+  const pageSuppliers = useMemo(
+    () => suppliers.slice((supplierPage - 1) * supplierLimit, supplierPage * supplierLimit),
+    [suppliers, supplierPage, supplierLimit],
+  );
+  const [orderPage, setOrderPage] = useState(1);
+  const [orderLimit, setOrderLimit] = useState(20);
+  const orderTotalPages = Math.max(1, Math.ceil(orders.length / orderLimit));
+  const pageOrders = useMemo(
+    () => orders.slice((orderPage - 1) * orderLimit, orderPage * orderLimit),
+    [orders, orderPage, orderLimit],
+  );
 
   const openPerformance = async (s: any) => {
     setPerfSupplier(s);
@@ -122,7 +138,7 @@ export default function ProcurementManagement() {
           <TBody>
             {loading && suppliers.length === 0 ? <TableState colSpan={5}>Loading…</TableState>
               : suppliers.length === 0 ? <TableState colSpan={5}>No suppliers.</TableState>
-              : suppliers.map((s) => (
+              : pageSuppliers.map((s) => (
                 <TR key={s._id}>
                   <Td className="font-medium text-gray-900">{s.name}</Td>
                   <Td className="text-xs text-gray-500">{s.contactPerson || ""}{s.phone ? ` · ${s.phone}` : ""}</Td>
@@ -137,6 +153,21 @@ export default function ProcurementManagement() {
           </TBody>
         </Table>
       )}
+      {tab === "suppliers" && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            Rows per page
+            <select
+              value={supplierLimit}
+              onChange={(e) => { setSupplierLimit(Number(e.target.value)); setSupplierPage(1); }}
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+            >
+              {[5, 10, 20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          <Pagination page={supplierPage} totalPages={supplierTotalPages} total={suppliers.length} label="suppliers" onPageChange={setSupplierPage} />
+        </div>
+      )}
 
       {tab === "orders" && (
         <Table>
@@ -144,7 +175,7 @@ export default function ProcurementManagement() {
           <TBody>
             {loading && orders.length === 0 ? <TableState colSpan={6}>Loading…</TableState>
               : orders.length === 0 ? <TableState colSpan={6}>No purchase orders.</TableState>
-              : orders.map((po) => (
+              : pageOrders.map((po) => (
                 <TR key={po._id}>
                   <Td className="font-medium text-gray-900">{po.poNumber}</Td>
                   <Td>{po.supplierId?.name || "—"}</Td>
@@ -159,6 +190,21 @@ export default function ProcurementManagement() {
               ))}
           </TBody>
         </Table>
+      )}
+      {tab === "orders" && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            Rows per page
+            <select
+              value={orderLimit}
+              onChange={(e) => { setOrderLimit(Number(e.target.value)); setOrderPage(1); }}
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+            >
+              {[5, 10, 20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          <Pagination page={orderPage} totalPages={orderTotalPages} total={orders.length} label="purchase orders" onPageChange={setOrderPage} />
+        </div>
       )}
 
       <Modal open={!!supplierModal} onClose={() => setSupplierModal(null)} title={supplierModal?._id ? "Edit Supplier" : "Add Supplier"}

@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { insuranceApi, hospitalPatientApi } from "../services/admin-api";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
 } from "../components/ui";
+import Pagination from "../components/Pagination";
 
 type Tab = "claims" | "policies" | "payers";
 const claimTone: Record<string, "neutral" | "info" | "success" | "danger" | "warning"> = {
@@ -32,6 +33,23 @@ export default function InsuranceManagement() {
   const [statusForm, setStatusForm] = useState({ status: "submitted", approvedAmount: "", notes: "" });
   const [patientQuery, setPatientQuery] = useState("");
   const [patientResults, setPatientResults] = useState<any[]>([]);
+
+  const [policyPage, setPolicyPage] = useState(1);
+  const [policyLimit, setPolicyLimit] = useState(20);
+  const policyTotalPages = Math.max(1, Math.ceil(policies.length / policyLimit));
+  const pagePolicies = useMemo(
+    () => policies.slice((policyPage - 1) * policyLimit, policyPage * policyLimit),
+    [policies, policyPage, policyLimit],
+  );
+  const [claimPage, setClaimPage] = useState(1);
+  const [claimLimit, setClaimLimit] = useState(20);
+  const claimTotalPages = Math.max(1, Math.ceil(claims.length / claimLimit));
+  const pageClaims = useMemo(
+    () => claims.slice((claimPage - 1) * claimLimit, claimPage * claimLimit),
+    [claims, claimPage, claimLimit],
+  );
+  useEffect(() => { if (policyPage > policyTotalPages) setPolicyPage(policyTotalPages); }, [policyPage, policyTotalPages]);
+  useEffect(() => { if (claimPage > claimTotalPages) setClaimPage(claimTotalPages); }, [claimPage, claimTotalPages]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -138,7 +156,7 @@ export default function InsuranceManagement() {
           <TBody>
             {loading && policies.length === 0 ? <TableState colSpan={5}>Loading…</TableState>
               : policies.length === 0 ? <TableState colSpan={5}>No policies.</TableState>
-              : policies.map((p) => (
+              : pagePolicies.map((p) => (
                 <TR key={p._id}>
                   <Td className="font-medium text-gray-900">{p.patientId?.fullName || "—"}<div className="text-xs text-gray-400">{p.patientId?.patientId}</div></Td>
                   <Td>{p.payerId?.name || "—"}</Td>
@@ -150,6 +168,21 @@ export default function InsuranceManagement() {
           </TBody>
         </Table>
       )}
+      {tab === "policies" && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            Rows per page
+            <select
+              value={policyLimit}
+              onChange={(e) => { setPolicyLimit(Number(e.target.value)); setPolicyPage(1); }}
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+            >
+              {[5, 10, 20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          <Pagination page={policyPage} totalPages={policyTotalPages} total={policies.length} label="policies" onPageChange={setPolicyPage} />
+        </div>
+      )}
 
       {tab === "claims" && (
         <Table>
@@ -157,7 +190,7 @@ export default function InsuranceManagement() {
           <TBody>
             {loading && claims.length === 0 ? <TableState colSpan={7}>Loading…</TableState>
               : claims.length === 0 ? <TableState colSpan={7}>No claims.</TableState>
-              : claims.map((c) => (
+              : pageClaims.map((c) => (
                 <TR key={c._id}>
                   <Td className="font-medium text-gray-900">{c.claimNumber}</Td>
                   <Td>{c.patientId?.fullName || "—"}</Td>
@@ -172,6 +205,21 @@ export default function InsuranceManagement() {
               ))}
           </TBody>
         </Table>
+      )}
+      {tab === "claims" && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            Rows per page
+            <select
+              value={claimLimit}
+              onChange={(e) => { setClaimLimit(Number(e.target.value)); setClaimPage(1); }}
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+            >
+              {[5, 10, 20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          <Pagination page={claimPage} totalPages={claimTotalPages} total={claims.length} label="claims" onPageChange={setClaimPage} />
+        </div>
       )}
 
       {/* Payer modal */}

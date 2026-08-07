@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
+import { Phone } from "lucide-react";
 import { ivrApi } from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
+import Pagination from "../components/Pagination";
 import {
   PageHeader,
   Button,
@@ -31,6 +33,7 @@ interface Attempt {
   provider: string;
   status: string;
   note?: string;
+  recordingUrl?: string;
   at: string;
 }
 interface Escalation {
@@ -67,16 +70,23 @@ export default function IvrEscalationsManagement() {
     { tier: 1, name: "", phone: "", role: "" },
   ]);
   const [err, setErr] = useState("");
+  const [callingTier, setCallingTier] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await ivrApi.list();
-      setItems(res.data?.items || []);
+      const res = await ivrApi.list({ page, limit });
+      const data = res.data || res;
+      setItems(data.items || []);
+      setTotal(data.pagination?.total ?? (data.items || []).length);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit]);
 
   useEffect(() => {
     load();
@@ -86,6 +96,16 @@ export default function IvrEscalationsManagement() {
     const res = await ivrApi.detail(id);
     setDetail(res.data?.escalation || null);
     load();
+  };
+
+  const callTier = async (id: string, tier: number) => {
+    setCallingTier(tier);
+    try {
+      await ivrApi.callNow(id, tier);
+      await refreshDetail(id);
+    } finally {
+      setCallingTier(null);
+    }
   };
 
   const startEscalation = async (e: React.FormEvent) => {
@@ -173,6 +193,22 @@ export default function IvrEscalationsManagement() {
           )}
         </TBody>
       </Table>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination page={page} totalPages={totalPages} total={total} label="escalations" onPageChange={setPage} />
+      </div>
 
       {/* Start modal */}
       <Modal
@@ -317,14 +353,27 @@ export default function IvrEscalationsManagement() {
               {detail.contacts.map((c) => (
                 <div
                   key={c.tier}
-                  className={`flex justify-between py-1 text-sm ${
+                  className={`flex items-center justify-between py-1 text-sm ${
                     c.tier === detail.currentTier ? "font-semibold" : ""
                   }`}
                 >
                   <span>
                     Tier {c.tier}: {c.name || "—"} {c.role ? `(${c.role})` : ""}
                   </span>
-                  <span className="text-gray-500">{c.phone}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-gray-500">{c.phone}</span>
+                    {canManage && (
+                      <button
+                        type="button"
+                        title={`Call ${c.name || c.phone} now`}
+                        disabled={callingTier === c.tier}
+                        onClick={() => callTier(detail._id, c.tier)}
+                        className="rounded-full p-1.5 text-emerald-600 hover:bg-emerald-50 disabled:opacity-50"
+                      >
+                        <Phone className="h-4 w-4" />
+                      </button>
+                    )}
+                  </span>
                 </div>
               ))}
             </div>
@@ -341,6 +390,19 @@ export default function IvrEscalationsManagement() {
                     <span className="font-medium">{a.status}</span> ·{" "}
                     {new Date(a.at).toLocaleTimeString()}
                     {a.note ? ` · ${a.note}` : ""}
+                    {a.recordingUrl && (
+                      <>
+                        {" · "}
+                        <a
+                          href={a.recordingUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium text-sky-600 hover:underline"
+                        >
+                          ▶ Listen to recording
+                        </a>
+                      </>
+                    )}
                   </div>
                 ))
               )}

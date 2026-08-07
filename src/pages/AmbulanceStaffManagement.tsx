@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Pencil, Trash2, Eye, Power } from "lucide-react";
 import { ambulanceStaffApi, providerApi } from "../services/admin-api";
+import Pagination from "../components/Pagination";
 import {
   PageHeader,
   Button,
@@ -53,6 +54,10 @@ export default function AmbulanceStaffManagement() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
   const load = async () => {
     setLoading(true);
@@ -60,14 +65,18 @@ export default function AmbulanceStaffManagement() {
       // Always scope to provider-affiliated staff. Hospital paramedics
       // live in the same collection but belong to a different party —
       // they're managed under Hospitals → [hospital] → Staff.
-      const clean: Record<string, string | boolean> = {
+      const clean: Record<string, string | number | boolean> = {
         affiliation: "provider",
+        page,
+        limit,
       };
       if (filters.providerId) clean.providerId = filters.providerId;
       if (filters.role) clean.role = filters.role;
       if (filters.search) clean.search = filters.search;
       const res = await ambulanceStaffApi.list(clean);
-      setItems(res.data?.items || res.items || []);
+      const data = res.data || res;
+      setItems(data.items || []);
+      setTotal(data.total ?? (data.items || []).length);
     } finally {
       setLoading(false);
     }
@@ -77,8 +86,12 @@ export default function AmbulanceStaffManagement() {
     providerApi.list({ isActive: true }).then((r) => {
       setProviders(r.data?.items || r.items || []);
     });
-    load();
   }, []);
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, limit]);
 
   const validate = () => {
     const errs: Record<string, string> = {};
@@ -177,7 +190,7 @@ export default function AmbulanceStaffManagement() {
           <option value="driver">Driver</option>
           <option value="attendant">Attendant</option>
         </Select>
-        <Button variant="secondary" onClick={load}>
+        <Button variant="secondary" onClick={() => (page === 1 ? load() : setPage(1))}>
           Apply
         </Button>
       </div>
@@ -300,6 +313,22 @@ export default function AmbulanceStaffManagement() {
           )}
         </TBody>
       </Table>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination page={page} totalPages={totalPages} total={total} label="staff" onPageChange={setPage} />
+      </div>
 
       <Modal
         open={showForm}

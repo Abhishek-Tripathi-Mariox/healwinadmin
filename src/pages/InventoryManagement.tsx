@@ -3,6 +3,7 @@ import { PackagePlus, Pencil, Trash2, Layers } from "lucide-react";
 import { inventoryApi, procurementApi } from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
+import Pagination from "../components/Pagination";
 import {
   PageHeader,
   Button,
@@ -205,10 +206,15 @@ export default function InventoryManagement() {
   const [poGenError, setPoGenError] = useState("");
   const [poGenSaving, setPoGenSaving] = useState(false);
 
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string | boolean> = {};
+      const params: Record<string, string | boolean | number> = { page, limit };
       if (search.trim()) params.search = search.trim();
       if (category) params.category = category;
       if (lowOnly) params.lowStock = true;
@@ -216,17 +222,20 @@ export default function InventoryManagement() {
         inventoryApi.list(params),
         inventoryApi.alerts(30),
       ]);
-      setItems(res.data?.items || []);
+      const data = res.data || res;
+      setItems(data.items || []);
+      setTotal(data.pagination?.total ?? (data.items || []).length);
       setAlerts(al.data || null);
     } finally {
       setLoading(false);
     }
-  }, [search, category, lowOnly]);
+  }, [search, category, lowOnly, page, limit]);
 
+  useEffect(() => { setPage(1); }, [category, lowOnly]);
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, lowOnly]);
+  }, [category, lowOnly, page, limit]);
 
   // Pending maker-checker approvals — poll a lightweight count so the badge
   // stays current even while this modal is closed.
@@ -544,7 +553,7 @@ export default function InventoryManagement() {
         <SearchInput
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && load()}
+          onKeyDown={(e) => e.key === "Enter" && (page === 1 ? load() : setPage(1))}
           placeholder="Search by name or SKU"
           className="w-full max-w-xs"
         />
@@ -679,6 +688,22 @@ export default function InventoryManagement() {
           )}
         </TBody>
       </Table>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination page={page} totalPages={totalPages} total={total} label="items" onPageChange={setPage} />
+      </div>
 
       {/* Item form modal */}
       <Modal

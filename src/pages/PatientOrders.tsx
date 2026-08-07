@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { patientCommerceApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
+import Pagination from "../components/Pagination";
 import {
   PageHeader, Table, THead, TBody, TR, Th, Td, TableState, Select, Modal, Badge, Button,
 } from "../components/ui";
+import { VoiceTextarea } from "../components/VoiceTextarea";
+import { SpeakButton } from "../components/SpeakButton";
 
 /**
  * Admin inbox for the patient-app commerce flows — doctor consultations, lab
@@ -101,6 +104,8 @@ export default function PatientOrders() {
   const [reportNotes, setReportNotes] = useState("");
   const [reportFiles, setReportFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
 
   const canSchedule = tab === "consultations" || tab === "lab-bookings";
 
@@ -122,6 +127,11 @@ export default function PatientOrders() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => { setPage(1); }, [tab]);
+  const totalPages = Math.max(1, Math.ceil(rows.length / limit));
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+  const pageRows = useMemo(() => rows.slice((page - 1) * limit, page * limit), [rows, page, limit]);
 
   // Real-time: a new order (or a status change) lands → reload + flash a banner.
   useEffect(() => {
@@ -241,7 +251,7 @@ export default function PatientOrders() {
           ) : rows.length === 0 ? (
             <TableState colSpan={7}>Nothing here yet.</TableState>
           ) : (
-            rows.map((r) => (
+            pageRows.map((r) => (
               <TR key={r._id} clickable onClick={() => openDetail(r)}>
                 <Td>
                   <div className="font-medium text-gray-900">{userName(r.userId)}</div>
@@ -271,6 +281,22 @@ export default function PatientOrders() {
           )}
         </TBody>
       </Table>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination page={page} totalPages={totalPages} total={rows.length} label="orders" onPageChange={setPage} />
+      </div>
 
       <Modal
         open={!!selected}
@@ -363,12 +389,16 @@ export default function PatientOrders() {
             {/* Consultation summary — what the doctor advised */}
             {tab === "consultations" && canManage && (
               <div className="rounded-lg bg-gray-50 p-3">
-                <div className="mb-1 text-sm font-medium text-gray-700">Consultation summary</div>
-                <textarea
+                <div className="mb-1 flex items-center justify-between">
+                  <div className="text-sm font-medium text-gray-700">Consultation summary</div>
+                  <SpeakButton text={summary} />
+                </div>
+                <VoiceTextarea
                   value={summary}
                   onChange={(e) => setSummary(e.target.value)}
+                  onTranscript={setSummary}
                   rows={4}
-                  placeholder="What was discussed / advised / prescribed to the patient…"
+                  placeholder="What was discussed / advised / prescribed to the patient… (or click the mic to dictate)"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                 />
                 <button

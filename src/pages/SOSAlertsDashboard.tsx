@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { sosAlertApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
 import DispatchPanel from "../components/DispatchPanel";
+import Pagination from "../components/Pagination";
 import {
   PageHeader,
   Button,
@@ -37,18 +38,26 @@ export default function SOSAlertsDashboard() {
   const [selected, setSelected] = useState<Alert | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ lat: "", lng: "", address: "" });
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
   const load = async () => {
     setLoading(true);
     try {
-      const params: Record<string, string> = {};
+      const params: Record<string, string | number> = { page, limit };
       if (statusFilter !== "ALL") params.status = statusFilter;
       const res: any = await sosAlertApi.list(params);
-      setItems(res.data?.items || res.rData?.items || res.items || []);
+      const data = res.data || res.rData || res;
+      setItems(data.items || []);
+      setTotal(data.total ?? (data.items || []).length);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => { setPage(1); }, [statusFilter]);
 
   useEffect(() => {
     load();
@@ -62,7 +71,7 @@ export default function SOSAlertsDashboard() {
       off();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
+  }, [statusFilter, page, limit]);
 
   const onCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,6 +209,22 @@ export default function SOSAlertsDashboard() {
           )}
         </TBody>
       </Table>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination page={page} totalPages={totalPages} total={total} label="alerts" onPageChange={setPage} />
+      </div>
 
       <Modal
         open={!!selected}

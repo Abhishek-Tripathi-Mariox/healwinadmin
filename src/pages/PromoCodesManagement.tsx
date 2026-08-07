@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { promoApi } from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
+import Pagination from "../components/Pagination";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
@@ -65,17 +66,25 @@ export default function PromoCodesManagement() {
   const [form, setForm] = useState<any>(empty);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await promoApi.list({ serviceCategory: categoryFilter, limit: "100" });
-      setItems(res.data?.promos || []);
+      // Backend uses 0-based page (skip = page*limit).
+      const res = await promoApi.list({ serviceCategory: categoryFilter, page: String(page - 1), limit: String(limit) });
+      const data = res.data || res;
+      setItems(data.promos || []);
+      setTotal(data.total ?? (data.promos || []).length);
     } finally {
       setLoading(false);
     }
-  }, [categoryFilter]);
+  }, [categoryFilter, page, limit]);
 
+  useEffect(() => { setPage(1); }, [categoryFilter]);
   useEffect(() => { load(); }, [load]);
 
   const openNew = () => { setEditing(null); setForm(empty); setError(""); setOpen(true); };
@@ -214,6 +223,22 @@ export default function PromoCodesManagement() {
           )}
         </TBody>
       </Table>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination page={page} totalPages={totalPages} total={total} label="promo codes" onPageChange={setPage} />
+      </div>
 
       <Modal
         open={open}
