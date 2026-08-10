@@ -92,6 +92,7 @@ const ApplicationsManagement: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
@@ -113,7 +114,7 @@ const ApplicationsManagement: React.FC = () => {
       const res = await applicationsApi.getAll({
         ...buildParams(),
         page: String(page),
-        limit: "20",
+        limit: String(limit),
       });
       const d = res.data;
       if (d?.items) {
@@ -145,11 +146,11 @@ const ApplicationsManagement: React.FC = () => {
 
   useEffect(() => {
     loadApplications();
-  }, [statusFilter, genderFilter, departmentFilter, dateFrom, dateTo, page]);
+  }, [statusFilter, genderFilter, departmentFilter, dateFrom, dateTo, page, limit]);
 
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, genderFilter, departmentFilter, dateFrom, dateTo, search]);
+  }, [statusFilter, genderFilter, departmentFilter, dateFrom, dateTo, search, limit]);
 
   const handleStatusChange = async (id: string, status: string) => {
     setError(null);
@@ -359,13 +360,27 @@ const ApplicationsManagement: React.FC = () => {
         </TBody>
       </Table>
 
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        total={total}
-        label="applications"
-        onPageChange={setPage}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          label="applications"
+          onPageChange={setPage}
+        />
+      </div>
 
       {/* Application detail */}
       <Modal

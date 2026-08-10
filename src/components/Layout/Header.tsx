@@ -13,6 +13,7 @@ interface AlertItem {
   title: string;
   message: string;
   tone: "danger" | "warning" | "info";
+  fingerprint: string;
 }
 
 interface ActivityItem {
@@ -68,6 +69,27 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
   // like notifications were never marked read.
   const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
 
+  // Alerts the admin explicitly dismissed (the "×" on a row) — persisted so a
+  // reload doesn't bring them back. These are LIVE facts (e.g. low stock),
+  // not one-time events, so dismissing one only hides it while the same
+  // underlying condition holds; if the item's stock changes at all (restocked,
+  // or drops further), it's treated as a fresh alert and reappears.
+  const DISMISS_KEY = "healwin_admin_dismissed_alerts";
+  const [dismissed, setDismissed] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(DISMISS_KEY) || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const dismissAlert = (id: string, fingerprint: string) => {
+    setDismissed((prev) => {
+      const next = { ...prev, [id]: fingerprint };
+      localStorage.setItem(DISMISS_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
   // Clinical alerts (low stock / expiry / follow-ups) — polled.
   useEffect(() => {
     let active = true;
@@ -77,17 +99,33 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
         .then((res) => {
           if (!active) return;
           const d = res.data || {};
-          const list: AlertItem[] = [];
+          const list: (AlertItem & { fingerprint: string })[] = [];
           (d.lowStock || []).forEach((x: any) =>
-            list.push({ id: `ls-${x._id}`, title: "Low stock", message: `${x.name} — ${x.currentStock} left (reorder ≤ ${x.reorderThreshold})`, tone: "danger" }),
+            list.push({ id: `ls-${x._id}`, title: "Low stock", message: `${x.name} — ${x.currentStock} left (reorder ≤ ${x.reorderThreshold})`, tone: "danger", fingerprint: String(x.currentStock) }),
           );
           (d.expiringSoon || []).forEach((x: any) =>
-            list.push({ id: `ex-${x._id}`, title: "Expiring soon", message: `${x.name} — exp ${new Date(x.expiryDate).toLocaleDateString()}`, tone: "warning" }),
+            list.push({ id: `ex-${x._id}`, title: "Expiring soon", message: `${x.name} — exp ${new Date(x.expiryDate).toLocaleDateString()}`, tone: "warning", fingerprint: String(x.currentStock) }),
           );
           (d.followUps || []).forEach((x: any) =>
-            list.push({ id: `fu-${x._id}`, title: "Follow-up due", message: `${x.patientId?.fullName || "Patient"} — ${new Date(x.followUpAt).toLocaleDateString()}`, tone: "info" }),
+            list.push({ id: `fu-${x._id}`, title: "Follow-up due", message: `${x.patientId?.fullName || "Patient"} — ${new Date(x.followUpAt).toLocaleDateString()}`, tone: "info", fingerprint: x.followUpAt }),
           );
           setItems(list);
+          // Drop stale dismissals: either the alert is gone entirely (resolved)
+          // or its fingerprint changed (stock moved) — either way it shouldn't
+          // stay suppressed forever.
+          setDismissed((prev) => {
+            const next: Record<string, string> = {};
+            let changed = false;
+            for (const it of list) {
+              if (prev[it.id] === it.fingerprint) next[it.id] = prev[it.id];
+            }
+            for (const k of Object.keys(prev)) {
+              if (!(k in next)) changed = true;
+            }
+            if (!changed && Object.keys(next).length === Object.keys(prev).length) return prev;
+            localStorage.setItem(DISMISS_KEY, JSON.stringify(next));
+            return next;
+          });
         })
         .catch(() => {});
     };
@@ -133,19 +171,21 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
     navigate(route);
   };
 
+  const visibleAlerts = items.filter((i) => dismissed[i.id] !== i.fingerprint);
+
   const toggle = () => {
     setShowNotifications((s) => {
       if (!s) {
         setUnseen(0); // opening clears the new-activity badge
         // …and marks every currently-shown alert as read, so the badge drops to
         // 0 on open and only re-lights when a brand-new alert arrives.
-        setSeenAlertIds(new Set(items.map((i) => i.id)));
+        setSeenAlertIds(new Set(visibleAlerts.map((i) => i.id)));
       }
       return !s;
     });
   };
 
-  const unseenAlerts = items.filter((i) => !seenAlertIds.has(i.id)).length;
+  const unseenAlerts = visibleAlerts.filter((i) => !seenAlertIds.has(i.id)).length;
   const badge = unseen + unseenAlerts;
 
   return (
@@ -180,7 +220,7 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
                   </button>
                 </div>
                 <div className="overflow-y-auto max-h-96">
-                  {activity.length === 0 && items.length === 0 && (
+                  {activity.length === 0 && visibleAlerts.length === 0 && (
                     <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
                       <Bell className="h-8 w-8 text-gray-300" />
                       <p className="text-sm font-medium text-gray-700">You're all caught up</p>
@@ -204,15 +244,24 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
                     </button>
                   ))}
 
-                  {items.length > 0 && (
+                  {visibleAlerts.length > 0 && (
                     <div className="px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
                       Alerts
                     </div>
                   )}
-                  {items.map((a) => (
-                    <div key={a.id} className="px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50">
-                      <p className={`text-sm font-medium ${toneText[a.tone]}`}>{a.title}</p>
-                      <p className="text-xs text-gray-500">{a.message}</p>
+                  {visibleAlerts.map((a) => (
+                    <div key={a.id} className="group flex items-start gap-2 px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50">
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium ${toneText[a.tone]}`}>{a.title}</p>
+                        <p className="text-xs text-gray-500">{a.message}</p>
+                      </div>
+                      <button
+                        onClick={() => dismissAlert(a.id, a.fingerprint)}
+                        title="Dismiss"
+                        className="shrink-0 rounded p-0.5 text-gray-300 opacity-0 hover:bg-gray-200 hover:text-gray-600 group-hover:opacity-100"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   ))}
                 </div>

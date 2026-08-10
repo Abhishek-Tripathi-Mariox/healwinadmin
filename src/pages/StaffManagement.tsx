@@ -743,8 +743,10 @@ const StaffManagement: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
   const [totalStaff, setTotalStaff] = useState(0);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   // Staff Modal
   const [showStaffModal, setShowStaffModal] = useState(false);
@@ -816,7 +818,13 @@ const StaffManagement: React.FC = () => {
     setError(null);
     try {
       const [staffResponse, rolesResponse] = await Promise.all([
-        staffApi.getAll({ page: page as any, limit: 20 as any }),
+        staffApi.getAll({
+          page: page as any,
+          limit: limit as any,
+          search: debouncedSearch || undefined,
+          role: roleFilter === "ALL" ? undefined : roleFilter,
+          status: statusFilter === "ALL" ? undefined : statusFilter.toLowerCase(),
+        }),
         rolesApi.getAll(),
       ]);
 
@@ -846,27 +854,28 @@ const StaffManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, limit, debouncedSearch, roleFilter, statusFilter]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const filteredStaff = useMemo(() => {
-    return staffMembers.filter((staff) => {
-      const staffName = staff.name || staff.fullName || "";
-      const matchesSearch =
-        staffName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (staff.email || "").toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesRole =
-        roleFilter === "ALL" || staff.role?._id === roleFilter;
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        (statusFilter === "ACTIVE" && staff.isActive) ||
-        (statusFilter === "INACTIVE" && !staff.isActive);
-      return matchesSearch && matchesRole && matchesStatus;
-    });
-  }, [staffMembers, searchQuery, roleFilter, statusFilter]);
+  // Debounce search so we don't fire a request on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  // Reset to page 1 whenever a filter actually changes.
+  useEffect(() => {
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, roleFilter, statusFilter]);
+
+  // Search/role/status are now applied server-side (see fetchData) so every
+  // matching record is found across all pages, not just the currently
+  // fetched page.
+  const filteredStaff = staffMembers;
 
   const stats = useMemo(
     () => ({
@@ -2065,13 +2074,27 @@ const StaffManagement: React.FC = () => {
         )}
       </Modal>
 
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        total={totalStaff}
-        label="staff members"
-        onPageChange={setPage}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={totalStaff}
+          label="staff members"
+          onPageChange={setPage}
+        />
+      </div>
     </div>
   );
 };

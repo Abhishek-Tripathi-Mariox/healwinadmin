@@ -539,8 +539,11 @@ export const staffApi = {
     limit?: number;
     search?: string;
   }) => {
+    // Backend filters by `roleId`, not `role` — remap here so callers can
+    // keep passing the more readable `role` key.
+    const { role, ...rest } = params || {};
     const query = new URLSearchParams(
-      params as Record<string, string>,
+      sanitizeParams({ ...rest, roleId: role }),
     ).toString();
     return fetchWithAuth(`/admin/staff?${query}`);
   },

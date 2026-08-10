@@ -705,9 +705,15 @@ function AdmissionDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-gray-900/50 backdrop-blur-sm">
-      <div className="w-full max-w-md h-full overflow-y-auto bg-white shadow-xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-gray-900/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md h-full overflow-y-auto bg-white shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-white border-b border-gray-100">
           <div>
             <h2 className="text-base font-semibold text-gray-900">
               {admission.admissionNo}

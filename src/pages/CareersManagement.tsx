@@ -71,6 +71,7 @@ const CareersManagement: React.FC = () => {
   const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
   const [districtDropdownOpen, setDistrictDropdownOpen] = useState(false);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const stateDropdownRef = useRef<HTMLDivElement>(null);
@@ -85,7 +86,7 @@ const CareersManagement: React.FC = () => {
       if (search.trim()) params.q = search.trim();
       if (departmentFilter !== "all") params.department = departmentFilter;
       params.page = String(page);
-      params.limit = "20";
+      params.limit = String(limit);
       const res = await careersApi.getAll(params);
       const d = res.data;
       if (d?.items) {
@@ -189,11 +190,11 @@ const CareersManagement: React.FC = () => {
   useEffect(() => {
     loadCareers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, departmentFilter, page]);
+  }, [statusFilter, departmentFilter, page, limit]);
 
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, departmentFilter, search]);
+  }, [statusFilter, departmentFilter, search, limit]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -432,13 +433,27 @@ const CareersManagement: React.FC = () => {
         </TBody>
       </Table>
 
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        total={total}
-        label="careers"
-        onPageChange={setPage}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          Rows per page
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
+          >
+            {[5, 10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          label="careers"
+          onPageChange={setPage}
+        />
+      </div>
 
       <Modal
         open={showForm}
