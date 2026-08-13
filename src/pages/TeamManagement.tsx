@@ -398,7 +398,7 @@ const TeamManagement: React.FC = () => {
   return (
     <div className="p-6">
       <PageHeader
-        title="Team Management"
+        title="Website Team"
         subtitle={`${total || members.length} member${
           (total || members.length) !== 1 ? "s" : ""
         }`}

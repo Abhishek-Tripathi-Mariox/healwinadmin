@@ -1,6 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { opdApi, hospitalPatientApi, staffApi } from "../services/admin-api";
+import {
+  opdApi,
+  hospitalPatientApi,
+  doctorScheduleApi,
+  billingApi,
+} from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
 import {
@@ -34,7 +39,27 @@ interface Appt {
     phone?: string;
   };
   doctorId?: { fullName?: string };
+  vitals?: Record<string, string | number | undefined> | null;
+  invoiceId?: {
+    _id: string;
+    invoiceNo: string;
+    total: number;
+    amountPaid: number;
+    balanceDue: number;
+    status: string;
+  } | null;
 }
+
+const PAY_METHODS = ["cash", "upi", "card", "insurance", "wallet"] as const;
+
+const payTone: Record<string, "neutral" | "info" | "warning" | "success" | "danger"> = {
+  unpaid: "danger",
+  partial: "warning",
+  paid: "success",
+  refunded: "neutral",
+  cancelled: "neutral",
+  draft: "neutral",
+};
 
 const STATUS_FLOW: Record<string, { next?: string; label?: string }> = {
   booked: { next: "checked_in", label: "Check in" },
@@ -65,6 +90,7 @@ export default function OPDManagement() {
   const { hasPermission } = useAuth();
   const canManage = hasPermission(PERMISSIONS.OPD_MANAGE);
   const canConsult = hasPermission(PERMISSIONS.EMR_CREATE);
+  const canCollect = hasPermission(PERMISSIONS.BILLING_PAYMENT);
 
   // Jump to the patient's EMR and auto-open a SOAP encounter for this visit.
   const startConsult = (a: Appt) => {
@@ -81,6 +107,31 @@ export default function OPDManagement() {
   const [appts, setAppts] = useState<Appt[]>([]);
   const [loading, setLoading] = useState(false);
   const [doctors, setDoctors] = useState<any[]>([]);
+  const [doctorsError, setDoctorsError] = useState("");
+
+  // Nurse / front-desk vitals, captured at check-in. Deliberately here and not
+  // on the doctor's encounter form — triage records vitals, the doctor reads them.
+  const emptyVitals = {
+    bloodPressure: "",
+    pulse: "",
+    temperature: "",
+    spo2: "",
+    respiratoryRate: "",
+    height: "",
+    weight: "",
+  };
+  const [vitalsFor, setVitalsFor] = useState<Appt | null>(null);
+  const [vitals, setVitals] = useState({ ...emptyVitals });
+  const [vitalsErr, setVitalsErr] = useState("");
+  const [savingVitals, setSavingVitals] = useState(false);
+
+  // Collect-payment modal (consultation bill raised at booking time).
+  const [payFor, setPayFor] = useState<Appt | null>(null);
+  const [payMethod, setPayMethod] = useState<string>("cash");
+  const [payAmount, setPayAmount] = useState("");
+  const [payRef, setPayRef] = useState("");
+  const [payErr, setPayErr] = useState("");
+  const [paying, setPaying] = useState(false);
 
   const [showBook, setShowBook] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
@@ -105,20 +156,23 @@ export default function OPDManagement() {
     load();
   }, [load]);
 
+  // Doctors for the booking dropdown.
+  //
+  // Sourced from /admin/doctor-schedules (opd:view) rather than /admin/staff
+  // (staff:view). A front-desk role that can run OPD legitimately has opd:view
+  // but usually NOT staff:view — reading the full admin-staff directory just to
+  // populate a dropdown 403'd for them, and the old `.catch(() => setDoctors([]))`
+  // swallowed it, so the list silently came up empty with no explanation.
   useEffect(() => {
-    staffApi
-      .getAll({ limit: 200 })
-      .then((res) => {
-        const list = res.data?.staff || res.data?.items || res.data?.admins || [];
-        setDoctors(
-          list.filter(
-            (s: any) =>
-              (s.roleName || "").toLowerCase().includes("doctor") ||
-              !s.roleName,
-          ),
+    doctorScheduleApi
+      .listDoctors()
+      .then((res) => setDoctors(res.data?.items || []))
+      .catch((e: any) => {
+        setDoctors([]);
+        setDoctorsError(
+          e?.message || "Could not load doctors. Check your permissions.",
         );
-      })
-      .catch(() => setDoctors([]));
+      });
   }, []);
 
   const searchPatients = async (q: string) => {
@@ -156,6 +210,66 @@ export default function OPDManagement() {
     }
   };
 
+  const openPay = (a: Appt) => {
+    setPayFor(a);
+    setPayMethod("cash");
+    // Default to the outstanding balance — the common case is collecting the
+    // consultation fee in full at the desk.
+    setPayAmount(String(a.invoiceId?.balanceDue ?? ""));
+    setPayRef("");
+    setPayErr("");
+  };
+
+  const submitPayment = async () => {
+    if (!payFor?.invoiceId) return;
+    const amount = Number(payAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPayErr("Enter a valid amount.");
+      return;
+    }
+    setPaying(true);
+    setPayErr("");
+    try {
+      await billingApi.recordPayment(payFor.invoiceId._id, {
+        method: payMethod,
+        amount,
+        reference: payRef.trim() || undefined,
+      });
+      setPayFor(null);
+      load();
+    } catch (e: any) {
+      setPayErr(e?.message || "Failed to record payment");
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const openVitals = (a: Appt) => {
+    setVitalsFor(a);
+    setVitals({
+      ...emptyVitals,
+      ...Object.fromEntries(
+        Object.entries(a.vitals || {}).map(([k, v]) => [k, v == null ? "" : String(v)]),
+      ),
+    });
+    setVitalsErr("");
+  };
+
+  const saveVitals = async () => {
+    if (!vitalsFor) return;
+    setSavingVitals(true);
+    setVitalsErr("");
+    try {
+      await opdApi.recordVitals(vitalsFor._id, vitals);
+      setVitalsFor(null);
+      load();
+    } catch (e: any) {
+      setVitalsErr(e?.message || "Failed to save vitals");
+    } finally {
+      setSavingVitals(false);
+    }
+  };
+
   const advance = async (a: Appt) => {
     const flow = STATUS_FLOW[a.status];
     if (!flow?.next) return;
@@ -173,7 +287,7 @@ export default function OPDManagement() {
     <div className="p-6">
       <PageHeader
         title="OPD — Appointments & Queue"
-        subtitle="Out-Patient Department — Doctor Panel (HMS)"
+        subtitle="Out-Patient Department — Hospital (HMS)"
         actions={
           canManage && (
             <Button
@@ -208,13 +322,14 @@ export default function OPDManagement() {
           <Th>Doctor</Th>
           <Th>Reason</Th>
           <Th>Status</Th>
+          <Th>Payment</Th>
           <Th className="text-right">Actions</Th>
         </THead>
         <TBody>
           {loading ? (
-            <TableState colSpan={7}>Loading…</TableState>
+            <TableState colSpan={8}>Loading…</TableState>
           ) : appts.length === 0 ? (
-            <TableState colSpan={7}>No appointments for this day.</TableState>
+            <TableState colSpan={8}>No appointments for this day.</TableState>
           ) : (
             appts.map((a) => (
               <TR key={a._id}>
@@ -233,14 +348,49 @@ export default function OPDManagement() {
                     {a.status.replace("_", " ")}
                   </Badge>
                 </Td>
+                <Td className="whitespace-nowrap">
+                  {a.invoiceId ? (
+                    <span className="flex items-center gap-2">
+                      <Badge tone={payTone[a.invoiceId.status] || "neutral"} dot>
+                        {a.invoiceId.status}
+                      </Badge>
+                      <span className="text-gray-500">
+                        ₹{a.invoiceId.amountPaid} / ₹{a.invoiceId.total}
+                      </span>
+                      {canCollect && a.invoiceId.balanceDue > 0 && (
+                        <Button size="sm" onClick={() => openPay(a)}>
+                          Collect
+                        </Button>
+                      )}
+                    </span>
+                  ) : (
+                    <span
+                      className="text-xs text-gray-400"
+                      title="No consultation fee is set on this doctor's profile, so no bill was raised."
+                    >
+                      No bill
+                    </span>
+                  )}
+                </Td>
                 <Td className="text-right whitespace-nowrap">
                   {canConsult &&
-                    (a.status === "checked_in" ||
+                    (a.status === "booked" ||
+                      a.status === "checked_in" ||
                       a.status === "in_consultation") && (
                       <Button size="sm" onClick={() => startConsult(a)}>
                         Consult
                       </Button>
                     )}
+                  {canManage && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => openVitals(a)}
+                      title="Record vitals (nurse / front desk)"
+                    >
+                      {a.vitals ? "Vitals ✓" : "Vitals"}
+                    </Button>
+                  )}
                   {canManage && STATUS_FLOW[a.status]?.next && (
                     <Button
                       size="sm"
@@ -331,13 +481,21 @@ export default function OPDManagement() {
               {patientSearch.trim().length >= 2 && patientResults.length === 0 && (
                 <p className="mt-1 text-xs text-amber-600">
                   No registered patient matches “{patientSearch.trim()}”. Register them first under{" "}
-                  <span className="font-medium">Doctor Panel → Patients</span>, then search here.
+                  <span className="font-medium">Hospital (HMS) → Patients</span>, then search here.
                 </p>
               )}
             </div>
           )}
 
-          <Field label="Doctor">
+          <Field
+            label="Doctor"
+            hint={
+              doctorsError ||
+              (doctors.length === 0
+                ? "No staff member has the Doctor role yet — add one under Team Management."
+                : undefined)
+            }
+          >
             <Select
               value={doctorId}
               onChange={(e) => setDoctorId(e.target.value)}
@@ -345,7 +503,7 @@ export default function OPDManagement() {
               <option value="">Select doctor…</option>
               {doctors.map((d) => (
                 <option key={d._id} value={d._id}>
-                  {d.fullName} {d.roleName ? `(${d.roleName})` : ""}
+                  {d.fullName} {d.speciality ? `(${d.speciality})` : ""}
                 </option>
               ))}
             </Select>
@@ -374,6 +532,142 @@ export default function OPDManagement() {
             />
           </Field>
         </form>
+      </Modal>
+
+      {/* Record vitals — nurse / front desk, at check-in */}
+      <Modal
+        open={!!vitalsFor}
+        onClose={() => setVitalsFor(null)}
+        title="Record Vitals"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setVitalsFor(null)}>
+              Cancel
+            </Button>
+            <Button onClick={saveVitals} disabled={savingVitals}>
+              {savingVitals ? "Saving…" : "Save Vitals"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {vitalsErr && <Alert tone="danger">{vitalsErr}</Alert>}
+          <p className="text-sm text-gray-500">
+            {vitalsFor?.patientId?.fullName || "Patient"} — these appear
+            read-only on the doctor's encounter.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {(
+              [
+                ["bloodPressure", "BP (e.g. 120/80)", "text"],
+                ["pulse", "Pulse (bpm)", "number"],
+                ["temperature", "Temp (°F)", "number"],
+                ["spo2", "SpO₂ (%)", "number"],
+                ["respiratoryRate", "Resp rate", "number"],
+                ["height", "Height (cm)", "number"],
+                ["weight", "Weight (kg)", "number"],
+              ] as const
+            ).map(([k, label, type]) => (
+              <Field key={k} label={label}>
+                <Input
+                  type={type}
+                  value={(vitals as any)[k]}
+                  onChange={(e) => setVitals({ ...vitals, [k]: e.target.value })}
+                />
+              </Field>
+            ))}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Collect payment against the consultation invoice raised at booking */}
+      <Modal
+        open={!!payFor}
+        onClose={() => setPayFor(null)}
+        title="Collect Payment"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPayFor(null)}>
+              Cancel
+            </Button>
+            <Button onClick={submitPayment} disabled={paying}>
+              {paying ? "Saving…" : "Record Payment"}
+            </Button>
+          </>
+        }
+      >
+        {payFor?.invoiceId && (
+          <div className="space-y-3">
+            {payErr && <Alert tone="danger">{payErr}</Alert>}
+
+            <div className="rounded-lg bg-gray-50 p-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Invoice</span>
+                <span className="font-medium">{payFor.invoiceId.invoiceNo}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Patient</span>
+                <span className="font-medium">
+                  {payFor.patientId?.fullName || "—"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Total</span>
+                <span>₹{payFor.invoiceId.total}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Already paid</span>
+                <span>₹{payFor.invoiceId.amountPaid}</span>
+              </div>
+              <div className="mt-1 flex justify-between border-t border-gray-200 pt-1 font-semibold">
+                <span>Balance due</span>
+                <span>₹{payFor.invoiceId.balanceDue}</span>
+              </div>
+            </div>
+
+            <Field label="Payment mode">
+              <Select
+                value={payMethod}
+                onChange={(e) => setPayMethod(e.target.value)}
+              >
+                {PAY_METHODS.map((m) => (
+                  <option key={m} value={m}>
+                    {m === "upi"
+                      ? "UPI"
+                      : m.charAt(0).toUpperCase() + m.slice(1)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field
+              label="Amount"
+              hint="Defaults to the full balance — lower it to record a part payment."
+            >
+              <Input
+                type="number"
+                min="0"
+                value={payAmount}
+                onChange={(e) => setPayAmount(e.target.value)}
+              />
+            </Field>
+
+            {payMethod !== "cash" && (
+              <Field
+                label="Reference"
+                hint="UPI / card / transaction reference, for reconciliation."
+              >
+                <Input
+                  value={payRef}
+                  onChange={(e) => setPayRef(e.target.value)}
+                  placeholder="e.g. UPI txn id"
+                />
+              </Field>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );

@@ -16,12 +16,14 @@ import {
   LifeBuoy,
   Clock,
   FileText,
+  FlaskConical,
   FolderOpen,
   Globe,
   Heart,
   Package,
   HeartPulse,
   ImageIcon,
+  Key,
   LayoutDashboard,
   Layers,
   Mail,
@@ -48,6 +50,7 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const SOSDashboard = lazy(() => import("./pages/SOSDashboard"));
 const FleetHealthDashboard = lazy(() => import("./pages/FleetHealthDashboard"));
 const StaffManagement = lazy(() => import("./pages/StaffManagement"));
+const RolesPermissions = lazy(() => import("./pages/RolesPermissions"));
 const CareersManagement = lazy(() => import("./pages/CareersManagement"));
 const ApplicationsManagement = lazy(
   () => import("./pages/ApplicationsManagement"),
@@ -133,6 +136,8 @@ const HMSReportsDashboard = lazy(() => import("./pages/HMSReportsDashboard"));
 const DoctorRosterManagement = lazy(() => import("./pages/DoctorRosterManagement"));
 const IPDManagement = lazy(() => import("./pages/IPDManagement"));
 const PharmaciesManagement = lazy(() => import("./pages/PharmaciesManagement"));
+const PharmacyDispense = lazy(() => import("./pages/PharmacyDispense"));
+const LabsManagement = lazy(() => import("./pages/LabsManagement"));
 const IvrEscalationsManagement = lazy(
   () => import("./pages/IvrEscalationsManagement"),
 );
@@ -191,8 +196,14 @@ export const adminRoutes = [
   {
     path: "staff",
     element: StaffManagement,
-    name: "Admin Management",
+    name: "Team Management",
     icon: Shield,
+  },
+  {
+    path: "roles",
+    element: RolesPermissions,
+    name: "Roles & Permissions",
+    icon: Key,
   },
   {
     path: "users",
@@ -215,7 +226,7 @@ export const adminRoutes = [
   {
     path: "team",
     element: TeamManagement,
-    name: "Team Management",
+    name: "Website Team",
     icon: Users,
   },
   {
@@ -532,6 +543,18 @@ export const adminRoutes = [
     element: PharmaciesManagement,
     name: "Pharmacies",
     icon: Pill,
+  },
+  {
+    path: "pharmacy-dispense",
+    element: PharmacyDispense,
+    name: "Pharmacy Dispense",
+    icon: Pill,
+  },
+  {
+    path: "labs",
+    element: LabsManagement,
+    name: "Labs",
+    icon: FlaskConical,
   },
   {
     path: "ivr-escalations",

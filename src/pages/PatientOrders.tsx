@@ -209,7 +209,7 @@ export default function PatientOrders() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       <PageHeader
         title="Patient Orders"
         subtitle="Doctor consultations, lab bookings and pharmacy orders placed from the patient app"

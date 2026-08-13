@@ -98,36 +98,6 @@ export default function PatientDetail() {
   const canDispense = hasPermission(PERMISSIONS.INVENTORY_ADJUST);
   const canBill = hasPermission(PERMISSIONS.BILLING_CREATE);
 
-  const dispenseRx = async (encounterId: string, overrideAllergyWarning = false) => {
-    try {
-      const res = await emrApi.dispense(encounterId, overrideAllergyWarning ? { overrideAllergyWarning: true } : undefined);
-      const r = res.data;
-      const lines = (r?.results || [])
-        .map((x: any) =>
-          x.status === "issued"
-            ? `✓ ${x.drug} ×${x.quantity}`
-            : x.status === "insufficient"
-              ? `⚠ ${x.drug} (only ${x.available} in stock)`
-              : `✗ ${x.drug} (not in inventory)`,
-        )
-        .join("\n");
-      alert(
-        `Dispensed ${r?.issued}/${r?.total} from pharmacy inventory:\n\n${lines || "no prescriptions"}`,
-      );
-      load();
-    } catch (e: any) {
-      const warnings = e.data?.allergyWarnings as { drug: string; allergyTerm: string }[] | undefined;
-      if (warnings?.length) {
-        const list = warnings.map((w) => `${w.drug} — conflicts with recorded allergy "${w.allergyTerm}"`).join("\n");
-        if (window.confirm(`⚠ Allergy warning:\n\n${list}\n\nDispense anyway? This will be recorded as an overridden allergy warning.`)) {
-          await dispenseRx(encounterId, true);
-        }
-        return;
-      }
-      alert(e.message || "Failed to dispense");
-    }
-  };
-
   // Generates a real invoice from this encounter — diagnostics (rate is
   // still manual, there's no per-test catalog price yet), procedures (real
   // prices snapshotted on the encounter when documented) and the
@@ -168,8 +138,17 @@ export default function PatientDetail() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<EncounterPayload>({ ...emptyEncounter });
   const [diagnosesText, setDiagnosesText] = useState("");
-  const [labText, setLabText] = useState("");
-  const [imagingText, setImagingText] = useState("");
+  // Lab / imaging orders are now picked from the catalogue one by one rather
+  // than typed as a comma list, so they carry real, consistent test names.
+  const [labOrders, setLabOrders] = useState<string[]>([]);
+  const [imagingOrders, setImagingOrders] = useState<string[]>([]);
+  const [testQuery, setTestQuery] = useState("");
+  const [testResults, setTestResults] = useState<any[]>([]);
+  const [drugQuery, setDrugQuery] = useState("");
+  const [drugResults, setDrugResults] = useState<any[]>([]);
+  // Vitals recorded by the nurse at check-in — read-only for the doctor.
+  const [apptVitals, setApptVitals] = useState<any>(null);
+  const [showMore, setShowMore] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -268,8 +247,13 @@ export default function PatientDetail() {
   const openNewEncounter = () => {
     setForm({ ...emptyEncounter, patientId: id });
     setDiagnosesText("");
-    setLabText("");
-    setImagingText("");
+    setLabOrders([]);
+    setImagingOrders([]);
+    setTestQuery("");
+    setTestResults([]);
+    setDrugQuery("");
+    setDrugResults([]);
+    setShowMore(false);
     setError("");
     setShowForm(true);
   };
@@ -280,12 +264,103 @@ export default function PatientDetail() {
     if (searchParams.get("newEncounter")) {
       setConsultAppointmentId(searchParams.get("appointmentId"));
       openNewEncounter();
+      // An IPD ward round arrives with ?encounterType=IPD — without this the
+      // form silently defaulted to OPD and the note landed under the wrong
+      // type, which also excludes it from the admission's procedure billing.
+      const t = searchParams.get("encounterType");
+      if (t) setForm((f) => ({ ...f, encounterType: t as any }));
       searchParams.delete("newEncounter");
       searchParams.delete("appointmentId");
+      searchParams.delete("encounterType");
       setSearchParams(searchParams, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Pull the nurse's check-in vitals for the appointment this consult came from.
+  useEffect(() => {
+    if (!consultAppointmentId) return setApptVitals(null);
+    opdApi
+      .detail(consultAppointmentId)
+      .then((r) => setApptVitals(r.data?.appointment?.vitals || null))
+      .catch(() => setApptVitals(null));
+  }, [consultAppointmentId]);
+
+  // Debounced catalogue pickers — the doctor types, we search, they click to add.
+  useEffect(() => {
+    if (!showForm) return;
+    const t = setTimeout(() => {
+      emrApi
+        .labTestOptions(testQuery.trim())
+        .then((r) => setTestResults(r.data?.items || []))
+        .catch(() => setTestResults([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [testQuery, showForm]);
+
+  useEffect(() => {
+    if (!showForm) return;
+    const t = setTimeout(() => {
+      emrApi
+        .drugOptions(drugQuery.trim())
+        .then((r) => setDrugResults(r.data?.items || []))
+        .catch(() => setDrugResults([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [drugQuery, showForm]);
+
+  const addLabOrder = (name: string, category: "lab" | "imaging" = "lab") => {
+    const setter = category === "lab" ? setLabOrders : setImagingOrders;
+    setter((prev) => (prev.includes(name) ? prev : [...prev, name]));
+    setTestQuery("");
+  };
+
+  /**
+   * Add a drug from the picker. `itemId` is only present when the drug maps to
+   * real HMS stock — catalogue-only drugs are prescribed by name and the
+   * pharmacy queue shows them as "not stocked" rather than decrementing.
+   */
+  const addDrugFromStock = (it: any) =>
+    setForm((f) => ({
+      ...f,
+      prescriptions: [
+        ...(f.prescriptions || []),
+        {
+          drug: it.name,
+          itemId: it.itemId,
+          dosage: "",
+          frequency: "",
+          duration: "",
+          quantity: 1,
+        } as any,
+      ],
+    }));
+
+  /**
+   * Standard Indian Rx frequencies. `perDay` drives the auto-quantity so the
+   * pharmacy gets a real number of units to hand over rather than the doctor
+   * doing the arithmetic: doses/day x days.
+   */
+  const FREQUENCIES = [
+    { code: "1-0-0", label: "1-0-0 · OD (once)", perDay: 1 },
+    { code: "0-0-1", label: "0-0-1 · HS (night)", perDay: 1 },
+    { code: "1-0-1", label: "1-0-1 · BD (twice)", perDay: 2 },
+    { code: "1-1-1", label: "1-1-1 · TDS (thrice)", perDay: 3 },
+    { code: "1-1-1-1", label: "1-1-1-1 · QID", perDay: 4 },
+    { code: "SOS", label: "SOS · if needed", perDay: 1 },
+    { code: "STAT", label: "STAT · single dose", perDay: 1 },
+  ];
+
+  const perDayOf = (freq?: string) =>
+    FREQUENCIES.find((f) => f.code === freq)?.perDay ?? 0;
+
+  /** doses/day x days — 0 when either side is unknown, so we never guess. */
+  const deriveQty = (freq?: string, days?: string | number) => {
+    const d = Number(days);
+    const pd = perDayOf(freq);
+    if (!pd || !Number.isFinite(d) || d <= 0) return 0;
+    return pd * d;
+  };
 
   const addPrescription = () =>
     setForm((f) => ({
@@ -364,8 +439,8 @@ export default function PatientDetail() {
         ...form,
         patientId: id,
         diagnoses: csvToArray(diagnosesText),
-        labOrders: csvToArray(labText),
-        imagingOrders: csvToArray(imagingText),
+        labOrders,
+        imagingOrders,
         prescriptions: (form.prescriptions || []).filter((p) => p.drug.trim()),
         procedures: (form.procedures || []).filter((p) => p.name.trim()),
         // Drop an empty referral row.
@@ -843,12 +918,17 @@ export default function PatientDetail() {
                   )}
                   {(canDispense || canBill) && (
                     <div className="flex gap-3 pt-3 mt-3 border-t">
+                      {/* Dispensing moved to the Pharmacy Dispense queue —
+                          prescriptions are raised there automatically when the
+                          encounter is finalised. Two entry points meant the
+                          same Rx could be dispensed twice. */}
                       {canDispense && enc.prescriptions?.length ? (
                         <button
-                          onClick={() => dispenseRx(enc._id)}
+                          onClick={() => navigate("/admin/pharmacy-dispense")}
                           className="text-xs text-healwin-700 hover:underline"
+                          title="Prescriptions are dispensed from the pharmacy counter's queue"
                         >
-                          Dispense Rx → pharmacy
+                          View in Pharmacy queue →
                         </button>
                       ) : null}
                       {canBill &&
@@ -923,52 +1003,44 @@ export default function PatientDetail() {
             </Field>
           </div>
 
-          {/* Vitals */}
+          {/* Vitals — recorded by the nurse at check-in, read-only here.
+              The doctor reads them; triage owns entering them. */}
           <section>
-            <h3 className="mb-2 text-sm font-semibold text-gray-700">Vitals</h3>
-            <div className="grid grid-cols-4 gap-2">
-              <Input
-                placeholder="BP"
-                value={form.vitals?.bloodPressure || ""}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    vitals: {
-                      ...form.vitals,
-                      bloodPressure: e.target.value,
-                    },
-                  })
-                }
-              />
-              {(
-                [
-                  ["pulse", "Pulse"],
-                  ["temperature", "Temp °F"],
-                  ["spo2", "SpO₂ %"],
-                  ["respiratoryRate", "Resp"],
-                  ["height", "Ht cm"],
-                  ["weight", "Wt kg"],
-                ] as const
-              ).map(([k, label]) => (
-                <Input
-                  key={k}
-                  type="number"
-                  placeholder={label}
-                  value={(form.vitals as any)?.[k] ?? ""}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      vitals: {
-                        ...form.vitals,
-                        [k]: e.target.value
-                          ? Number(e.target.value)
-                          : undefined,
-                      },
-                    })
-                  }
-                />
-              ))}
-            </div>
+            <h3 className="mb-2 text-sm font-semibold text-gray-700">
+              Vitals{" "}
+              <span className="font-normal text-gray-400">
+                (recorded at check-in)
+              </span>
+            </h3>
+            {apptVitals ? (
+              <div className="grid grid-cols-4 gap-2 rounded-lg bg-gray-50 p-3 text-sm">
+                {(
+                  [
+                    ["bloodPressure", "BP", ""],
+                    ["pulse", "Pulse", " bpm"],
+                    ["temperature", "Temp", " °F"],
+                    ["spo2", "SpO\u2082", " %"],
+                    ["respiratoryRate", "Resp", ""],
+                    ["height", "Ht", " cm"],
+                    ["weight", "Wt", " kg"],
+                  ] as const
+                ).map(([k, label, unit]) => (
+                  <div key={k}>
+                    <p className="text-xs text-gray-500">{label}</p>
+                    <p className="font-medium text-gray-900">
+                      {apptVitals[k] != null && apptVitals[k] !== ""
+                        ? `${apptVitals[k]}${unit}`
+                        : "\u2014"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">
+                No vitals recorded for this visit. The nurse can add them from
+                the OPD queue (Record vitals).
+              </p>
+            )}
           </section>
 
           {/* SOAP */}
@@ -1001,81 +1073,196 @@ export default function PatientDetail() {
             </div>
           </section>
 
-          {/* Structured S / O detail */}
-          <section className="grid grid-cols-2 gap-3">
-            <Field label="Symptoms (S)">
-              <Input value={form.subjectiveDetail?.symptoms || ""} onChange={(e) => setForm({ ...form, subjectiveDetail: { ...form.subjectiveDetail, symptoms: e.target.value } })} />
-            </Field>
-            <Field label="Duration (S)">
-              <Input value={form.subjectiveDetail?.duration || ""} onChange={(e) => setForm({ ...form, subjectiveDetail: { ...form.subjectiveDetail, duration: e.target.value } })} />
-            </Field>
-            <Field label="Pain level (0-10)">
-              <Input type="number" value={form.subjectiveDetail?.painLevel ?? ""} onChange={(e) => setForm({ ...form, subjectiveDetail: { ...form.subjectiveDetail, painLevel: e.target.value ? Number(e.target.value) : undefined } })} />
-            </Field>
-            <Field label="Lifestyle (S)">
-              <Input value={form.subjectiveDetail?.lifestyle || ""} onChange={(e) => setForm({ ...form, subjectiveDetail: { ...form.subjectiveDetail, lifestyle: e.target.value } })} />
-            </Field>
-            <Field label="Examination findings (O)">
-              <Input value={form.objectiveDetail?.examFindings || ""} onChange={(e) => setForm({ ...form, objectiveDetail: { ...form.objectiveDetail, examFindings: e.target.value } })} />
-            </Field>
-            <Field label="Device data — ambulance vitals (O)">
-              <Input value={form.objectiveDetail?.deviceData || ""} onChange={(e) => setForm({ ...form, objectiveDetail: { ...form.objectiveDetail, deviceData: e.target.value } })} />
-            </Field>
-          </section>
+          {/* Consultation summary — the doctor's plain-language takeaway,
+              mirroring Consultation.summary from the patient-app consult. */}
+          <Field
+            label="Consultation summary — what was advised"
+            hint="Shown to the patient. Keep it plain and short."
+          >
+            <Textarea
+              rows={3}
+              value={form.summary || ""}
+              onChange={(e) => setForm({ ...form, summary: e.target.value })}
+              placeholder="e.g. Viral fever. Rest and fluids. Paracetamol as needed. Review in 3 days if fever persists."
+            />
+          </Field>
 
-          {/* Assessment extras + Plan extras */}
-          <section className="grid grid-cols-2 gap-3">
-            <Field label="Severity (A)">
-              <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.severity || ""} onChange={(e) => setForm({ ...form, severity: (e.target.value || undefined) as any })}>
-                <option value="">—</option>
-                {["mild", "moderate", "severe", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </Field>
-            <Field label="Differential diagnoses (comma)">
-              <Input value={(form.differentialDiagnoses || []).join(", ")} onChange={(e) => setForm({ ...form, differentialDiagnoses: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })} />
-            </Field>
-            <Field label="Treatment plan (P)">
-              <Input value={form.treatmentPlan || ""} onChange={(e) => setForm({ ...form, treatmentPlan: e.target.value })} />
-            </Field>
-            <Field label="Follow-up date (P)">
-              <Input type="date" value={form.followUpAt || ""} onChange={(e) => setForm({ ...form, followUpAt: e.target.value })} />
-            </Field>
-            <Field label="Referral — department">
-              <Input value={form.referrals?.[0]?.department || ""} onChange={(e) => setForm({ ...form, referrals: [{ ...(form.referrals?.[0] || {}), department: e.target.value }] })} />
-            </Field>
-            <Field label="Referral — reason">
-              <Input value={form.referrals?.[0]?.reason || ""} onChange={(e) => setForm({ ...form, referrals: [{ ...(form.referrals?.[0] || {}), reason: e.target.value }] })} />
-            </Field>
-            <Field label="Admission recommended (P)">
-              <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.admissionRecommended ? "1" : "0"} onChange={(e) => setForm({ ...form, admissionRecommended: e.target.value === "1" })}>
-                <option value="0">No</option><option value="1">Yes</option>
-              </select>
-            </Field>
-          </section>
-
-          {/* Orders */}
-          <section className="grid grid-cols-1 gap-3">
-            <Field label="Diagnoses (comma separated)">
+          {/* Orders — picked from the catalogue one at a time. Each saved
+              lab/imaging order becomes a DiagnosticOrder linked to this
+              encounter, so the lab's result lands back on this record. */}
+          <section className="space-y-3">
+            <Field label="Diagnosis">
               <Input
                 value={diagnosesText}
                 onChange={(e) => setDiagnosesText(e.target.value)}
+                placeholder="e.g. Viral fever"
               />
             </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Lab tests (comma separated)">
-                <Input
-                  value={labText}
-                  onChange={(e) => setLabText(e.target.value)}
-                />
-              </Field>
-              <Field label="Imaging (comma separated)">
-                <Input
-                  value={imagingText}
-                  onChange={(e) => setImagingText(e.target.value)}
-                />
-              </Field>
+
+            <div>
+              <h3 className="mb-1 text-sm font-semibold text-gray-700">
+                Lab & imaging orders
+              </h3>
+              {(labOrders.length > 0 || imagingOrders.length > 0) && (
+                <div className="mb-2 flex flex-wrap gap-1">
+                  {labOrders.map((n) => (
+                    <span
+                      key={`l-${n}`}
+                      className="flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-700"
+                    >
+                      {n}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLabOrders((p) => p.filter((x) => x !== n))
+                        }
+                        className="text-blue-400 hover:text-blue-700"
+                        aria-label={`Remove ${n}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  {imagingOrders.map((n) => (
+                    <span
+                      key={`i-${n}`}
+                      className="flex items-center gap-1 rounded bg-purple-50 px-2 py-0.5 text-xs text-purple-700"
+                    >
+                      {n}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setImagingOrders((p) => p.filter((x) => x !== n))
+                        }
+                        className="text-purple-400 hover:text-purple-700"
+                        aria-label={`Remove ${n}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <Input
+                value={testQuery}
+                onChange={(e) => setTestQuery(e.target.value)}
+                placeholder="Search a test to add (e.g. CBC, Chest X-Ray)…"
+              />
+              {testQuery.trim() && (
+                <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-gray-200">
+                  {testResults.length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => addLabOrder(testQuery.trim())}
+                      className="block w-full px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-50"
+                    >
+                      Not in catalogue — add “{testQuery.trim()}” anyway
+                    </button>
+                  ) : (
+                    testResults.map((t) => (
+                      <div
+                        key={t._id}
+                        className="flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50"
+                      >
+                        <span>
+                          {t.name}
+                          {t.category ? (
+                            <span className="text-gray-400"> · {t.category}</span>
+                          ) : null}
+                          {t.price ? (
+                            <span className="text-gray-400"> · ₹{t.price}</span>
+                          ) : null}
+                        </span>
+                        <span className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => addLabOrder(t.name, "lab")}
+                          >
+                            + Lab
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => addLabOrder(t.name, "imaging")}
+                          >
+                            + Imaging
+                          </Button>
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </section>
+
+          {/* Everything below is optional detail. Collapsed by default — a
+              routine OPD consult does not fill 15 structured sub-fields, and
+              burying them keeps the common path short without losing data. */}
+          <details
+            open={showMore}
+            onToggle={(e) => setShowMore((e.target as HTMLDetailsElement).open)}
+            className="rounded-lg border border-gray-200"
+          >
+            <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-gray-700">
+              More clinical detail (optional)
+            </summary>
+            <div className="space-y-3 border-t border-gray-100 p-3">
+            {/* Structured S / O detail */}
+            <section className="grid grid-cols-2 gap-3">
+              <Field label="Symptoms (S)">
+                <Input value={form.subjectiveDetail?.symptoms || ""} onChange={(e) => setForm({ ...form, subjectiveDetail: { ...form.subjectiveDetail, symptoms: e.target.value } })} />
+              </Field>
+              <Field label="Duration (S)">
+                <Input value={form.subjectiveDetail?.duration || ""} onChange={(e) => setForm({ ...form, subjectiveDetail: { ...form.subjectiveDetail, duration: e.target.value } })} />
+              </Field>
+              <Field label="Pain level (0-10)">
+                <Input type="number" value={form.subjectiveDetail?.painLevel ?? ""} onChange={(e) => setForm({ ...form, subjectiveDetail: { ...form.subjectiveDetail, painLevel: e.target.value ? Number(e.target.value) : undefined } })} />
+              </Field>
+              <Field label="Lifestyle (S)">
+                <Input value={form.subjectiveDetail?.lifestyle || ""} onChange={(e) => setForm({ ...form, subjectiveDetail: { ...form.subjectiveDetail, lifestyle: e.target.value } })} />
+              </Field>
+              <Field label="Examination findings (O)">
+                <Input value={form.objectiveDetail?.examFindings || ""} onChange={(e) => setForm({ ...form, objectiveDetail: { ...form.objectiveDetail, examFindings: e.target.value } })} />
+              </Field>
+              <Field label="Device data — ambulance vitals (O)">
+                <Input value={form.objectiveDetail?.deviceData || ""} onChange={(e) => setForm({ ...form, objectiveDetail: { ...form.objectiveDetail, deviceData: e.target.value } })} />
+              </Field>
+            </section>
+
+            {/* Assessment extras + Plan extras */}
+            <section className="grid grid-cols-2 gap-3">
+              <Field label="Severity (A)">
+                <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.severity || ""} onChange={(e) => setForm({ ...form, severity: (e.target.value || undefined) as any })}>
+                  <option value="">—</option>
+                  {["mild", "moderate", "severe", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </Field>
+              <Field label="Differential diagnoses (comma)">
+                <Input value={(form.differentialDiagnoses || []).join(", ")} onChange={(e) => setForm({ ...form, differentialDiagnoses: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })} />
+              </Field>
+              <Field label="Treatment plan (P)">
+                <Input value={form.treatmentPlan || ""} onChange={(e) => setForm({ ...form, treatmentPlan: e.target.value })} />
+              </Field>
+              <Field label="Follow-up date (P)">
+                <Input type="date" value={form.followUpAt || ""} onChange={(e) => setForm({ ...form, followUpAt: e.target.value })} />
+              </Field>
+              <Field label="Referral — department">
+                <Input value={form.referrals?.[0]?.department || ""} onChange={(e) => setForm({ ...form, referrals: [{ ...(form.referrals?.[0] || {}), department: e.target.value }] })} />
+              </Field>
+              <Field label="Referral — reason">
+                <Input value={form.referrals?.[0]?.reason || ""} onChange={(e) => setForm({ ...form, referrals: [{ ...(form.referrals?.[0] || {}), reason: e.target.value }] })} />
+              </Field>
+              <Field label="Admission recommended (P)">
+                <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.admissionRecommended ? "1" : "0"} onChange={(e) => setForm({ ...form, admissionRecommended: e.target.value === "1" })}>
+                  <option value="0">No</option><option value="1">Yes</option>
+                </select>
+              </Field>
+            </section>
+            </div>
+          </details>
+
 
           {/* Prescriptions */}
           <section>
@@ -1089,63 +1276,194 @@ export default function PatientDetail() {
                 variant="ghost"
                 onClick={addPrescription}
               >
-                + Add drug
+                + Blank row
               </Button>
             </div>
-            {(form.prescriptions || []).map((p, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 mb-2">
-                <VoiceInput
-                  className="col-span-3"
-                  placeholder="Drug"
-                  value={p.drug}
-                  onChange={(e) =>
-                    updatePrescription(i, "drug", e.target.value)
-                  }
-                  onTranscript={(text) => updatePrescription(i, "drug", text)}
-                />
-                <VoiceInput
-                  className="col-span-3"
-                  placeholder="Dosage"
-                  value={p.dosage}
-                  onChange={(e) =>
-                    updatePrescription(i, "dosage", e.target.value)
-                  }
-                  onTranscript={(text) => updatePrescription(i, "dosage", text)}
-                />
-                <VoiceInput
-                  className="col-span-3"
-                  placeholder="Freq (1-0-1)"
-                  value={p.frequency}
-                  onChange={(e) =>
-                    updatePrescription(i, "frequency", e.target.value)
-                  }
-                  onTranscript={(text) => updatePrescription(i, "frequency", text)}
-                />
-                <VoiceInput
-                  className="col-span-2"
-                  placeholder="Duration"
-                  value={p.duration}
-                  onChange={(e) =>
-                    updatePrescription(i, "duration", e.target.value)
-                  }
-                  onTranscript={(text) => updatePrescription(i, "duration", text)}
-                />
-                <button
-                  type="button"
-                  onClick={() => removePrescription(i)}
-                  className="col-span-1 text-red-500"
-                >
-                  ✕
-                </button>
+
+            {/* Search HMS stock and add one drug at a time. A drug added this
+                way carries its itemId, so the pharmacy dispense draws real FEFO
+                stock; the blank row above is the escape hatch for anything not
+                stocked. */}
+            <div className="mb-3">
+              <Input
+                value={drugQuery}
+                onChange={(e) => setDrugQuery(e.target.value)}
+                placeholder="Search medicine in hospital stock…"
+              />
+              {drugQuery.trim() && (
+                <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-gray-200">
+                  {drugResults.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-gray-500">
+                      No medicine matches “{drugQuery.trim()}”. If the pharmacy
+                      has no stock loaded yet, add medicines under{" "}
+                      <span className="font-medium">Inventory</span> (category
+                      “medicine”). You can still use “+ Blank row” to prescribe
+                      it.
+                    </p>
+                  ) : (
+                    drugResults.map((it) => {
+                      // Only a drug backed by HMS stock can actually run out;
+                      // a catalogue-only drug is just a name we can prescribe.
+                      const dispensable = !!it.itemId;
+                      const out = dispensable && (it.currentStock ?? 0) <= 0;
+                      return (
+                        <div
+                          key={it.key || it.itemId || it.name}
+                          className="flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50"
+                        >
+                          <span>
+                            {it.name}
+                            {it.sub ? (
+                              <span className="text-gray-400"> · {it.sub}</span>
+                            ) : null}
+                            <span className="text-gray-400">
+                              {" "}
+                              · {it.currentStock ?? 0} {it.unit || ""}
+                            </span>
+                            {!dispensable && (
+                              <span
+                                className="ml-1 text-xs text-amber-600"
+                                title="Catalogue item with no HMS stock link — it can be prescribed, but the pharmacy will not decrement stock. Link it to an inventory item under Pharmacy & Lab Catalog to make it dispensable."
+                              >
+                                catalogue only
+                              </span>
+                            )}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={out}
+                            onClick={() => {
+                              addDrugFromStock(it);
+                              setDrugQuery("");
+                            }}
+                          >
+                            {out ? "Out of stock" : "+ Add"}
+                          </Button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            {(form.prescriptions || []).length > 0 && (
+              <div className="mb-1 flex gap-2 px-1 text-xs font-medium text-gray-500">
+                <span className="min-w-0 flex-1">Medicine</span>
+                <span className="w-24 shrink-0">Dose</span>
+                <span className="w-44 shrink-0">Frequency</span>
+                <span className="w-16 shrink-0">Days</span>
+                <span className="w-16 shrink-0">Qty</span>
+                <span className="w-6 shrink-0" />
               </div>
-            ))}
+            )}
+            {(form.prescriptions || []).map((p, i) => {
+              // Days are stored inside the free-text `duration` ("5 days") so
+              // existing records keep working; we parse the leading number out.
+              const days = String(p.duration || "").replace(/[^0-9]/g, "");
+              const autoQty = deriveQty(p.frequency, days);
+              return (
+                <div key={i} className="mb-2 space-y-1">
+                  <div className="flex gap-2">
+                    <VoiceInput
+                      className="min-w-0 flex-1"
+                      placeholder="Medicine"
+                      value={p.drug}
+                      onChange={(e) => updatePrescription(i, "drug", e.target.value)}
+                      onTranscript={(text) => updatePrescription(i, "drug", text)}
+                    />
+                    <VoiceInput
+                      className="w-24 shrink-0"
+                      placeholder="500mg"
+                      value={p.dosage}
+                      onChange={(e) => updatePrescription(i, "dosage", e.target.value)}
+                      onTranscript={(text) => updatePrescription(i, "dosage", text)}
+                    />
+                    <Select
+                      className="w-44 shrink-0"
+                      value={p.frequency || ""}
+                      onChange={(e) => {
+                        updatePrescription(i, "frequency", e.target.value);
+                        const q = deriveQty(e.target.value, days);
+                        if (q) updatePrescription(i, "quantity", q as any);
+                      }}
+                    >
+                      <option value="">How often…</option>
+                      {FREQUENCIES.map((f) => (
+                        <option key={f.code} value={f.code}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </Select>
+                    <Input
+                      className="w-16 shrink-0"
+                      type="number"
+                      min="1"
+                      placeholder="5"
+                      value={days}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        updatePrescription(i, "duration", v ? `${v} days` : "");
+                        const q = deriveQty(p.frequency, v);
+                        if (q) updatePrescription(i, "quantity", q as any);
+                      }}
+                    />
+                    <Input
+                      className="w-16 shrink-0"
+                      type="number"
+                      min="0"
+                      placeholder={autoQty ? String(autoQty) : "Qty"}
+                      value={p.quantity ?? ""}
+                      onChange={(e) =>
+                        updatePrescription(
+                          i,
+                          "quantity",
+                          (e.target.value ? Number(e.target.value) : undefined) as any,
+                        )
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePrescription(i)}
+                      className="w-6 shrink-0 text-red-500"
+                      aria-label="Remove medicine"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Select
+                      className="w-44 shrink-0"
+                      value={p.timing || ""}
+                      onChange={(e) => updatePrescription(i, "timing", e.target.value)}
+                    >
+                      <option value="">Food timing…</option>
+                      <option value="After food">After food</option>
+                      <option value="Before food">Before food</option>
+                      <option value="With food">With food</option>
+                      <option value="Empty stomach">Empty stomach</option>
+                    </Select>
+                    <Input
+                      className="min-w-0 flex-1"
+                      placeholder="Instructions (optional) — e.g. stop if rash appears"
+                      value={p.notes || ""}
+                      onChange={(e) => updatePrescription(i, "notes", e.target.value)}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </section>
 
           {/* Procedures — feeds real billing lines, see billing.controller.ts */}
           <section>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-gray-700">
-                Procedures
+                Procedures performed{" "}
+                <span className="font-normal text-gray-400">
+                  — billed to the patient
+                </span>
               </h3>
               <Button type="button" size="sm" variant="ghost" onClick={addProcedure}>
                 + Add procedure

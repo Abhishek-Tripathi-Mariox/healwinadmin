@@ -282,7 +282,7 @@ ${pays ? `<div style="margin-top:16px;font-size:12px;color:#444"><b>Payments</b>
     <div className="p-6">
       <PageHeader
         title="Billing Management"
-        subtitle="Invoices, payments & financial reports — Doctor Panel (HMS)"
+        subtitle="Invoices, payments & financial reports — Hospital (HMS)"
         actions={
           canCreate && tab === "invoices" ? (
             <Button

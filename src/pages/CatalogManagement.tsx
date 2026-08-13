@@ -9,7 +9,7 @@ import {
   TableState, Badge, Modal, Field, Input, Select, Alert,
 } from "../components/ui";
 
-type FieldType = "text" | "number" | "bool" | "inventoryLink";
+type FieldType = "text" | "number" | "bool" | "inventoryLink" | "facilityLink";
 interface FieldDef {
   key: string;
   label: string;
@@ -34,6 +34,7 @@ const TABS: TabDef[] = [
       { key: "price", label: "Price" },
       { key: "stock", label: "Stock" },
       { key: "linkedItemName", label: "Linked HMS item" },
+      { key: "facilityName", label: "Pharmacy" },
     ],
     fields: [
       { key: "name", label: "Name", required: true },
@@ -41,6 +42,7 @@ const TABS: TabDef[] = [
       { key: "category", label: "Category" },
       { key: "price", label: "Price", type: "number", required: true },
       { key: "mrp", label: "MRP", type: "number" },
+      { key: "pharmacyId", label: "Pharmacy that stocks this", type: "facilityLink" },
       { key: "itemId", label: "Link to HMS inventory item", type: "inventoryLink" },
       { key: "stock", label: "Stock (manual — only used if not linked above)", type: "number" },
       { key: "prescriptionRequired", label: "Prescription required", type: "bool" },
@@ -55,9 +57,11 @@ const TABS: TabDef[] = [
       { key: "category", label: "Category" },
       { key: "price", label: "Price" },
       { key: "sampleType", label: "Sample" },
+      { key: "facilityName", label: "Lab" },
     ],
     fields: [
       { key: "name", label: "Name", required: true },
+      { key: "labId", label: "Lab that runs this test", type: "facilityLink" },
       { key: "category", label: "Category" },
       { key: "price", label: "Price", type: "number", required: true },
       { key: "mrp", label: "MRP", type: "number" },
@@ -99,6 +103,25 @@ export default function CatalogManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, any>>({});
   const [error, setError] = useState("");
+
+  // Facilities available to scope the current tab's entries to: pharmacies on
+  // the products tab, labs on the lab-tests tab. Only approved + active ones
+  // come back from the API.
+  const [facilityOptions, setFacilityOptions] = useState<
+    { _id: string; name: string; address?: string }[]
+  >([]);
+  useEffect(() => {
+    const source =
+      tabKey === "products"
+        ? catalogApi.pharmacies
+        : tabKey === "labTests"
+          ? catalogApi.labs
+          : null;
+    if (!source) return setFacilityOptions([]);
+    source()
+      .then((res) => setFacilityOptions(res.data?.items || []))
+      .catch(() => setFacilityOptions([]));
+  }, [tabKey]);
 
   // Inventory items available to link a pharmacy product to (products tab only).
   const [invOptions, setInvOptions] = useState<{ _id: string; name: string; sku: string; currentStock: number; unit: string }[]>([]);
@@ -182,7 +205,7 @@ export default function CatalogManagement() {
     <div className="p-6">
       <PageHeader
         title="Pharmacy & Lab Catalog"
-        subtitle="Pharmacy products & lab tests shown in the patient app (doctors are managed under Admin Management)"
+        subtitle="Pharmacy products & lab tests shown in the patient app (doctors are managed under Team Management)"
         actions={canManage ? <Button onClick={openCreate}>+ Add {tab.label.replace(/s$/, "")}</Button> : undefined}
       />
 
@@ -280,6 +303,34 @@ export default function CatalogManagement() {
                   />
                   {fd.label}
                 </label>
+              ) : fd.type === "facilityLink" ? (
+                <Field
+                  key={fd.key}
+                  label={fd.label}
+                  className="col-span-2"
+                  hint={
+                    facilityOptions.length === 0
+                      ? tabKey === "products"
+                        ? "No approved pharmacies yet — add one under Centre Locator → Pharmacies."
+                        : "No approved labs yet — add one under Centre Locator → Labs."
+                      : "Leave blank to offer this across the whole platform."
+                  }
+                >
+                  <Select
+                    value={form[fd.key] ?? ""}
+                    onChange={(e) =>
+                      setForm({ ...form, [fd.key]: e.target.value || undefined })
+                    }
+                  >
+                    <option value="">— Not linked (available platform-wide) —</option>
+                    {facilityOptions.map((f) => (
+                      <option key={f._id} value={f._id}>
+                        {f.name}
+                        {f.address ? ` — ${f.address}` : ""}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
               ) : fd.type === "inventoryLink" ? (
                 <Field key={fd.key} label={fd.label} className="col-span-2">
                   <Select

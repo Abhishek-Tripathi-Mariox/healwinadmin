@@ -110,7 +110,7 @@ export default function FaqManagement() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       <PageHeader
         title="Help FAQs"
         subtitle="FAQs shown in the patient app's Help & Support screen"

@@ -45,8 +45,13 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({ onTranscript, className,
   };
 
   return (
-    <div className="relative">
-      <Input className={cn(SR && "pr-7", className)} {...props} />
+    /* `className` goes on the WRAPPER, not the inner input: callers pass layout
+       classes (col-span-*, w-40) expecting them to size this control's slot in
+       a grid/flex row. Putting them on the input left the wrapper — the actual
+       grid child — sizing to content, which collapsed the field. The input
+       itself is already w-full from the Input base. */
+    <div className={cn("relative", className)}>
+      <Input className={cn(SR && "pr-7")} {...props} />
       {SR && (
         <button
           type="button"

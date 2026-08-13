@@ -259,7 +259,7 @@ export default function PatientRegistrationManagement() {
     <div className="p-6">
       <PageHeader
         title="Patient Registration"
-        subtitle="Demographics & health history — Doctor Panel (HMS)"
+        subtitle="Demographics & health history — Hospital (HMS)"
         actions={
           <div className="flex gap-2">
             {canMerge && (

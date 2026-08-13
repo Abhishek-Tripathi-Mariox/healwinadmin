@@ -234,13 +234,23 @@ const hasWidth = (cls?: string) => /\bw-/.test(cls || "");
 export const Input: React.FC<
   React.InputHTMLAttributes<HTMLInputElement>
 > = ({ className, ...props }) => (
-  <input className={cn(fieldBase, "h-10 w-full", className)} {...props} />
+  // Same width guard Select uses: `cn` is a plain join, not tailwind-merge, so
+  // an unconditional "w-full" would still be emitted alongside a caller's
+  // "w-16" — and Tailwind orders w-full last, so w-full won and the caller's
+  // width was silently ignored. Only default to full width when none is given.
+  <input
+    className={cn(fieldBase, "h-10", hasWidth(className) ? "" : "w-full", className)}
+    {...props}
+  />
 );
 
 export const Textarea: React.FC<
   React.TextareaHTMLAttributes<HTMLTextAreaElement>
 > = ({ className, ...props }) => (
-  <textarea className={cn(fieldBase, "w-full py-2", className)} {...props} />
+  <textarea
+    className={cn(fieldBase, "py-2", hasWidth(className) ? "" : "w-full", className)}
+    {...props}
+  />
 );
 
 export const Select: React.FC<

@@ -1,43 +1,58 @@
 import React, { useState } from "react";
 import {
-  AlertTriangle,
+  Activity,
+  Ambulance,
   Award,
   BarChart3,
   BedDouble,
-  Car,
   Bell,
   Boxes,
   Briefcase,
+  BriefcaseMedical,
   Building2,
   CalendarCheck,
   CalendarDays,
+  CalendarOff,
+  Car,
   ChevronDown,
+  CircleHelp,
   ClipboardList,
-  LifeBuoy,
   Clock,
+  Contact,
   FileText,
+  FlaskConical,
   FolderOpen,
   Globe,
   Heart,
-  Package,
   HeartPulse,
+  History,
   Home,
+  Hospital,
   Image,
   ImageIcon,
-  LayoutDashboard,
+  IndianRupee,
+  Key,
   Layers,
+  LayoutDashboard,
   LogOut,
   Mail,
   Map,
   MapPin,
   Newspaper,
+  Package,
   Phone,
   PhoneCall,
   Pill,
   Receipt,
+  ScrollText,
   Send,
   Settings,
   Shield,
+  Siren,
+  Stethoscope,
+  Syringe,
+  Ticket,
+  TicketPercent,
   UserCog,
   Users,
   Wallet,
@@ -111,19 +126,18 @@ const Sidebar: React.FC<SidebarProps> = ({
     "providers-group":
       location.pathname.includes("/admin/service-providers") ||
       location.pathname.includes("/admin/ambulance-staff") ||
+      location.pathname.includes("/admin/staff-records") ||
       location.pathname.includes("/admin/ambulances") ||
-      location.pathname.includes("/admin/off-duty-reasons"),
+      location.pathname.includes("/admin/ambulance-inventory") ||
+      location.pathname.includes("/admin/shifts") ||
+      location.pathname.includes("/admin/off-duty-reasons") ||
+      location.pathname.includes("/admin/ambulance-pricing"),
     "reports-group": location.pathname.includes("/admin/reports"),
-    "users-group":
-      location.pathname.includes("/admin/users") ||
-      location.pathname.includes("/admin/service-providers") ||
-      location.pathname.includes("/admin/ambulance-staff") ||
-      location.pathname.includes("/admin/ambulances") ||
-      location.pathname.includes("/admin/off-duty-reasons"),
     "system-group":
       location.pathname.includes("/admin/email-templates") ||
       location.pathname.includes("/admin/activity-logs") ||
-      location.pathname.includes("/admin/notifications"),
+      location.pathname.includes("/admin/notifications") ||
+      location.pathname.includes("/admin/roles"),
     "hr-group":
       location.pathname.includes("/admin/hr") ||
       location.pathname.includes("/admin/employees") ||
@@ -137,19 +151,19 @@ const Sidebar: React.FC<SidebarProps> = ({
     {
       id: "sos",
       label: "SOS Dashboard",
-      icon: AlertTriangle,
+      icon: Siren,
       path: "/admin/sos",
     },
     {
       id: "fleet-health",
       label: "Fleet Health",
-      icon: AlertTriangle,
+      icon: Activity,
       path: "/admin/fleet-health",
     },
     {
       id: "ambulance-requests",
       label: "Ambulance Requests",
-      icon: AlertTriangle,
+      icon: Ambulance,
       path: "/admin/ambulance-requests",
     },
     {
@@ -168,92 +182,87 @@ const Sidebar: React.FC<SidebarProps> = ({
     {
       id: "help-faqs",
       label: "Help FAQs",
-      icon: ClipboardList,
+      icon: CircleHelp,
       path: "/admin/help-faqs",
     },
     {
       id: "support-tickets",
       label: "Support Tickets",
-      icon: LifeBuoy,
+      icon: Ticket,
       path: "/admin/support-tickets",
     },
     {
-      id: "users-group",
-      label: "Users",
+      id: "users",
+      label: "User Management",
       icon: Users,
+      path: "/admin/users",
+    },
+    // Named for what it holds (providers + crew + vehicles + shifts + pricing)
+    // rather than "Service Providers", which collided with its own first child.
+    // `id` stays "providers-group" — it is the openDropdowns state key.
+    {
+      id: "providers-group",
+      label: "Ambulance Operations",
+      icon: Ambulance,
       children: [
         {
-          id: "users",
-          label: "User Management",
-          icon: Users,
-          path: "/admin/users",
-        },
-        {
-          id: "providers-group",
+          id: "service-providers",
           label: "Service Providers",
           icon: Building2,
-          children: [
-            {
-              id: "service-providers",
-              label: "Service Providers",
-              icon: Building2,
-              path: "/admin/service-providers",
-            },
-            {
-              id: "ambulance-staff",
-              label: "Drivers & Attendants",
-              icon: Users,
-              path: "/admin/ambulance-staff",
-            },
-            {
-              id: "staff-records",
-              label: "Staff App Records",
-              icon: ClipboardList,
-              path: "/admin/staff-records",
-            },
-            {
-              id: "ambulances",
-              label: "Ambulances",
-              icon: Heart,
-              path: "/admin/ambulances",
-            },
-            {
-              id: "ambulance-inventory",
-              label: "Ambulance Inventory",
-              icon: Package,
-              path: "/admin/ambulance-inventory",
-            },
-            {
-              id: "shifts",
-              label: "Shifts",
-              icon: Clock,
-              path: "/admin/shifts",
-            },
-            {
-              id: "off-duty-reasons",
-              label: "Off-Duty Reasons",
-              icon: Clock,
-              path: "/admin/off-duty-reasons",
-            },
-            {
-              id: "ambulance-pricing",
-              label: "Types & Pricing",
-              icon: Receipt,
-              path: "/admin/ambulance-pricing",
-            },
-          ],
+          path: "/admin/service-providers",
         },
-        // Hospitals sit at the same level as Service Providers because
-        // attendants (paramedics / MTs) are employed by hospitals, not
-        // by ambulance providers. The list mirrors Centre Locator rows;
-        // each hospital page drills into its own staff management.
         {
-          id: "hospitals",
-          label: "Hospitals",
-          icon: Building2,
-          path: "/admin/hospitals",
+          id: "ambulance-staff",
+          label: "Drivers & Attendants",
+          icon: Users,
+          path: "/admin/ambulance-staff",
+        },
+        {
+          id: "staff-records",
+          label: "Staff App Records",
+          icon: ClipboardList,
+          path: "/admin/staff-records",
+        },
+        {
+          id: "ambulances",
+          label: "Ambulances",
+          icon: Ambulance,
+          path: "/admin/ambulances",
+        },
+        {
+          id: "ambulance-inventory",
+          label: "Ambulance Inventory",
+          icon: Package,
+          path: "/admin/ambulance-inventory",
+        },
+        {
+          id: "shifts",
+          label: "Shifts",
+          icon: Clock,
+          path: "/admin/shifts",
+        },
+        {
+          id: "off-duty-reasons",
+          label: "Off-Duty Reasons",
+          icon: CalendarOff,
+          path: "/admin/off-duty-reasons",
+        },
+        {
+          id: "ambulance-pricing",
+          label: "Types & Pricing",
+          icon: IndianRupee,
+          path: "/admin/ambulance-pricing",
         },
       ],
+    },
+    // Hospitals is its own root entry rather than sitting under Service
+    // Providers: attendants (paramedics / MTs) are employed by hospitals, not
+    // by ambulance providers. Each hospital page drills into its own staff.
+    {
+      id: "hospitals",
+      label: "Hospitals Registry",
+      icon: Hospital,
+      path: "/admin/hospitals",
     },
     {
       id: "reports-group",
@@ -286,20 +295,24 @@ const Sidebar: React.FC<SidebarProps> = ({
         },
       ],
     },
+    // "People" groups two different things: Team Management (/admin/staff) is
+    // admin-panel login accounts, and Website Team (/admin/team) is the public
+    // website's staff directory (team.routes.ts, rendered on the site's Team
+    // page, with per-member QR verification).
     {
       id: "team-management-group",
-      label: "Team Management",
-      icon: Shield,
+      label: "People",
+      icon: Users,
       children: [
         {
           id: "staff",
-          label: "Admin Management",
-          icon: Shield,
+          label: "Team Management",
+          icon: UserCog,
           path: "/admin/staff",
         },
         {
           id: "team",
-          label: "Team Management",
+          label: "Website Team",
           icon: Users,
           path: "/admin/team",
         },
@@ -397,12 +410,18 @@ const Sidebar: React.FC<SidebarProps> = ({
           icon: Pill,
           path: "/admin/pharmacies",
         },
+        {
+          id: "labs",
+          label: "Labs",
+          icon: FlaskConical,
+          path: "/admin/labs",
+        },
       ],
     },
     {
       id: "master-data-group",
       label: "Master Data",
-      icon: Settings,
+      icon: Layers,
       children: [
         {
           id: "departments",
@@ -419,7 +438,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         {
           id: "employment-types",
           label: "Employment Types",
-          icon: Clock,
+          icon: Briefcase,
           path: "/admin/employment-types",
         },
       ],
@@ -444,13 +463,13 @@ const Sidebar: React.FC<SidebarProps> = ({
         {
           id: "promo-codes",
           label: "Promo Codes",
-          icon: Image,
+          icon: TicketPercent,
           path: "/admin/promo-codes",
         },
         {
           id: "membership-plans",
           label: "Membership Plans",
-          icon: ClipboardList,
+          icon: Award,
           path: "/admin/membership-plans",
         },
         {
@@ -462,7 +481,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         {
           id: "legal-content",
           label: "Legal Content (App)",
-          icon: FileText,
+          icon: ScrollText,
           path: "/admin/legal-content",
         },
         {
@@ -486,7 +505,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         {
           id: "first-aid",
           label: "First Aid Guides",
-          icon: Newspaper,
+          icon: BriefcaseMedical,
           path: "/admin/first-aid",
         },
         {
@@ -511,43 +530,50 @@ const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: "doctor-panel-group",
-      label: "Doctor Panel",
+      // Named for its CONTENTS, like every sibling group. It was briefly
+      // role-derived ("Reception Panel"), which fixed a Reception login seeing
+      // "Doctor Panel" but regressed everyone else — Super Admin got "Super
+      // Admin Panel" and Admin got "Admin Panel", which collides with the name
+      // of the whole app. A function name is correct for all roles at once.
+      // The `id` must stay "doctor-panel-group": it is the openDropdowns state
+      // key and the canAccessModule / React key.
+      label: "Hospital (HMS)",
       icon: HeartPulse,
       children: [
         {
           id: "patients",
           label: "Patients",
-          icon: HeartPulse,
+          icon: Contact,
           path: "/admin/patients",
         },
         {
           id: "patient-orders",
           label: "Consultations & Orders",
-          icon: ClipboardList,
+          icon: Stethoscope,
           path: "/admin/patient-orders",
         },
         {
           id: "hms-reports",
           label: "Hospital MIS",
-          icon: ClipboardList,
+          icon: BarChart3,
           path: "/admin/hms-reports",
         },
         {
           id: "opd",
           label: "OPD",
-          icon: ClipboardList,
+          icon: Stethoscope,
           path: "/admin/opd",
         },
         {
           id: "doctor-schedules",
           label: "Doctor Availability",
-          icon: ClipboardList,
+          icon: CalendarCheck,
           path: "/admin/doctor-schedules",
         },
         {
           id: "doctor-roster",
           label: "Doctor Roster",
-          icon: ClipboardList,
+          icon: CalendarDays,
           path: "/admin/doctor-roster",
         },
         {
@@ -559,7 +585,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         {
           id: "ot",
           label: "Operation Theatre",
-          icon: BedDouble,
+          icon: Syringe,
           path: "/admin/ot",
         },
         {
@@ -567,6 +593,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           label: "Procurement",
           icon: Boxes,
           path: "/admin/procurement",
+        },
+        {
+          id: "pharmacy-dispense",
+          label: "Pharmacy Dispense",
+          icon: Pill,
+          path: "/admin/pharmacy-dispense",
         },
         {
           id: "inventory",
@@ -589,13 +621,13 @@ const Sidebar: React.FC<SidebarProps> = ({
         {
           id: "insurance",
           label: "Insurance & TPA",
-          icon: Receipt,
+          icon: Shield,
           path: "/admin/insurance",
         },
         {
           id: "catalog",
           label: "Pharmacy & Lab Catalog",
-          icon: HeartPulse,
+          icon: Pill,
           path: "/admin/catalog",
         },
       ],
@@ -675,8 +707,14 @@ const Sidebar: React.FC<SidebarProps> = ({
         {
           id: "activity-logs",
           label: "Activity Logs",
-          icon: ClipboardList,
+          icon: History,
           path: "/admin/activity-logs",
+        },
+        {
+          id: "roles",
+          label: "Roles & Permissions",
+          icon: Key,
+          path: "/admin/roles",
         },
       ],
     },
@@ -851,7 +889,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                           : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                       }`}
                     >
-                      <span className="flex items-center gap-3">
+                      <span className="flex min-w-0 items-center gap-3">
                         <Icon
                           className={`h-5 w-5 shrink-0 ${
                             isChildActive
@@ -859,7 +897,16 @@ const Sidebar: React.FC<SidebarProps> = ({
                               : "text-gray-400 group-hover:text-gray-500"
                           }`}
                         />
-                        <span>{item.label}</span>
+                        {/* Wrap rather than truncate: one group label is
+                            role-derived ("Call Centre Executive Panel") and
+                            others are simply long ("Ambulance Operations"), and
+                            clipping them to "Ambulance Operat…" hides the name.
+                            min-w-0 on the parent lets the text wrap instead of
+                            overflowing, and the chevron is shrink-0 so it stays
+                            put — same behaviour the child links already have. */}
+                        <span className="text-left leading-tight">
+                          {item.label}
+                        </span>
                       </span>
                       <ChevronDown
                         className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 ${

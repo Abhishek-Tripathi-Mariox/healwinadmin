@@ -1640,9 +1640,15 @@ export interface DuplicateGroup {
 
 export interface Prescription {
   drug: string;
+  /** Set when picked from HMS inventory — lets the pharmacy dispense real stock. */
+  itemId?: string;
+  /** Units to hand over at the pharmacy counter. */
+  quantity?: number;
   dosage?: string;
   frequency?: string;
   duration?: string;
+  /** "Before food" / "After food". */
+  timing?: string;
   notes?: string;
 }
 
@@ -1696,6 +1702,8 @@ export interface EncounterPayload {
   admissionRecommended?: boolean;
   admissionNote?: string;
   notes?: string;
+  /** Doctor's plain-language takeaway, mirroring Consultation.summary. */
+  summary?: string;
   status?: "draft" | "finalized";
 }
 
@@ -1714,18 +1722,12 @@ export const emrApi = {
       method: "PUT",
       body: JSON.stringify(data),
     }),
-  // Push an encounter's prescriptions into pharmacy inventory (stock-out).
-  // overrideAllergyWarning must be explicitly set after the caller has shown
-  // the user a conflict returned by a first attempt (see emr.controller.ts's
-  // allergy safety gate) — never set it up front.
-  dispense: (id: string, opts?: { items?: { drug: string; quantity?: number }[]; overrideAllergyWarning?: boolean }) =>
-    fetchWithAuth(`/admin/emr/${id}/dispense`, {
-      method: "POST",
-      body: JSON.stringify({
-        ...(opts?.items ? { items: opts.items } : {}),
-        ...(opts?.overrideAllergyWarning ? { overrideAllergyWarning: true } : {}),
-      }),
-    }),
+  // Pickers for the encounter form — gated on emr:create so a doctor can use
+  // them without needing catalog:view or the inventory module.
+  drugOptions: (search = "") =>
+    fetchWithAuth(`/admin/emr/drug-options${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+  labTestOptions: (search = "") =>
+    fetchWithAuth(`/admin/emr/lab-test-options${search ? `?search=${encodeURIComponent(search)}` : ""}`),
 };
 
 // ==================== DIAGNOSTICS (LAB & RADIOLOGY) API ====================
@@ -2033,6 +2035,14 @@ export const procurementApi = {
 };
 
 export const opdApi = {
+  detail: (id: string) => fetchWithAuth(`/admin/opd/${id}`),
+  // Nurse / front-desk vitals captured at check-in; the doctor's encounter
+  // form reads these instead of asking the doctor to type them.
+  recordVitals: (id: string, vitals: Record<string, string | number | undefined>) =>
+    fetchWithAuth(`/admin/opd/${id}/vitals`, {
+      method: "PUT",
+      body: JSON.stringify({ vitals }),
+    }),
   list: (params: Record<string, string> = {}) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/opd${qs ? `?${qs}` : ""}`);
@@ -2057,6 +2067,9 @@ export const opdApi = {
 
 // IPD — beds & admissions
 export const ipdApi = {
+  /** Live running charges for an in-progress stay (bed-days + pharmacy + procedures). */
+  charges: (admissionId: string) =>
+    fetchWithAuth(`/admin/ipd/admissions/${admissionId}/charges`),
   // Wards (managed picklist the bed form draws from).
   listWards: (params: Record<string, string> = {}) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
@@ -2160,6 +2173,32 @@ export const pharmacyApi = {
     }),
   remove: (id: string) =>
     fetchWithAuth(`/admin/pharmacies/${id}`, { method: "DELETE" }),
+};
+
+// Diagnostic lab platform — same shape as pharmacyApi above.
+export const labApi = {
+  list: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/labs${qs ? `?${qs}` : ""}`);
+  },
+  detail: (id: string) => fetchWithAuth(`/admin/labs/${id}`),
+  create: (data: FormData) =>
+    fetchWithAuthMultipart("/admin/labs", {
+      method: "POST",
+      body: data,
+    }),
+  update: (id: string, data: FormData) =>
+    fetchWithAuthMultipart(`/admin/labs/${id}`, {
+      method: "PUT",
+      body: data,
+    }),
+  approve: (id: string, approve: boolean, reason?: string) =>
+    fetchWithAuth(`/admin/labs/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ approve, reason }),
+    }),
+  remove: (id: string) =>
+    fetchWithAuth(`/admin/labs/${id}`, { method: "DELETE" }),
 };
 
 // IVR escalation
@@ -2339,6 +2378,11 @@ export const catalogApi = {
   // Picker source for linking a pharmacy product to real HMS inventory.
   inventoryItems: (search = "") =>
     fetchWithAuth(`/admin/catalog/inventory-items${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+  // Picker sources for scoping a catalogue entry to the facility that provides it.
+  pharmacies: (search = "") =>
+    fetchWithAuth(`/admin/catalog/pharmacies${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+  labs: (search = "") =>
+    fetchWithAuth(`/admin/catalog/labs${search ? `?search=${encodeURIComponent(search)}` : ""}`),
 };
 
 // ==================== AMBULANCE REQUESTS (patient dispatch) ====================
@@ -2652,4 +2696,29 @@ export default {
   hrDashboard: hrDashboardApi,
   catalog: catalogApi,
   ambulanceRequests: ambulanceRequestApi,
+};
+
+// ==================== PHARMACY DISPENSE (prescription counter) ====================
+export const pharmacyDispenseApi = {
+  list: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/pharmacy-dispense${qs ? `?${qs}` : ""}`);
+  },
+  fulfil: (
+    id: string,
+    lines?: { index: number; quantity: number }[],
+    overrideAllergyWarning = false,
+  ) =>
+    fetchWithAuth(`/admin/pharmacy-dispense/${id}/fulfil`, {
+      method: "POST",
+      body: JSON.stringify({
+        lines: lines || [],
+        ...(overrideAllergyWarning ? { overrideAllergyWarning: true } : {}),
+      }),
+    }),
+  cancel: (id: string, reason?: string) =>
+    fetchWithAuth(`/admin/pharmacy-dispense/${id}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
 };

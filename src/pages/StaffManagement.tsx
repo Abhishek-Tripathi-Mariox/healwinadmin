@@ -5,11 +5,9 @@ import {
   Plus,
   Edit2,
   Trash2,
-  Shield,
   ShieldCheck,
   ShieldAlert,
   X,
-  Check,
   Clock,
   Lock,
   Unlock,
@@ -79,659 +77,8 @@ interface StaffMember {
   };
 }
 
-// Permission modules - IDs must match backend PERMISSIONS format (using colons)
-const PERMISSION_MODULES = [
-  {
-    module: "Dashboard",
-    permissions: [
-      {
-        id: "dashboard:view",
-        name: "View Dashboard",
-        description: "Can view dashboard statistics",
-      },
-    ],
-  },
-  {
-    module: "SOS Dashboard",
-    permissions: [
-      {
-        id: "sos:view",
-        name: "View SOS Alerts",
-        description: "Can view SOS alerts",
-      },
-      {
-        id: "sos:respond",
-        name: "Respond to SOS",
-        description: "Can respond to SOS alerts",
-      },
-      {
-        id: "sos:resolve",
-        name: "Resolve SOS",
-        description: "Can resolve SOS alerts",
-      },
-    ],
-  },
-  {
-    module: "Admin Management",
-    permissions: [
-      {
-        id: "staff:view",
-        name: "View Staff",
-        description: "Can view staff members",
-      },
-      {
-        id: "staff:create",
-        name: "Create Staff",
-        description: "Can add staff members",
-      },
-      {
-        id: "staff:update",
-        name: "Edit Staff",
-        description: "Can edit staff members",
-      },
-      {
-        id: "staff:delete",
-        name: "Delete Staff",
-        description: "Can remove staff members",
-      },
-      {
-        id: "roles:view",
-        name: "View Roles",
-        description: "Can view roles",
-      },
-      {
-        id: "roles:create",
-        name: "Create Roles",
-        description: "Can create roles",
-      },
-      {
-        id: "roles:update",
-        name: "Edit Roles",
-        description: "Can edit roles",
-      },
-      {
-        id: "roles:delete",
-        name: "Delete Roles",
-        description: "Can delete roles",
-      },
-    ],
-  },
-  {
-    module: "Team Management",
-    permissions: [
-      {
-        id: "team:view",
-        name: "View Team Members",
-        description: "Can view team members",
-      },
-      {
-        id: "team:create",
-        name: "Create Team Members",
-        description: "Can add team members",
-      },
-      {
-        id: "team:update",
-        name: "Edit Team Members",
-        description: "Can edit team members",
-      },
-      {
-        id: "team:delete",
-        name: "Delete Team Members",
-        description: "Can remove team members",
-      },
-    ],
-  },
-  {
-    module: "Careers",
-    permissions: [
-      {
-        id: "careers:view",
-        name: "View Job Listings",
-        description: "Can view careers/job listings",
-      },
-      {
-        id: "careers:create",
-        name: "Create Job Listings",
-        description: "Can create careers/job listings",
-      },
-      {
-        id: "careers:update",
-        name: "Edit Job Listings",
-        description: "Can edit careers/job listings",
-      },
-      {
-        id: "careers:delete",
-        name: "Delete Job Listings",
-        description: "Can delete careers/job listings",
-      },
-    ],
-  },
-  {
-    module: "Applications",
-    permissions: [
-      {
-        id: "applications:view",
-        name: "View Applications",
-        description: "Can view job applications",
-      },
-      {
-        id: "applications:update",
-        name: "Update Applications",
-        description: "Can update application status/details",
-      },
-    ],
-  },
-  {
-    module: "Services",
-    permissions: [
-      {
-        id: "services:view",
-        name: "View Services",
-        description: "Can view services",
-      },
-      {
-        id: "services:create",
-        name: "Create Services",
-        description: "Can create services",
-      },
-      {
-        id: "services:update",
-        name: "Edit Services",
-        description: "Can edit services",
-      },
-      {
-        id: "services:delete",
-        name: "Delete Services",
-        description: "Can delete services",
-      },
-    ],
-  },
-  {
-    module: "Categories",
-    permissions: [
-      {
-        id: "categories:view",
-        name: "View Categories",
-        description: "Can view service categories",
-      },
-      {
-        id: "categories:create",
-        name: "Create Categories",
-        description: "Can create service categories",
-      },
-      {
-        id: "categories:update",
-        name: "Edit Categories",
-        description: "Can edit service categories",
-      },
-      {
-        id: "categories:delete",
-        name: "Delete Categories",
-        description: "Can delete service categories",
-      },
-    ],
-  },
-  {
-    module: "States",
-    permissions: [
-      {
-        id: "states:view",
-        name: "View States",
-        description: "Can view states",
-      },
-      {
-        id: "states:create",
-        name: "Create States",
-        description: "Can create states",
-      },
-      {
-        id: "states:update",
-        name: "Edit States",
-        description: "Can edit states",
-      },
-      {
-        id: "states:delete",
-        name: "Delete States",
-        description: "Can delete states",
-      },
-    ],
-  },
-  {
-    module: "Districts",
-    permissions: [
-      {
-        id: "districts:view",
-        name: "View Districts",
-        description: "Can view districts",
-      },
-      {
-        id: "districts:create",
-        name: "Create Districts",
-        description: "Can create districts",
-      },
-      {
-        id: "districts:update",
-        name: "Edit Districts",
-        description: "Can edit districts",
-      },
-      {
-        id: "districts:delete",
-        name: "Delete Districts",
-        description: "Can delete districts",
-      },
-    ],
-  },
-  {
-    module: "Divisions",
-    permissions: [
-      {
-        id: "divisions:view",
-        name: "View Divisions",
-        description: "Can view divisions",
-      },
-      {
-        id: "divisions:create",
-        name: "Create Divisions",
-        description: "Can create divisions",
-      },
-      {
-        id: "divisions:update",
-        name: "Edit Divisions",
-        description: "Can edit divisions",
-      },
-      {
-        id: "divisions:delete",
-        name: "Delete Divisions",
-        description: "Can delete divisions",
-      },
-    ],
-  },
-  {
-    module: "Centres",
-    permissions: [
-      {
-        id: "centres:view",
-        name: "View Centres",
-        description: "Can view centres",
-      },
-      {
-        id: "centres:create",
-        name: "Create Centres",
-        description: "Can create centres",
-      },
-      {
-        id: "centres:update",
-        name: "Edit Centres",
-        description: "Can edit centres",
-      },
-      {
-        id: "centres:delete",
-        name: "Delete Centres",
-        description: "Can delete centres",
-      },
-    ],
-  },
-  {
-    module: "Service Types",
-    permissions: [
-      {
-        id: "locator_types:view",
-        name: "View Service Types",
-        description: "Can view locator service types",
-      },
-      {
-        id: "locator_types:create",
-        name: "Create Service Types",
-        description: "Can create locator service types",
-      },
-      {
-        id: "locator_types:update",
-        name: "Edit Service Types",
-        description: "Can edit locator service types",
-      },
-      {
-        id: "locator_types:delete",
-        name: "Delete Service Types",
-        description: "Can delete locator service types",
-      },
-    ],
-  },
-  {
-    module: "Departments",
-    permissions: [
-      {
-        id: "departments:view",
-        name: "View Departments",
-        description: "Can view departments",
-      },
-      {
-        id: "departments:create",
-        name: "Create Departments",
-        description: "Can create departments",
-      },
-      {
-        id: "departments:update",
-        name: "Edit Departments",
-        description: "Can edit departments",
-      },
-      {
-        id: "departments:delete",
-        name: "Delete Departments",
-        description: "Can delete departments",
-      },
-    ],
-  },
-  {
-    module: "Designations",
-    permissions: [
-      {
-        id: "designations:view",
-        name: "View Designations",
-        description: "Can view designations",
-      },
-      {
-        id: "designations:create",
-        name: "Create Designations",
-        description: "Can create designations",
-      },
-      {
-        id: "designations:update",
-        name: "Edit Designations",
-        description: "Can edit designations",
-      },
-      {
-        id: "designations:delete",
-        name: "Delete Designations",
-        description: "Can delete designations",
-      },
-    ],
-  },
-  {
-    module: "Employment Types",
-    permissions: [
-      {
-        id: "employment_types:view",
-        name: "View Employment Types",
-        description: "Can view employment types",
-      },
-      {
-        id: "employment_types:create",
-        name: "Create Employment Types",
-        description: "Can create employment types",
-      },
-      {
-        id: "employment_types:update",
-        name: "Edit Employment Types",
-        description: "Can edit employment types",
-      },
-      {
-        id: "employment_types:delete",
-        name: "Delete Employment Types",
-        description: "Can delete employment types",
-      },
-    ],
-  },
-  {
-    module: "Home Page",
-    permissions: [
-      {
-        id: "home:view",
-        name: "View Home Page",
-        description: "Can view home page settings",
-      },
-      {
-        id: "home:update",
-        name: "Update Home Page",
-        description: "Can update home page settings",
-      },
-    ],
-  },
-  {
-    module: "About Page",
-    permissions: [
-      {
-        id: "about:view",
-        name: "View About Page",
-        description: "Can view about page settings",
-      },
-      {
-        id: "about:update",
-        name: "Update About Page",
-        description: "Can update about page settings",
-      },
-    ],
-  },
-  {
-    module: "Contact Page",
-    permissions: [
-      {
-        id: "contact:view",
-        name: "View Contact Page",
-        description: "Can view contact page settings",
-      },
-      {
-        id: "contact:update",
-        name: "Update Contact Page",
-        description: "Can update contact page settings",
-      },
-    ],
-  },
-  {
-    module: "CMS Pages",
-    permissions: [
-      {
-        id: "cms:view",
-        name: "View CMS Pages",
-        description: "Can view CMS pages",
-      },
-      {
-        id: "cms:create",
-        name: "Create CMS Pages",
-        description: "Can create CMS pages",
-      },
-      {
-        id: "cms:update",
-        name: "Edit CMS Pages",
-        description: "Can edit CMS pages",
-      },
-      {
-        id: "cms:delete",
-        name: "Delete CMS Pages",
-        description: "Can delete CMS pages",
-      },
-    ],
-  },
-  {
-    module: "News Articles",
-    permissions: [
-      {
-        id: "news:view",
-        name: "View News",
-        description: "Can view news articles",
-      },
-      {
-        id: "news:create",
-        name: "Create News",
-        description: "Can create news articles",
-      },
-      {
-        id: "news:update",
-        name: "Edit News",
-        description: "Can edit news articles",
-      },
-      {
-        id: "news:delete",
-        name: "Delete News",
-        description: "Can delete news articles",
-      },
-    ],
-  },
-  {
-    module: "Gallery",
-    permissions: [
-      {
-        id: "gallery:view",
-        name: "View Gallery",
-        description: "Can view gallery items",
-      },
-      {
-        id: "gallery:create",
-        name: "Create Gallery Items",
-        description: "Can create gallery items",
-      },
-      {
-        id: "gallery:update",
-        name: "Edit Gallery Items",
-        description: "Can edit gallery items",
-      },
-      {
-        id: "gallery:delete",
-        name: "Delete Gallery Items",
-        description: "Can delete gallery items",
-      },
-    ],
-  },
-  {
-    module: "Submissions",
-    permissions: [
-      {
-        id: "submissions:view",
-        name: "View Submissions",
-        description: "Can view article submissions",
-      },
-      {
-        id: "submissions:update",
-        name: "Update Submissions",
-        description: "Can review/update article submissions",
-      },
-      {
-        id: "submissions:delete",
-        name: "Delete Submissions",
-        description: "Can delete article submissions",
-      },
-    ],
-  },
-  {
-    module: "Logo Management",
-    permissions: [
-      {
-        id: "logo_settings:view",
-        name: "View Logo Settings",
-        description: "Can view logo settings",
-      },
-      {
-        id: "logo_settings:update",
-        name: "Update Logo Settings",
-        description: "Can update logo settings",
-      },
-    ],
-  },
-  {
-    module: "Email Templates",
-    permissions: [
-      {
-        id: "email_templates:view",
-        name: "View Email Templates",
-        description: "Can view email templates",
-      },
-      {
-        id: "email_templates:create",
-        name: "Create Email Templates",
-        description: "Can create email templates",
-      },
-      {
-        id: "email_templates:update",
-        name: "Edit Email Templates",
-        description: "Can edit email templates",
-      },
-      {
-        id: "email_templates:delete",
-        name: "Delete Email Templates",
-        description: "Can delete email templates",
-      },
-    ],
-  },
-  {
-    module: "Activity Logs",
-    permissions: [
-      {
-        id: "activity_logs:view",
-        name: "View Activity Logs",
-        description: "Can view admin activity logs",
-      },
-    ],
-  },
-  {
-    module: "Reports",
-    permissions: [
-      {
-        id: "reports:view",
-        name: "View Reports",
-        description: "Can view reports",
-      },
-      {
-        id: "reports:export",
-        name: "Export Reports",
-        description: "Can export reports",
-      },
-    ],
-  },
-  {
-    module: "HR — Dashboard",
-    permissions: [
-      {
-        id: "hr_dashboard:view",
-        name: "View HR Dashboard",
-        description: "Can view the HR dashboard",
-      },
-    ],
-  },
-  {
-    module: "HR — Employees",
-    permissions: [
-      { id: "employees:view", name: "View Employees", description: "Can view employees" },
-      { id: "employees:create", name: "Create Employees", description: "Can add employees" },
-      { id: "employees:update", name: "Edit Employees", description: "Can edit employees" },
-      { id: "employees:delete", name: "Delete Employees", description: "Can remove employees" },
-      { id: "salary_structure:view", name: "View Salary Structure", description: "Can view salary / CTC" },
-      { id: "salary_structure:manage", name: "Manage Salary Structure", description: "Can edit salary / CTC" },
-    ],
-  },
-  {
-    module: "HR — Attendance",
-    permissions: [
-      { id: "attendance:view", name: "View Attendance", description: "Can view attendance" },
-      { id: "attendance:manage", name: "Mark Attendance", description: "Can mark / edit attendance" },
-    ],
-  },
-  {
-    module: "HR — Leave",
-    permissions: [
-      { id: "leave:view", name: "View Leave", description: "Can view leave requests & types" },
-      { id: "leave:manage", name: "Manage Leave", description: "Can create requests & leave types" },
-      { id: "leave:approve", name: "Approve Leave", description: "Can approve / reject leave" },
-    ],
-  },
-  {
-    module: "HR — Holidays",
-    permissions: [
-      { id: "holidays:view", name: "View Holidays", description: "Can view the holiday calendar" },
-      { id: "holidays:manage", name: "Manage Holidays", description: "Can add / edit holidays" },
-    ],
-  },
-  {
-    module: "HR — Payroll",
-    permissions: [
-      { id: "payroll:view", name: "View Payroll", description: "Can view payroll & payslips" },
-      { id: "payroll:process", name: "Process Payroll", description: "Can generate payroll runs" },
-      { id: "payroll:finalize", name: "Finalize Payroll", description: "Can finalize payroll runs" },
-    ],
-  },
-];
-
 const StaffManagement: React.FC = () => {
   useAuth(); // For authentication check
-  const [activeTab, setActiveTab] = useState<"staff" | "roles">("staff");
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
@@ -782,20 +129,8 @@ const StaffManagement: React.FC = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // Role Modal
-  const [showRoleModal, setShowRoleModal] = useState(false);
-  const [editingRole, setEditingRole] = useState<Role | null>(null);
-  const [roleForm, setRoleForm] = useState({
-    name: "",
-    description: "",
-    permissions: [] as string[],
-  });
-
   // Delete Confirmation
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    type: "staff" | "role";
-    id: string;
-  } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   // Auto-dismiss notifications
   useEffect(() => {
@@ -882,9 +217,8 @@ const StaffManagement: React.FC = () => {
       total: staffMembers.length,
       active: staffMembers.filter((s) => s.isActive).length,
       inactive: staffMembers.filter((s) => !s.isActive).length,
-      roles: roles.length,
     }),
-    [staffMembers, roles],
+    [staffMembers],
   );
 
   const getTimeAgo = (dateString?: string) => {
@@ -1020,42 +354,6 @@ const StaffManagement: React.FC = () => {
     setShowResetPasswordModal(true);
   };
 
-  const handleSaveRole = async () => {
-    if (!roleForm.name || roleForm.permissions.length === 0) {
-      setError("Please provide a role name and select at least one permission");
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-    try {
-      if (editingRole) {
-        await rolesApi.update(editingRole._id, {
-          name: roleForm.name,
-          description: roleForm.description,
-          permissions: roleForm.permissions,
-        });
-        setSuccess("Role updated successfully");
-      } else {
-        await rolesApi.create({
-          name: roleForm.name,
-          description: roleForm.description,
-          permissions: roleForm.permissions,
-        });
-        setSuccess("Role created successfully");
-      }
-
-      setShowRoleModal(false);
-      setEditingRole(null);
-      setRoleForm({ name: "", description: "", permissions: [] });
-      fetchData();
-    } catch (err: any) {
-      setError(err.message || "Failed to save role");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleToggleStaffStatus = async (staffId: string) => {
     try {
       const response = await staffApi.toggleStatus(staffId);
@@ -1074,57 +372,6 @@ const StaffManagement: React.FC = () => {
       fetchData();
     } catch (err: any) {
       setError(err.message || "Failed to delete staff member");
-    }
-  };
-
-  const handleDeleteRole = async (id: string) => {
-    const role = roles.find((r) => r._id === id);
-    if (role?.isSystem) {
-      setError("Cannot delete system role");
-      return;
-    }
-    if (role && role.staffCount > 0) {
-      setError("Cannot delete role with assigned staff members");
-      return;
-    }
-    try {
-      await rolesApi.delete(id);
-      setSuccess("Role deleted successfully");
-      setDeleteConfirm(null);
-      fetchData();
-    } catch (err: any) {
-      setError(err.message || "Failed to delete role");
-    }
-  };
-
-  const togglePermission = (permissionId: string) => {
-    setRoleForm((prev) => ({
-      ...prev,
-      permissions: prev.permissions.includes(permissionId)
-        ? prev.permissions.filter((p) => p !== permissionId)
-        : [...prev.permissions, permissionId],
-    }));
-  };
-
-  const toggleModulePermissions = (module: string) => {
-    const modulePerms =
-      PERMISSION_MODULES.find((m) => m.module === module)?.permissions.map(
-        (p) => p.id,
-      ) || [];
-    const allSelected = modulePerms.every((p) =>
-      roleForm.permissions.includes(p),
-    );
-
-    if (allSelected) {
-      setRoleForm((prev) => ({
-        ...prev,
-        permissions: prev.permissions.filter((p) => !modulePerms.includes(p)),
-      }));
-    } else {
-      setRoleForm((prev) => ({
-        ...prev,
-        permissions: [...new Set([...prev.permissions, ...modulePerms])],
-      }));
     }
   };
 
@@ -1149,16 +396,6 @@ const StaffManagement: React.FC = () => {
       listInApp: dp?.listInApp !== false,
     });
     setShowStaffModal(true);
-  };
-
-  const openEditRoleModal = (role: Role) => {
-    setEditingRole(role);
-    setRoleForm({
-      name: role.name || "",
-      description: role.description || "",
-      permissions: [...(role.permissions || [])],
-    });
-    setShowRoleModal(true);
   };
 
   // Helper to get display name
@@ -1217,38 +454,12 @@ const StaffManagement: React.FC = () => {
 
       {/* Header */}
       <PageHeader
-        title="Admin Management"
+        title="Team Management"
         subtitle="Manage admin staff, roles, and permissions"
       />
 
-      {/* Tabs */}
-      <div className="flex gap-4 border-b border-gray-200">
-        <button
-          onClick={() => setActiveTab("staff")}
-          className={`pb-3 px-1 font-medium text-sm border-b-2 transition-colors ${
-            activeTab === "staff"
-              ? "border-healwin-500 text-healwin-600"
-              : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          <Users className="inline-block w-4 h-4 mr-2" />
-          Admin Members ({stats.total})
-        </button>
-        <button
-          onClick={() => setActiveTab("roles")}
-          className={`pb-3 px-1 font-medium text-sm border-b-2 transition-colors ${
-            activeTab === "roles"
-              ? "border-healwin-500 text-healwin-600"
-              : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          <Key className="inline-block w-4 h-4 mr-2" />
-          Roles & Permissions ({stats.roles})
-        </button>
-      </div>
-
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -1291,24 +502,10 @@ const StaffManagement: React.FC = () => {
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Roles</p>
-              <p className="mt-1 text-2xl font-bold text-purple-600">
-                {stats.roles}
-              </p>
-            </div>
-            <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-xl">
-              <Key className="w-6 h-6 text-purple-600" />
-            </div>
-          </div>
-        </Card>
       </div>
 
-      {/* Staff Tab Content */}
-      {activeTab === "staff" && (
-        <div className="space-y-4">
+      {/* Staff list */}
+      <div className="space-y-4">
           {/* Filters */}
           <div className="flex flex-wrap gap-2">
             <SearchInput
@@ -1452,10 +649,7 @@ const StaffManagement: React.FC = () => {
                         {!staff.role?.isSystem && (
                           <button
                             onClick={() =>
-                              setDeleteConfirm({
-                                type: "staff",
-                                id: staff._id,
-                              })
+                              setDeleteConfirm(staff._id)
                             }
                             className="p-2 text-gray-400 rounded-lg hover:text-red-600 hover:bg-red-50"
                             title="Delete Staff"
@@ -1471,131 +665,7 @@ const StaffManagement: React.FC = () => {
               )}
             </TBody>
           </Table>
-        </div>
-      )}
-
-      {/* Roles Tab Content */}
-      {activeTab === "roles" && (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            <Button
-              icon={<Plus className="w-4 h-4" />}
-              onClick={() => {
-                setEditingRole(null);
-                setRoleForm({ name: "", description: "", permissions: [] });
-                setShowRoleModal(true);
-              }}
-            >
-              Create Role
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {roles.map((role) => (
-              <Card
-                key={role._id}
-                className="p-5 transition-shadow hover:shadow-md"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        role.isSystem ? "bg-purple-100" : "bg-blue-100"
-                      }`}
-                    >
-                      <Shield
-                        className={`w-5 h-5 ${role.isSystem ? "text-purple-600" : "text-blue-600"}`}
-                      />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-800">
-                        {role.name}
-                      </h3>
-                      {role.isSystem && (
-                        <span className="text-xs font-medium text-purple-600">
-                          System Role
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-1">
-                    {/* Permissions are editable on every role; system role
-                        names can't change (enforced in the modal + backend). */}
-                    <button
-                      onClick={() => openEditRoleModal(role)}
-                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
-                      title={role.isSystem ? "Edit permissions" : "Edit"}
-                      aria-label="Edit"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    {!role.isSystem && (
-                      <button
-                        onClick={() =>
-                          setDeleteConfirm({ type: "role", id: role._id })
-                        }
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                        title="Delete"
-                        aria-label="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <p className="mb-4 text-sm text-gray-500">{role.description}</p>
-
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">
-                    <Users className="inline-block w-4 h-4 mr-1" />
-                    {role.staffCount} members
-                  </span>
-                  <span className="text-gray-500">
-                    <Key className="inline-block w-4 h-4 mr-1" />
-                    {role.permissions.length} permissions
-                  </span>
-                </div>
-
-                <div className="pt-4 mt-4 border-t border-gray-100">
-                  <p className="mb-2 text-xs text-gray-500">Permissions:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {PERMISSION_MODULES.filter((m) =>
-                      m.permissions.some((p) =>
-                        role.permissions.includes(p.id),
-                      ),
-                    )
-                      .slice(0, 4)
-                      .map((m) => (
-                        <span
-                          key={m.module}
-                          className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded"
-                        >
-                          {m.module}
-                        </span>
-                      ))}
-                    {PERMISSION_MODULES.filter((m) =>
-                      m.permissions.some((p) =>
-                        role.permissions.includes(p.id),
-                      ),
-                    ).length > 4 && (
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
-                        +
-                        {PERMISSION_MODULES.filter((m) =>
-                          m.permissions.some((p) =>
-                            role.permissions.includes(p.id),
-                          ),
-                        ).length - 4}{" "}
-                        more
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
+      </div>
 
       {/* Staff Modal */}
       <Modal
@@ -1790,136 +860,6 @@ const StaffManagement: React.FC = () => {
           )}
         </div>
       </Modal>
-
-      {/* Role Modal */}
-      <Modal
-        open={showRoleModal}
-        onClose={() => setShowRoleModal(false)}
-        title={editingRole ? "Edit Role" : "Create New Role"}
-        size="lg"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setShowRoleModal(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveRole}
-              icon={saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : undefined}
-              disabled={
-                !roleForm.name || roleForm.permissions.length === 0 || saving
-              }
-            >
-              {editingRole ? "Save Changes" : "Create Role"}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Field
-              label="Role Name *"
-              hint={
-                editingRole?.isSystem
-                  ? "System role name can't be changed — only its permissions."
-                  : undefined
-              }
-            >
-              <Input
-                type="text"
-                value={roleForm.name}
-                onChange={(e) =>
-                  setRoleForm({ ...roleForm, name: e.target.value })
-                }
-                placeholder="e.g. Support Manager"
-                disabled={editingRole?.isSystem}
-              />
-            </Field>
-            <Field label="Description">
-              <Input
-                type="text"
-                value={roleForm.description}
-                onChange={(e) =>
-                  setRoleForm({ ...roleForm, description: e.target.value })
-                }
-                placeholder="Brief description of this role"
-              />
-            </Field>
-          </div>
-
-          <div>
-            <h4 className="mb-4 font-medium text-gray-800">
-              Permissions ({roleForm.permissions.length} selected)
-            </h4>
-            <div className="space-y-4">
-              {PERMISSION_MODULES.map((module) => {
-                const modulePerms = module.permissions.map((p) => p.id);
-                const selectedCount = modulePerms.filter((p) =>
-                  roleForm.permissions.includes(p),
-                ).length;
-                const allSelected = selectedCount === modulePerms.length;
-
-                return (
-                  <div
-                    key={module.module}
-                    className="overflow-hidden border border-gray-200 rounded-xl"
-                  >
-                    <div
-                      className="flex items-center justify-between p-3 cursor-pointer bg-gray-50"
-                      onClick={() => toggleModulePermissions(module.module)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-5 h-5 rounded border flex items-center justify-center ${
-                            allSelected
-                              ? "bg-healwin-500 border-healwin-500"
-                              : selectedCount > 0
-                                ? "bg-healwin-100 border-healwin-300"
-                                : "border-gray-300"
-                          }`}
-                        >
-                          {allSelected && (
-                            <Check className="w-3 h-3 text-white" />
-                          )}
-                        </div>
-                        <span className="font-medium text-gray-800">
-                          {module.module}
-                        </span>
-                      </div>
-                      <span className="text-sm text-gray-500">
-                        {selectedCount}/{modulePerms.length}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 p-3 md:grid-cols-2">
-                      {module.permissions.map((perm) => (
-                        <label
-                          key={perm.id}
-                          className="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-gray-50"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={roleForm.permissions.includes(perm.id)}
-                            onChange={() => togglePermission(perm.id)}
-                            className="w-4 h-4 rounded text-healwin-500 focus:ring-healwin-500"
-                          />
-                          <div>
-                            <p className="text-sm font-medium text-gray-700">
-                              {perm.name}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {perm.description}
-                            </p>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </Modal>
-
       {/* Reset Password Modal */}
       <Modal
         open={showResetPasswordModal && !!resetPasswordStaff}
@@ -2045,10 +985,7 @@ const StaffManagement: React.FC = () => {
             <Button
               variant="danger"
               onClick={() =>
-                deleteConfirm &&
-                (deleteConfirm.type === "staff"
-                  ? handleDeleteStaff(deleteConfirm.id)
-                  : handleDeleteRole(deleteConfirm.id))
+                deleteConfirm && handleDeleteStaff(deleteConfirm)
               }
             >
               Delete
@@ -2062,13 +999,11 @@ const StaffManagement: React.FC = () => {
               <Trash2 className="w-8 h-8 text-red-600" />
             </div>
             <h3 className="mb-2 text-lg font-semibold text-gray-800">
-              Delete {deleteConfirm.type === "staff" ? "Staff Member" : "Role"}?
+              Delete Staff Member?
             </h3>
             <p className="mb-2 text-gray-500">
-              This action cannot be undone.
-              {deleteConfirm.type === "staff"
-                ? " The staff member will lose access immediately."
-                : " Make sure no staff members are assigned to this role."}
+              This action cannot be undone. The staff member will lose access
+              immediately.
             </p>
           </div>
         )}

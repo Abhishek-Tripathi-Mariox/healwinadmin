@@ -140,6 +140,11 @@ export const PERMISSIONS = {
   PHARMACIES_UPDATE: "pharmacies:update",
   PHARMACIES_DELETE: "pharmacies:delete",
   PHARMACIES_APPROVE: "pharmacies:approve",
+  LABS_VIEW: "labs:view",
+  LABS_CREATE: "labs:create",
+  LABS_UPDATE: "labs:update",
+  LABS_DELETE: "labs:delete",
+  LABS_APPROVE: "labs:approve",
   IVR_VIEW: "ivr:view",
   IVR_MANAGE: "ivr:manage",
   // HR & Payroll
@@ -198,7 +203,7 @@ export const PERMISSIONS = {
 export const SIDEBAR_PERMISSION_MAP: Record<string, string[]> = {
   sos: [PERMISSIONS.SOS_VIEW],
   "sos-alerts": [PERMISSIONS.SOS_VIEW],
-  staff: [PERMISSIONS.STAFF_VIEW, PERMISSIONS.ROLES_VIEW],
+  staff: [PERMISSIONS.STAFF_VIEW],
   careers: [PERMISSIONS.CAREERS_VIEW],
   applications: [PERMISSIONS.APPLICATIONS_VIEW],
   team: [PERMISSIONS.TEAM_VIEW],
@@ -221,6 +226,10 @@ export const SIDEBAR_PERMISSION_MAP: Record<string, string[]> = {
   gallery: [PERMISSIONS.GALLERY_VIEW],
   submissions: [PERMISSIONS.SUBMISSIONS_VIEW],
   "logo-settings": [PERMISSIONS.LOGO_SETTINGS_VIEW],
+  // Roles & Permissions is its own page under System — gated on roles:view
+  // alone, separate from the Admin Members page (staff:view) it used to be a
+  // tab of.
+  roles: [PERMISSIONS.ROLES_VIEW],
   "activity-logs": [PERMISSIONS.ACTIVITY_LOGS_VIEW],
   "email-templates": [PERMISSIONS.EMAIL_TEMPLATES_VIEW],
   notifications: [PERMISSIONS.NOTIFICATIONS_VIEW, PERMISSIONS.NOTIFICATIONS_SEND],
@@ -254,6 +263,8 @@ export const SIDEBAR_PERMISSION_MAP: Record<string, string[]> = {
   opd: [PERMISSIONS.OPD_VIEW],
   ipd: [PERMISSIONS.IPD_VIEW],
   pharmacies: [PERMISSIONS.PHARMACIES_VIEW],
+  labs: [PERMISSIONS.LABS_VIEW],
+  "pharmacy-dispense": [PERMISSIONS.INVENTORY_VIEW],
   "ivr-escalations": [PERMISSIONS.IVR_VIEW],
   "ambulance-requests": [PERMISSIONS.SOS_VIEW],
   // HR & Payroll

@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { adminSocket } from "../services/socket";
 import {
   ipdApi,
   hospitalPatientApi,
@@ -126,7 +128,7 @@ export default function IPDManagement() {
     <div className="p-6">
       <PageHeader
         title="IPD — In-Patient Department"
-        subtitle="Admissions, beds, transfers & discharge — Doctor Panel (HMS)"
+        subtitle="Admissions, beds, transfers & discharge — Hospital (HMS)"
         actions={
           <>
             {tab === "admissions" && canManage && (
@@ -630,11 +632,97 @@ function AdmissionDrawer({
   onChanged: () => void;
   onDischarged: () => void;
 }) {
+  const navigate = useNavigate();
   const [vital, setVital] = useState({ bloodPressure: "", pulse: "", temperature: "", spo2: "" });
   const [med, setMed] = useState({ drug: "", dose: "", route: "" });
   const [note, setNote] = useState("");
   const [mar, setMar] = useState<any[]>([]);
   const [marLoading, setMarLoading] = useState(false);
+
+  // Running charges for the stay so far — bed-days + pharmacy + procedures,
+  // computed live on the server. Previously the bill only appeared at
+  // discharge, so the ward could not see the total or take an advance.
+  const [charges, setCharges] = useState<any>(null);
+  const [payOpen, setPayOpen] = useState(false);
+  const [payMethod, setPayMethod] = useState("cash");
+  const [payAmount, setPayAmount] = useState("");
+  const [payRef, setPayRef] = useState("");
+  const [payErr, setPayErr] = useState("");
+  const [paying, setPaying] = useState(false);
+
+  const loadCharges = useCallback(async () => {
+    try {
+      const res = await ipdApi.charges(admission._id);
+      setCharges(res.data || null);
+    } catch {
+      setCharges(null);
+    }
+  }, [admission._id]);
+
+  useEffect(() => {
+    loadCharges();
+  }, [loadCharges]);
+
+  // Live: refresh the running total when a charge lands on (or a payment hits)
+  // this stay's bill from anywhere else — the pharmacy counter dispensing, the
+  // lab reporting a test, a doctor finalising a procedure.
+  useEffect(() => {
+    adminSocket.connect();
+    const off = adminSocket.on("billing:updated", (raw) => {
+      const d = raw as { admissionId?: string | null; patientId?: string };
+      const pid = String(admission.patientId?._id || admission.patientId || "");
+      if (
+        d?.admissionId === String(admission._id) ||
+        (!d?.admissionId && d?.patientId === pid)
+      ) {
+        loadCharges();
+      }
+    });
+    return off;
+  }, [admission._id, admission.patientId, loadCharges]);
+
+  const collect = async () => {
+    const amount = Number(payAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPayErr("Enter a valid amount.");
+      return;
+    }
+    setPaying(true);
+    setPayErr("");
+    try {
+      const invoiceId = charges?.invoice?._id;
+      if (!invoiceId) {
+        // No bill raised yet (the draft is created at discharge) — an advance
+        // needs something to sit against, so make the bill from what has
+        // accrued so far, then take the payment against it.
+        const gen = await billingApi.generate({
+          patientId: admission.patientId?._id || admission.patientId,
+          admissionId: admission._id,
+        });
+        const newId = gen.data?.invoice?._id;
+        if (!newId) throw new Error("Could not raise a bill for this stay");
+        await billingApi.recordPayment(newId, {
+          method: payMethod,
+          amount,
+          reference: payRef.trim() || undefined,
+        });
+      } else {
+        await billingApi.recordPayment(invoiceId, {
+          method: payMethod,
+          amount,
+          reference: payRef.trim() || undefined,
+        });
+      }
+      setPayOpen(false);
+      setPayAmount("");
+      setPayRef("");
+      loadCharges();
+    } catch (e: any) {
+      setPayErr(e?.message || "Failed to record payment");
+    } finally {
+      setPaying(false);
+    }
+  };
 
   const loadMar = useCallback(async () => {
     setMarLoading(true);
@@ -754,6 +842,19 @@ function AdmissionDrawer({
               </Button>
             </div>
           )}
+          {/* Ward round -> a real IPD encounter on the patient's record, the
+              same jump OPD's "Consult" makes. encounterType=IPD matters: the
+              admission's procedure billing only picks up IPD encounters. */}
+          <Button
+            className="w-full"
+            onClick={() => {
+              const pid = admission.patientId?._id || admission.patientId;
+              if (!pid) return alert("This admission has no linked patient.");
+              navigate(`/admin/patients/${pid}?newEncounter=1&encounterType=IPD`);
+            }}
+          >
+            Consult / Ward round
+          </Button>
           {canManage && (
             <Button
               variant="subtle"
@@ -763,6 +864,70 @@ function AdmissionDrawer({
               Generate Bill (bed charges)
             </Button>
           )}
+          {/* Live running charges — the IPD equivalent of the OPD payment
+              column: what the stay has cost so far, and collect against it
+              mid-stay rather than waiting for discharge. */}
+          {charges && (
+            <div className="rounded-lg border border-gray-200 p-3 text-sm">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="font-semibold text-gray-700">
+                  Charges so far
+                </span>
+                {charges.invoice ? (
+                  <Badge tone={charges.invoice.status === "paid" ? "success" : "warning"} dot>
+                    {charges.invoice.status}
+                  </Badge>
+                ) : (
+                  <span className="text-xs text-gray-400">no bill raised yet</span>
+                )}
+              </div>
+
+              {(charges.lineItems || []).length === 0 ? (
+                <p className="text-gray-500">Nothing billable yet.</p>
+              ) : (
+                <div className="mb-2 space-y-0.5">
+                  {charges.lineItems.map((li: any, i: number) => (
+                    <div key={i} className="flex justify-between text-gray-600">
+                      <span className="truncate pr-2">{li.description}</span>
+                      <span className="shrink-0">₹{li.amount}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex justify-between border-t border-gray-100 pt-1 font-semibold text-gray-900">
+                <span>Accrued</span>
+                <span>₹{charges.accrued}</span>
+              </div>
+              {charges.invoice && (
+                <>
+                  <div className="flex justify-between text-green-700">
+                    <span>Paid</span>
+                    <span>₹{charges.invoice.amountPaid}</span>
+                  </div>
+                  <div className="flex justify-between text-red-700">
+                    <span>Due</span>
+                    <span>₹{charges.invoice.balanceDue}</span>
+                  </div>
+                </>
+              )}
+
+              {canManage && (
+                <Button
+                  size="sm"
+                  className="mt-2 w-full"
+                  onClick={() => {
+                    setPayErr("");
+                    setPayAmount(String(charges.outstanding ?? ""));
+                    setPayOpen(true);
+                  }}
+                >
+                  Collect payment
+                </Button>
+              )}
+            </div>
+          )}
+
           {admission.status === "discharged" && (
             <Button
               variant="subtle"
@@ -772,6 +937,62 @@ function AdmissionDrawer({
               Download Discharge Summary (PDF)
             </Button>
           )}
+
+          {/* Collect an advance / part payment against the stay */}
+          <Modal
+            open={payOpen}
+            onClose={() => setPayOpen(false)}
+            title="Collect Payment"
+            size="sm"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setPayOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={collect} disabled={paying}>
+                  {paying ? "Saving…" : "Record Payment"}
+                </Button>
+              </>
+            }
+          >
+            <div className="space-y-3">
+              {payErr && <Alert tone="danger">{payErr}</Alert>}
+              <p className="text-sm text-gray-500">
+                {charges?.invoice
+                  ? `Against ${charges.invoice.invoiceNo} — ₹${charges.invoice.balanceDue} due.`
+                  : `No bill exists yet for this stay. Recording a payment will raise one from the ₹${charges?.accrued ?? 0} accrued so far.`}
+              </p>
+              <Field label="Payment mode">
+                <Select
+                  value={payMethod}
+                  onChange={(e) => setPayMethod(e.target.value)}
+                >
+                  {["cash", "upi", "card", "insurance", "wallet"].map((m) => (
+                    <option key={m} value={m}>
+                      {m === "upi" ? "UPI" : m.charAt(0).toUpperCase() + m.slice(1)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Amount" hint="Lower it to take a part payment / advance.">
+                <Input
+                  type="number"
+                  min="0"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                />
+              </Field>
+              {payMethod !== "cash" && (
+                <Field label="Reference">
+                  <Input
+                    value={payRef}
+                    onChange={(e) => setPayRef(e.target.value)}
+                    placeholder="UPI / card txn id"
+                  />
+                </Field>
+              )}
+            </div>
+          </Modal>
 
           {/* Vitals */}
           <section>

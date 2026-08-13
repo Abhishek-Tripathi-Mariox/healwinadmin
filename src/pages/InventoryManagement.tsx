@@ -487,7 +487,7 @@ export default function InventoryManagement() {
     <div className="p-6">
       <PageHeader
         title="Inventory Management"
-        subtitle="Supplies, consumables & equipment — Doctor Panel (HMS)"
+        subtitle="Supplies, consumables & equipment — Hospital (HMS)"
         actions={
           <div className="flex gap-2">
             <Button variant="secondary" onClick={openValuation}>Valuation</Button>
