@@ -448,7 +448,6 @@ export const dashboardApi = {
   getStats: () => fetchWithAuth("/admin/dashboard/stats"),
 
   // Get recent activity
-  getRecentActivity: () => fetchWithAuth("/admin/dashboard/activity"),
 };
 
 // ==================== REPORTS API ====================
@@ -2019,7 +2018,13 @@ export const staffDirectoryApi = {
 };
 
 export const doctorRosterApi = {
-  list: (date: string) => fetchWithAuth(`/admin/doctor-roster?date=${date}`),
+  /** Single day, or a from..to range (the backend accepts both). */
+  list: (date: string, to?: string) =>
+    fetchWithAuth(
+      to
+        ? `/admin/doctor-roster?from=${date}&to=${to}`
+        : `/admin/doctor-roster?date=${date}`,
+    ),
   add: (data: { doctorId: string; date: string; shift: string; isOnCall?: boolean; department?: string; notes?: string }) =>
     fetchWithAuth("/admin/doctor-roster", { method: "POST", body: JSON.stringify(data) }),
   remove: (id: string) => fetchWithAuth(`/admin/doctor-roster/${id}`, { method: "DELETE" }),

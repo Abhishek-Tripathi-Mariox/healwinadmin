@@ -52,6 +52,9 @@ interface DiagnosticOrder {
   attachments?: { url: string; label: string; uploadedAt: string }[];
   orderedAt?: string;
   reportedAt?: string;
+  orderedByAdminId?: { fullName?: string } | string;
+  reportedByAdminId?: { fullName?: string } | string;
+  labId?: { name?: string } | string;
 }
 
 interface Encounter {
@@ -134,6 +137,7 @@ export default function PatientDetail() {
     name: string;
   }>({ category: "lab", name: "" });
   const [resultDraft, setResultDraft] = useState<Record<string, string>>({});
+  const [notesDraft, setNotesDraft] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<EncounterPayload>({ ...emptyEncounter });
@@ -149,6 +153,12 @@ export default function PatientDetail() {
   // Vitals recorded by the nurse at check-in — read-only for the doctor.
   const [apptVitals, setApptVitals] = useState<any>(null);
   const [showMore, setShowMore] = useState(false);
+  // Amending an existing encounter. A finalized clinical note is a legal
+  // record, so an edit is a tracked correction with a stated reason — the API
+  // enforces this; previously there was no UI to reach it at all and a saved
+  // encounter simply could not be opened.
+  const [amendingId, setAmendingId] = useState<string | null>(null);
+  const [amendReason, setAmendReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -198,9 +208,13 @@ export default function PatientDetail() {
     try {
       await diagnosticsApi.update(orderId, {
         resultValue: resultDraft[orderId] || "",
+        // resultNotes existed on the model and the type but was never sent or
+        // shown — the interpretation/remark half of a report was being lost.
+        resultNotes: notesDraft[orderId] || "",
         status: "reported",
       });
       setResultDraft((d) => ({ ...d, [orderId]: "" }));
+      setNotesDraft((d) => ({ ...d, [orderId]: "" }));
       load();
     } catch (e: any) {
       alert(e.message || "Failed to save result");
@@ -244,6 +258,31 @@ export default function PatientDetail() {
     load();
   }, [load]);
 
+  /** Open a saved encounter in the same form, in amendment mode. */
+  const openAmendEncounter = (enc: any) => {
+    setAmendingId(enc._id);
+    setAmendReason("");
+    setError("");
+    setForm({
+      ...emptyEncounter,
+      encounterType: enc.encounterType || "OPD",
+      chiefComplaint: enc.chiefComplaint || "",
+      vitals: enc.vitals || {},
+      soap: enc.soap || {},
+      summary: enc.summary || "",
+      treatmentPlan: enc.treatmentPlan || "",
+      prescriptions: enc.prescriptions || [],
+      procedures: enc.procedures || [],
+      notes: enc.notes || "",
+      followUpAt: enc.followUpAt ? String(enc.followUpAt).slice(0, 10) : undefined,
+    });
+    setDiagnosesText((enc.diagnoses || []).join(", "));
+    setLabOrders(enc.labOrders || []);
+    setImagingOrders(enc.imagingOrders || []);
+    setShowMore(false);
+    setShowForm(true);
+  };
+
   const openNewEncounter = () => {
     setForm({ ...emptyEncounter, patientId: id });
     setDiagnosesText("");
@@ -255,6 +294,8 @@ export default function PatientDetail() {
     setDrugResults([]);
     setShowMore(false);
     setError("");
+    setAmendingId(null);
+    setAmendReason("");
     setShowForm(true);
   };
 
@@ -309,9 +350,21 @@ export default function PatientDetail() {
     return () => clearTimeout(t);
   }, [drugQuery, showForm]);
 
-  const addLabOrder = (name: string, category: "lab" | "imaging" = "lab") => {
+  // Catalogue detail for the tests picked, keyed by name — the order itself
+  // only stores the name (labOrders is string[]), so without this the chip read
+  // as a bare word with no indication of what was actually ordered or its cost.
+  const [testMeta, setTestMeta] = useState<
+    Record<string, { category?: string; price?: number; sampleType?: string }>
+  >({});
+
+  const addLabOrder = (
+    name: string,
+    category: "lab" | "imaging" = "lab",
+    meta?: { category?: string; price?: number; sampleType?: string },
+  ) => {
     const setter = category === "lab" ? setLabOrders : setImagingOrders;
     setter((prev) => (prev.includes(name) ? prev : [...prev, name]));
+    if (meta) setTestMeta((prev) => ({ ...prev, [name]: meta }));
     setTestQuery("");
   };
 
@@ -435,6 +488,23 @@ export default function PatientDetail() {
     setSaving(true);
     setError("");
     try {
+      if (amendingId) {
+        await emrApi.update(amendingId, {
+          ...form,
+          diagnoses: csvToArray(diagnosesText),
+          labOrders,
+          imagingOrders,
+          prescriptions: (form.prescriptions || []).filter((p) => p.drug.trim()),
+          procedures: (form.procedures || []).filter((p) => p.name.trim()),
+          followUpAt: form.followUpAt || undefined,
+          amendmentReason: amendReason.trim(),
+        } as any);
+        setShowForm(false);
+        setAmendingId(null);
+        setAmendReason("");
+        load();
+        return;
+      }
       const res = await emrApi.create({
         ...form,
         patientId: id,
@@ -755,12 +825,56 @@ export default function PatientDetail() {
                       </span>
                     </div>
 
-                    {d.resultValue && (
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">
-                        <span className="text-gray-400">Result: </span>
-                        {d.resultValue}
-                      </p>
+                    {(d.resultValue || d.resultNotes) && (
+                      <div className="mt-2 rounded-lg bg-gray-50 p-3">
+                        {d.resultValue && (
+                          <p className="whitespace-pre-wrap text-sm text-gray-900">
+                            <span className="text-gray-400">Result: </span>
+                            {d.resultValue}
+                          </p>
+                        )}
+                        {d.resultNotes && (
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
+                            <span className="text-gray-400">
+                              Interpretation:{" "}
+                            </span>
+                            {d.resultNotes}
+                          </p>
+                        )}
+                      </div>
                     )}
+
+                    {/* Audit trail — a report is only meaningful with who
+                        ordered it, which lab ran it, and who signed it off.
+                        None of this was shown, so the card read as a bare
+                        line of text. */}
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-400">
+                      {d.orderedAt && (
+                        <span>
+                          Ordered {new Date(d.orderedAt).toLocaleString()}
+                          {typeof d.orderedByAdminId === "object" &&
+                            d.orderedByAdminId?.fullName &&
+                            ` by Dr. ${d.orderedByAdminId.fullName}`}
+                        </span>
+                      )}
+                      {typeof d.labId === "object" && d.labId?.name && (
+                        <span>Lab: {d.labId.name}</span>
+                      )}
+                      {d.reportedAt && (
+                        <span>
+                          Reported {new Date(d.reportedAt).toLocaleString()}
+                          {typeof d.reportedByAdminId === "object" &&
+                            d.reportedByAdminId?.fullName &&
+                            ` by ${d.reportedByAdminId.fullName}`}
+                        </span>
+                      )}
+                      {d.attachments && d.attachments.length > 0 && (
+                        <span>
+                          {d.attachments.length} report file
+                          {d.attachments.length === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </div>
 
                     {d.attachments && d.attachments.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -788,7 +902,18 @@ export default function PatientDetail() {
                               [d._id]: e.target.value,
                             }))
                           }
-                          placeholder="Enter result / findings"
+                          placeholder="Result value — e.g. Hb 13.2 g/dL"
+                          className="h-9 min-w-[12rem] flex-1"
+                        />
+                        <Input
+                          value={notesDraft[d._id] || ""}
+                          onChange={(e) =>
+                            setNotesDraft((s) => ({
+                              ...s,
+                              [d._id]: e.target.value,
+                            }))
+                          }
+                          placeholder="Interpretation / remarks (optional)"
                           className="h-9 min-w-[12rem] flex-1"
                         />
                         <Button size="sm" onClick={() => saveResult(d._id)}>
@@ -916,12 +1041,20 @@ export default function PatientDetail() {
                         .join(", ")}
                     </p>
                   )}
-                  {(canDispense || canBill) && (
+                  {(canDispense || canBill || hasPermission(PERMISSIONS.EMR_UPDATE)) && (
                     <div className="flex gap-3 pt-3 mt-3 border-t">
-                      {/* Dispensing moved to the Pharmacy Dispense queue —
-                          prescriptions are raised there automatically when the
-                          encounter is finalised. Two entry points meant the
-                          same Rx could be dispensed twice. */}
+                      {/* A saved encounter previously had no action at all —
+                          clicking it did nothing. Amending is the correct way
+                          to change a finalized note: tracked, with a reason. */}
+                      {hasPermission(PERMISSIONS.EMR_UPDATE) && (
+                        <button
+                          onClick={() => openAmendEncounter(enc)}
+                          className="text-xs font-medium text-healwin-700 hover:underline"
+                          title="Open this encounter to review it or record a tracked correction"
+                        >
+                          Open / amend
+                        </button>
+                      )}
                       {enc.prescriptions?.length ? (
                         <button
                           onClick={() =>
@@ -934,6 +1067,9 @@ export default function PatientDetail() {
                           Print prescription (PDF)
                         </button>
                       ) : null}
+                      {/* Dispensing lives in the Pharmacy Dispense queue —
+                          raised automatically when the encounter is finalised.
+                          Two entry points meant one Rx could be dispensed twice. */}
                       {canDispense && enc.prescriptions?.length ? (
                         <button
                           onClick={() => navigate("/admin/pharmacy-dispense")}
@@ -972,21 +1108,41 @@ export default function PatientDetail() {
       <Modal
         open={showForm}
         onClose={() => setShowForm(false)}
-        title="New Encounter (SOAP)"
+        title={amendingId ? "Amend Encounter (SOAP)" : "New Encounter (SOAP)"}
         size="lg"
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowForm(false)}>
               Cancel
             </Button>
-            <Button onClick={submitEncounter} disabled={saving}>
-              {saving ? "Saving…" : "Save Encounter"}
+            <Button
+              onClick={submitEncounter}
+              disabled={saving || (!!amendingId && !amendReason.trim())}
+            >
+              {saving
+                ? "Saving…"
+                : amendingId
+                  ? "Save Amendment"
+                  : "Save Encounter"}
             </Button>
           </>
         }
       >
         <form onSubmit={submitEncounter} className="space-y-5">
           {error && <Alert tone="danger">{error}</Alert>}
+
+          {amendingId && (
+            <Field
+              label="Reason for amendment *"
+              hint="This note is already finalized. The change is recorded with the previous values, who changed them and why."
+            >
+              <Input
+                value={amendReason}
+                onChange={(e) => setAmendReason(e.target.value)}
+                placeholder="e.g. Corrected dosage recorded in error"
+              />
+            </Field>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Encounter type">
@@ -1122,7 +1278,16 @@ export default function PatientDetail() {
                       key={`l-${n}`}
                       className="flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-700"
                     >
+                      <span className="font-semibold">LAB</span>
                       {n}
+                      {testMeta[n]?.sampleType ? (
+                        <span className="opacity-70">
+                          · {testMeta[n].sampleType}
+                        </span>
+                      ) : null}
+                      {testMeta[n]?.price ? (
+                        <span className="opacity-70">₹{testMeta[n].price}</span>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() =>
@@ -1140,7 +1305,11 @@ export default function PatientDetail() {
                       key={`i-${n}`}
                       className="flex items-center gap-1 rounded bg-purple-50 px-2 py-0.5 text-xs text-purple-700"
                     >
+                      <span className="font-semibold">IMAGING</span>
                       {n}
+                      {testMeta[n]?.price ? (
+                        <span className="opacity-70">₹{testMeta[n].price}</span>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() =>
@@ -1189,14 +1358,25 @@ export default function PatientDetail() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => addLabOrder(t.name, "lab")}
+                            onClick={() =>
+                              addLabOrder(t.name, "lab", {
+                                category: t.category,
+                                price: t.price,
+                                sampleType: t.sampleType,
+                              })
+                            }
                           >
                             + Lab
                           </Button>
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => addLabOrder(t.name, "imaging")}
+                            onClick={() =>
+                              addLabOrder(t.name, "imaging", {
+                                category: t.category,
+                                price: t.price,
+                              })
+                            }
                           >
                             + Imaging
                           </Button>

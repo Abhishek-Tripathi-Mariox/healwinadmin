@@ -108,6 +108,11 @@ export default function OPDManagement() {
   const [loading, setLoading] = useState(false);
   const [doctors, setDoctors] = useState<any[]>([]);
   const [doctorsError, setDoctorsError] = useState("");
+  // The board had only a date filter; the backend list already accepted
+  // doctorId and status, they were simply never wired to anything.
+  const [doctorFilter, setDoctorFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
 
   // Nurse / front-desk vitals, captured at check-in. Deliberately here and not
   // on the doctor's encounter form — triage records vitals, the doctor reads them.
@@ -145,12 +150,29 @@ export default function OPDManagement() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await opdApi.list({ date });
+      const res = await opdApi.list({
+        date,
+        ...(doctorFilter ? { doctorId: doctorFilter } : {}),
+        ...(statusFilter ? { status: statusFilter } : {}),
+      });
       setAppts(res.data?.appointments || []);
     } finally {
       setLoading(false);
     }
-  }, [date]);
+  }, [date, doctorFilter, statusFilter]);
+
+  // Name / phone / token search across the day's list. Client-side because the
+  // list is already scoped to one day — no round trip needed.
+  const visibleAppts = appts.filter((a) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (a.patientId?.fullName || "").toLowerCase().includes(q) ||
+      (a.patientId?.phone || "").includes(q) ||
+      (a.patientId?.patientId || "").toLowerCase().includes(q) ||
+      String(a.tokenNumber) === q
+    );
+  });
 
   useEffect(() => {
     load();
@@ -309,8 +331,52 @@ export default function OPDManagement() {
           onChange={(e) => setDate(e.target.value)}
           className="w-auto"
         />
+        <Select
+          value={doctorFilter}
+          onChange={(e) => setDoctorFilter(e.target.value)}
+          className="w-52"
+        >
+          <option value="">All doctors</option>
+          {doctors.map((d) => (
+            <option key={d._id} value={d._id}>
+              {d.fullName}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="w-44"
+        >
+          <option value="">All statuses</option>
+          <option value="booked">Booked</option>
+          <option value="checked_in">Checked in</option>
+          <option value="in_consultation">In consultation</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+          <option value="no_show">No show</option>
+        </Select>
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search patient, phone or token…"
+          className="w-64"
+        />
+        {(doctorFilter || statusFilter || search) && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setDoctorFilter("");
+              setStatusFilter("");
+              setSearch("");
+            }}
+          >
+            Clear
+          </Button>
+        )}
         <span className="text-sm text-gray-500">
-          {appts.length} appointment(s)
+          {visibleAppts.length} appointment(s)
         </span>
       </div>
 
@@ -328,10 +394,10 @@ export default function OPDManagement() {
         <TBody>
           {loading ? (
             <TableState colSpan={8}>Loading…</TableState>
-          ) : appts.length === 0 ? (
+          ) : visibleAppts.length === 0 ? (
             <TableState colSpan={8}>No appointments for this day.</TableState>
           ) : (
-            appts.map((a) => (
+            visibleAppts.map((a) => (
               <TR key={a._id}>
                 <Td className="font-semibold text-gray-900">#{a.tokenNumber}</Td>
                 <Td>

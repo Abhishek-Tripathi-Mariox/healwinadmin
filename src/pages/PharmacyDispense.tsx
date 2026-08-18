@@ -160,8 +160,6 @@ export default function PharmacyDispense() {
 
   return (
     <div className="space-y-6 p-6">
-      {error && <Alert tone="danger">{error}</Alert>}
-
       <PageHeader
         title="Pharmacy — Dispense Queue"
         subtitle="Prescriptions raised by doctors, fulfilled against hospital stock"
@@ -184,6 +182,18 @@ export default function PharmacyDispense() {
 
       {loading ? (
         <Card className="p-10 text-center text-gray-500">Loading…</Card>
+      ) : error ? (
+        // A failed load must NOT claim the queue is empty — that asserts
+        // something we don't know. "Nothing in the queue" was showing whenever
+        // the API was unreachable, which reads as "no prescriptions" when the
+        // truth is "we couldn't ask".
+        <Card className="p-10 text-center">
+          <p className="font-medium text-red-700">Could not load the queue</p>
+          <p className="mt-1 text-sm text-gray-500">{error}</p>
+          <Button size="sm" className="mt-3" onClick={load}>
+            Retry
+          </Button>
+        </Card>
       ) : items.length === 0 ? (
         <Card className="p-10 text-center text-gray-500">
           Nothing in the queue. Prescriptions appear here as soon as a doctor

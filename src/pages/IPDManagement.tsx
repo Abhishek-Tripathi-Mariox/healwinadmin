@@ -36,6 +36,7 @@ interface Bed {
   ward: string;
   bedNumber: string;
   bedType?: string;
+  dailyCharge?: number;
   status: "available" | "occupied" | "maintenance";
   currentAdmissionId?: any;
 }
@@ -71,6 +72,9 @@ export default function IPDManagement() {
 
   const [showAdmit, setShowAdmit] = useState(false);
   const [showBed, setShowBed] = useState(false);
+  // Bed cards were inert — clicking one did nothing at all. This is the detail
+  // they open into.
+  const [bedDetail, setBedDetail] = useState<Bed | null>(null);
   const [wardForm, setWardForm] = useState<Ward | null | "new">(null);
   const [detail, setDetail] = useState<any>(null);
 
@@ -272,7 +276,14 @@ export default function IPDManagement() {
               <Card
                 key={b._id}
                 padded
+                onClick={() => setBedDetail(b)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e: React.KeyboardEvent) => {
+                  if (e.key === "Enter" || e.key === " ") setBedDetail(b);
+                }}
                 className={cn(
+                  "cursor-pointer transition-shadow hover:shadow-md",
                   b.status === "available"
                     ? "border-emerald-200 bg-emerald-50"
                     : b.status === "occupied"
@@ -323,6 +334,150 @@ export default function IPDManagement() {
           }}
         />
       )}
+      {/* Bed detail — what a bed card opens into. Occupied beds surface who is
+          in them and jump to that admission; free beds offer the status
+          actions that used to require going elsewhere. */}
+      <Modal
+        open={!!bedDetail}
+        onClose={() => setBedDetail(null)}
+        title={bedDetail ? `${bedDetail.ward} · Bed ${bedDetail.bedNumber}` : ""}
+        size="sm"
+        footer={
+          <Button variant="secondary" onClick={() => setBedDetail(null)}>
+            Close
+          </Button>
+        }
+      >
+        {bedDetail && (
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center gap-2">
+              <Badge
+                tone={
+                  bedDetail.status === "available"
+                    ? "success"
+                    : bedDetail.status === "occupied"
+                      ? "danger"
+                      : "neutral"
+                }
+                dot
+              >
+                {bedDetail.status}
+              </Badge>
+              <span className="capitalize text-gray-600">
+                {(bedDetail.bedType || "general").replace("_", " ")}
+              </span>
+              {bedDetail.dailyCharge ? (
+                <span className="ml-auto font-medium text-gray-900">
+                  ₹{bedDetail.dailyCharge}/day
+                </span>
+              ) : (
+                <span
+                  className="ml-auto text-xs text-amber-600"
+                  title="Without a daily charge this bed contributes nothing to the stay's bill."
+                >
+                  no daily charge set
+                </span>
+              )}
+            </div>
+
+            {bedDetail.status === "occupied" && bedDetail.currentAdmissionId ? (
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="font-semibold text-gray-900">
+                  {bedDetail.currentAdmissionId.patientId?.fullName || "Patient"}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {bedDetail.currentAdmissionId.patientId?.patientId || ""}
+                  {bedDetail.currentAdmissionId.admissionNo
+                    ? ` · ${bedDetail.currentAdmissionId.admissionNo}`
+                    : ""}
+                </p>
+                {bedDetail.currentAdmissionId.admittedAt && (
+                  <p className="mt-1 text-gray-600">
+                    Admitted{" "}
+                    {new Date(
+                      bedDetail.currentAdmissionId.admittedAt,
+                    ).toLocaleString()}{" "}
+                    ·{" "}
+                    {Math.max(
+                      1,
+                      Math.ceil(
+                        (Date.now() -
+                          new Date(
+                            bedDetail.currentAdmissionId.admittedAt,
+                          ).getTime()) /
+                          86400000,
+                      ),
+                    )}{" "}
+                    day(s)
+                  </p>
+                )}
+                {bedDetail.currentAdmissionId.attendingDoctorId?.fullName && (
+                  <p className="text-gray-600">
+                    Under Dr.{" "}
+                    {bedDetail.currentAdmissionId.attendingDoctorId.fullName}
+                  </p>
+                )}
+                {bedDetail.currentAdmissionId.reason && (
+                  <p className="text-gray-600">
+                    Reason: {bedDetail.currentAdmissionId.reason}
+                  </p>
+                )}
+                <Button
+                  size="sm"
+                  className="mt-2"
+                  onClick={async () => {
+                    try {
+                      const res = await ipdApi.admissionDetail(
+                        bedDetail.currentAdmissionId._id,
+                      );
+                      setBedDetail(null);
+                      setTab("admissions");
+                      setDetail(res.data?.admission);
+                    } catch {
+                      alert("Could not open this admission.");
+                    }
+                  }}
+                >
+                  Open admission
+                </Button>
+              </div>
+            ) : (
+              <p className="text-gray-500">
+                {bedDetail.status === "maintenance"
+                  ? "This bed is out of service."
+                  : "This bed is free and can be assigned on admission."}
+              </p>
+            )}
+
+            {canBeds && bedDetail.status !== "occupied" && (
+              <div className="flex gap-2 border-t border-gray-100 pt-3">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={async () => {
+                    const next =
+                      bedDetail.status === "maintenance"
+                        ? "available"
+                        : "maintenance";
+                    try {
+                      await ipdApi.updateBed(bedDetail._id, { status: next });
+                      setBedDetail(null);
+                      loadBeds();
+                    } catch (e: any) {
+                      alert(e?.message || "Could not update the bed.");
+                    }
+                  }}
+                >
+                  {bedDetail.status === "maintenance"
+                    ? "Mark available"
+                    : "Mark under maintenance"}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
       {showBed && (
         <BedModal
           wards={wards}
@@ -744,19 +899,49 @@ function AdmissionDrawer({
     onChanged();
   };
 
+  const [logErr, setLogErr] = useState("");
+
   const addVital = async () => {
-    await ipdApi.addLog(admission._id, { kind: "vital", ...vital });
-    setVital({ bloodPressure: "", pulse: "", temperature: "", spo2: "" });
-    onChanged();
+    // Send only the fields actually filled in — an empty string used to reach
+    // the API and be stored as 0, so a blank pulse looked like a real reading
+    // of zero. Also: this had no try/catch, so a 403 or network error failed
+    // completely silently and the nurse saw nothing happen at all.
+    const filled = Object.fromEntries(
+      Object.entries(vital).filter(([, v]) => String(v ?? "").trim() !== ""),
+    );
+    if (Object.keys(filled).length === 0) {
+      setLogErr("Enter at least one vital before logging.");
+      return;
+    }
+    setLogErr("");
+    try {
+      await ipdApi.addLog(admission._id, { kind: "vital", ...filled });
+      setVital({ bloodPressure: "", pulse: "", temperature: "", spo2: "" });
+      onChanged();
+    } catch (e: any) {
+      setLogErr(e?.message || "Could not log vitals. Check your permissions.");
+    }
   };
   const addMed = async () => {
-    if (!med.drug.trim()) return;
-    await ipdApi.addLog(admission._id, { kind: "medication", ...med });
-    setMed({ drug: "", dose: "", route: "" });
-    onChanged();
+    if (!med.drug.trim()) {
+      setLogErr("Enter the drug name.");
+      return;
+    }
+    setLogErr("");
+    try {
+      await ipdApi.addLog(admission._id, { kind: "medication", ...med });
+      setMed({ drug: "", dose: "", route: "" });
+      onChanged();
+    } catch (e: any) {
+      setLogErr(e?.message || "Could not log the medication.");
+    }
   };
   const addNote = async () => {
-    if (!note.trim()) return;
+    if (!note.trim()) {
+      setLogErr("Enter a note.");
+      return;
+    }
+    setLogErr("");
     await ipdApi.addLog(admission._id, { kind: "progress", note });
     setNote("");
     onChanged();
@@ -997,6 +1182,11 @@ function AdmissionDrawer({
           {/* Vitals */}
           <section>
             <h3 className="mb-2 font-semibold text-gray-700">Vitals</h3>
+            {logErr && (
+              <Alert tone="danger" className="mb-2">
+                {logErr}
+              </Alert>
+            )}
             {canManage && (
               <div className="grid grid-cols-4 gap-2 mb-2">
                 <Input

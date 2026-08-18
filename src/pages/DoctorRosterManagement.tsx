@@ -10,6 +10,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 export default function DoctorRosterManagement() {
   const [date, setDate] = useState(today());
+  // End of range. Blank = single day, which is how this always behaved.
+  const [toDate, setToDate] = useState("");
   const [rows, setRows] = useState<any[]>([]);
   const [doctors, setDoctors] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -22,9 +24,9 @@ export default function DoctorRosterManagement() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setRows((await doctorRosterApi.list(date)).data?.items || []);
+      setRows((await doctorRosterApi.list(date, toDate || undefined)).data?.items || []);
     } finally { setLoading(false); }
-  }, [date]);
+  }, [date, toDate]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { doctorScheduleApi.listDoctors().then((r) => setDoctors(r.data?.items || [])).catch(() => {}); }, []);
@@ -43,20 +45,28 @@ export default function DoctorRosterManagement() {
         actions={<Button variant="secondary" onClick={load}>Refresh</Button>} />
 
       <div className="mb-4 flex items-center gap-3">
+        <label className="text-sm text-gray-500">From</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
           className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none" />
+        <label className="text-sm text-gray-500">To</label>
+        <input type="date" value={toDate} min={date} onChange={(e) => setToDate(e.target.value)}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none" />
+        {toDate && (
+          <Button size="sm" variant="ghost" onClick={() => setToDate("")}>Clear range</Button>
+        )}
         <div className="ml-auto">
           <Button size="sm" onClick={() => { setForm({ doctorId: "", shift: "full", isOnCall: false, department: "", notes: "" }); setError(""); setModal(true); }}>+ Assign duty</Button>
         </div>
       </div>
 
       <Table>
-        <THead><Th>Doctor</Th><Th>Speciality</Th><Th>Shift</Th><Th>On-call</Th><Th>Dept</Th><Th className="text-right">Actions</Th></THead>
+        <THead>{toDate && <Th>Date</Th>}<Th>Doctor</Th><Th>Speciality</Th><Th>Shift</Th><Th>On-call</Th><Th>Dept</Th><Th className="text-right">Actions</Th></THead>
         <TBody>
-          {loading && rows.length === 0 ? <TableState colSpan={6}>Loading…</TableState>
-            : rows.length === 0 ? <TableState colSpan={6}>No duties assigned for this day.</TableState>
+          {loading && rows.length === 0 ? <TableState colSpan={toDate ? 7 : 6}>Loading…</TableState>
+            : rows.length === 0 ? <TableState colSpan={toDate ? 7 : 6}>No duties assigned for this period.</TableState>
             : rows.map((r) => (
               <TR key={r._id}>
+                {toDate && <Td className="whitespace-nowrap text-gray-600">{r.date}</Td>}
                 <Td className="font-medium text-gray-900">{r.doctorId?.fullName || "—"}</Td>
                 <Td className="text-gray-500">{r.doctorId?.doctorProfile?.speciality || "—"}</Td>
                 <Td><Badge tone="info">{r.shift}</Badge></Td>
