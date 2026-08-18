@@ -922,6 +922,18 @@ export default function PatientDetail() {
                           prescriptions are raised there automatically when the
                           encounter is finalised. Two entry points meant the
                           same Rx could be dispensed twice. */}
+                      {enc.prescriptions?.length ? (
+                        <button
+                          onClick={() =>
+                            emrApi
+                              .downloadPrescription(enc._id)
+                              .catch((e: any) => alert(e.message))
+                          }
+                          className="text-xs text-healwin-700 hover:underline"
+                        >
+                          Print prescription (PDF)
+                        </button>
+                      ) : null}
                       {canDispense && enc.prescriptions?.length ? (
                         <button
                           onClick={() => navigate("/admin/pharmacy-dispense")}

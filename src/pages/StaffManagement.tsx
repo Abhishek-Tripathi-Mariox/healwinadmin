@@ -18,7 +18,7 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { staffApi, rolesApi } from "../services/admin-api";
+import { staffApi, rolesApi, labApi, pharmacyApi } from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import Pagination from "../components/Pagination";
 import {
@@ -104,7 +104,24 @@ const StaffManagement: React.FC = () => {
     phone: "",
     roleId: "",
     password: "",
+    // Facility assignment — scopes this person's worklist to one lab/pharmacy.
+    labId: "",
+    pharmacyId: "",
   });
+
+  // Facilities a staff member can be assigned to operate.
+  const [labOptions, setLabOptions] = useState<{ _id: string; name: string }[]>([]);
+  const [pharmacyOptions, setPharmacyOptions] = useState<{ _id: string; name: string }[]>([]);
+  useEffect(() => {
+    labApi
+      .list({ status: "approved", limit: 100 })
+      .then((r) => setLabOptions(r.data?.items || []))
+      .catch(() => setLabOptions([]));
+    pharmacyApi
+      .list({ status: "approved", limit: 100 })
+      .then((r) => setPharmacyOptions(r.data?.items || []))
+      .catch(() => setPharmacyOptions([]));
+  }, []);
 
   // Doctor display profile — shown only when the selected role is "Doctor".
   // This is the single source for the patient app's "Consult a Doctor" list.
@@ -284,6 +301,8 @@ const StaffManagement: React.FC = () => {
           phone: staffForm.phone,
           roleId: staffForm.roleId,
           ...(doctorProfile ? { doctorProfile } : {}),
+          labId: staffForm.labId || "",
+          pharmacyId: staffForm.pharmacyId || "",
         });
         setSuccess("Staff member updated successfully");
       } else {
@@ -294,6 +313,8 @@ const StaffManagement: React.FC = () => {
           password: staffForm.password,
           roleId: staffForm.roleId,
           ...(doctorProfile ? { doctorProfile } : {}),
+          labId: staffForm.labId || "",
+          pharmacyId: staffForm.pharmacyId || "",
         });
         setSuccess("Staff member created successfully");
       }
@@ -306,6 +327,8 @@ const StaffManagement: React.FC = () => {
         phone: "",
         roleId: "",
         password: "",
+      labId: "",
+      pharmacyId: "",
       });
       setDocForm({ ...emptyDoctor });
       fetchData();
@@ -383,6 +406,8 @@ const StaffManagement: React.FC = () => {
       phone: staff.phone || "",
       roleId: staff.role?._id || "",
       password: "",
+      labId: (staff as any).labId || "",
+      pharmacyId: (staff as any).pharmacyId || "",
     });
     const dp = staff.doctorProfile;
     setDocForm({
@@ -412,6 +437,8 @@ const StaffManagement: React.FC = () => {
       phone: "",
       roleId: "",
       password: "",
+      labId: "",
+      pharmacyId: "",
     });
     setDocForm({ ...emptyDoctor });
   };
@@ -545,6 +572,8 @@ const StaffManagement: React.FC = () => {
                   phone: "",
                   roleId: "",
                   password: "",
+      labId: "",
+      pharmacyId: "",
                 });
                 setDocForm({ ...emptyDoctor });
                 setShowStaffModal(true);
@@ -749,6 +778,54 @@ const StaffManagement: React.FC = () => {
               ))}
             </Select>
           </Field>
+
+          {/* Facility assignment. A lab technician assigned to a lab sees only
+              that lab's diagnostic orders; a pharmacist assigned to a pharmacy
+              works only that outlet's dispense queue. Leave blank for staff who
+              should see everything (admins, doctors, front desk). */}
+          <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+              Facility assignment (optional)
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field
+                label="Works at lab"
+                hint="Limits this user to that lab's test worklist."
+              >
+                <Select
+                  value={staffForm.labId}
+                  onChange={(e) =>
+                    setStaffForm({ ...staffForm, labId: e.target.value })
+                  }
+                >
+                  <option value="">— Not assigned (sees all labs) —</option>
+                  {labOptions.map((l) => (
+                    <option key={l._id} value={l._id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field
+                label="Works at pharmacy"
+                hint="Limits this user to that pharmacy's dispense queue."
+              >
+                <Select
+                  value={staffForm.pharmacyId}
+                  onChange={(e) =>
+                    setStaffForm({ ...staffForm, pharmacyId: e.target.value })
+                  }
+                >
+                  <option value="">— Not assigned (sees all) —</option>
+                  {pharmacyOptions.map((p) => (
+                    <option key={p._id} value={p._id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+          </div>
 
           {/* Doctor profile — only for the Doctor role. This same record is the
               app's "Consult a Doctor" listing. */}

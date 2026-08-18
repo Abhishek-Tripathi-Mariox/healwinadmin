@@ -559,6 +559,8 @@ export const staffApi = {
     password: string;
     roleId: string;
     doctorProfile?: Record<string, any>;
+    labId?: string;
+    pharmacyId?: string;
   }) =>
     fetchWithAuth("/admin/staff", {
       method: "POST",
@@ -574,6 +576,9 @@ export const staffApi = {
       phone?: string;
       roleId?: string;
       doctorProfile?: Record<string, any>;
+      /** Facility this user operates — scopes their worklist. "" clears it. */
+      labId?: string;
+      pharmacyId?: string;
     },
   ) =>
     fetchWithAuth(`/admin/staff/${id}`, {
@@ -1728,6 +1733,23 @@ export const emrApi = {
     fetchWithAuth(`/admin/emr/drug-options${search ? `?search=${encodeURIComponent(search)}` : ""}`),
   labTestOptions: (search = "") =>
     fetchWithAuth(`/admin/emr/lab-test-options${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+  /** Printable OPD prescription (hospital letterhead + medication table). */
+  downloadPrescription: async (id: string) => {
+    const token = getAuthToken();
+    const res = await fetch(`${API_URL}/admin/emr/${id}/prescription-pdf`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("Failed to download the prescription");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `prescription-${id.slice(-6)}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 };
 
 // ==================== DIAGNOSTICS (LAB & RADIOLOGY) API ====================
