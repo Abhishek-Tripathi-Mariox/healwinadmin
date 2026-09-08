@@ -914,10 +914,18 @@ const PERMISSION_MODULES = [
     ],
   },
   {
+    module: "HR — Shifts",
+    permissions: [
+      { id: "shifts:view", name: "View Shifts", description: "Can view the shift master & roster" },
+      { id: "shifts:manage", name: "Manage Shifts", description: "Can create / edit shifts & timings" },
+    ],
+  },
+  {
     module: "HR — Attendance",
     permissions: [
       { id: "attendance:view", name: "View Attendance", description: "Can view attendance" },
-      { id: "attendance:manage", name: "Mark Attendance", description: "Can mark / edit attendance" },
+      { id: "attendance:manage", name: "Mark Attendance", description: "Can mark / edit attendance & geofences" },
+      { id: "attendance:approve", name: "Approve Regularization", description: "Can approve / reject attendance corrections" },
     ],
   },
   {
@@ -940,6 +948,7 @@ const PERMISSION_MODULES = [
     permissions: [
       { id: "payroll:view", name: "View Payroll", description: "Can view payroll & payslips" },
       { id: "payroll:process", name: "Process Payroll", description: "Can generate payroll runs" },
+      { id: "payroll:verify", name: "Verify Payroll", description: "Can sign off a payroll run before it is locked" },
       { id: "payroll:finalize", name: "Finalize Payroll", description: "Can finalize payroll runs" },
     ],
   },

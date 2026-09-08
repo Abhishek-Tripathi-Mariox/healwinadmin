@@ -157,6 +157,12 @@ const AttendanceManagement = lazy(
 );
 const LeaveManagement = lazy(() => import("./pages/hr/LeaveManagement"));
 const HolidayManagement = lazy(() => import("./pages/hr/HolidayManagement"));
+const WorkShiftManagement = lazy(() => import("./pages/hr/WorkShiftManagement"));
+const AttendanceRegularizationPage = lazy(
+  () => import("./pages/hr/AttendanceRegularization"),
+);
+const HRReports = lazy(() => import("./pages/hr/HRReports"));
+const GeofenceManagement = lazy(() => import("./pages/hr/GeofenceManagement"));
 const PayrollManagement = lazy(() => import("./pages/hr/PayrollManagement"));
 // Patient Catalog
 const CatalogManagement = lazy(() => import("./pages/CatalogManagement"));
@@ -608,10 +614,34 @@ export const adminRoutes = [
     hidden: true,
   },
   {
+    path: "work-shifts",
+    element: WorkShiftManagement,
+    name: "Shift Master",
+    icon: CalendarCheck,
+  },
+  {
     path: "attendance",
     element: AttendanceManagement,
     name: "Attendance",
     icon: CalendarCheck,
+  },
+  {
+    path: "attendance-regularization",
+    element: AttendanceRegularizationPage,
+    name: "Regularization",
+    icon: CalendarCheck,
+  },
+  {
+    path: "geofences",
+    element: GeofenceManagement,
+    name: "Attendance Locations",
+    icon: MapPin,
+  },
+  {
+    path: "hr-reports",
+    element: HRReports,
+    name: "HR Reports",
+    icon: FileText,
   },
   {
     path: "leave",

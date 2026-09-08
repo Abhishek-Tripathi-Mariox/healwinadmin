@@ -24,6 +24,7 @@ interface Employee {
   phone?: string;
   status: string;
   joiningDate: string;
+  category?: string;
   departmentId?: Ref;
   designationId?: Ref;
   employmentTypeId?: Ref;
@@ -39,6 +40,16 @@ const statusTone: Record<string, "success" | "warning" | "neutral" | "danger"> =
   terminated: "danger",
 };
 
+/** Mirrors EMPLOYEE_CATEGORIES on the backend. */
+const CATEGORIES = [
+  "clinical",
+  "field",
+  "ambulance",
+  "security",
+  "support",
+  "administrative",
+];
+
 const emptyForm = {
   fullName: "",
   email: "",
@@ -47,6 +58,7 @@ const emptyForm = {
   dob: "",
   address: "",
   joiningDate: "",
+  category: "",
   departmentId: "",
   designationId: "",
   employmentTypeId: "",
@@ -151,6 +163,7 @@ export default function EmployeeManagement() {
       dob: emp.dob ? emp.dob.substring(0, 10) : "",
       address: emp.address || "",
       joiningDate: emp.joiningDate ? emp.joiningDate.substring(0, 10) : "",
+      category: emp.category || "",
       departmentId: emp.departmentId?._id || emp.departmentId || "",
       designationId: emp.designationId?._id || emp.designationId || "",
       employmentTypeId: emp.employmentTypeId?._id || emp.employmentTypeId || "",
@@ -183,6 +196,7 @@ export default function EmployeeManagement() {
     dob: form.dob || undefined,
     address: form.address || undefined,
     joiningDate: form.joiningDate,
+    category: form.category || undefined,
     departmentId: form.departmentId || undefined,
     designationId: form.designationId || undefined,
     employmentTypeId: form.employmentTypeId || undefined,
@@ -262,6 +276,7 @@ export default function EmployeeManagement() {
         <THead>
           <Th>Code</Th>
           <Th>Name</Th>
+          <Th>Category</Th>
           <Th>Department</Th>
           <Th>Designation</Th>
           <Th>Status</Th>
@@ -269,9 +284,9 @@ export default function EmployeeManagement() {
         </THead>
         <TBody>
           {loading ? (
-            <TableState colSpan={6}>Loading…</TableState>
+            <TableState colSpan={7}>Loading…</TableState>
           ) : items.length === 0 ? (
-            <TableState colSpan={6}>No employees.</TableState>
+            <TableState colSpan={7}>No employees.</TableState>
           ) : (
             items.map((e) => (
               <TR key={e._id}>
@@ -280,6 +295,7 @@ export default function EmployeeManagement() {
                   {e.fullName}
                   {e.email && <div className="text-xs text-gray-400">{e.email}</div>}
                 </Td>
+                <Td className="capitalize">{e.category || "—"}</Td>
                 <Td>{e.departmentId?.name || "—"}</Td>
                 <Td>{e.designationId?.name || "—"}</Td>
                 <Td><Badge tone={statusTone[e.status] || "neutral"}>{e.status.replace("_", " ")}</Badge></Td>
@@ -339,6 +355,19 @@ export default function EmployeeManagement() {
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Organization</h3>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              {/* Category drives where a person may mark attendance (§4.4)
+                  and how they group in reports — separate from Department
+                  (org structure) and Designation (job title). */}
+              <Field label="Category" hint="Clinical, field, ambulance, security, support or administrative.">
+                <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                  <option value="">—</option>
+                  {CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c.charAt(0).toUpperCase() + c.slice(1)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
               <Field label="Department">
                 <Select value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })}>
                   <option value="">—</option>

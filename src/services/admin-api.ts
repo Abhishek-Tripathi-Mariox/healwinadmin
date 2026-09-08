@@ -166,6 +166,64 @@ export const applicationsApi = {
     return fetchWithAuth(`/admin/applications?${query}`);
   },
   getById: (id: string) => fetchWithAuth(`/admin/applications/${id}`),
+  // Schedules (or reschedules) an interview and emails the candidate the
+  // joining link or the walk-in venue, depending on mode.
+  scheduleInterview: (
+    id: string,
+    data: {
+      mode: "ONLINE" | "WALK_IN";
+      scheduledAt: string;
+      durationMinutes?: number;
+      roundName?: string;
+      meetingLink?: string;
+      venueName?: string;
+      venueAddress?: string;
+      contactPerson?: string;
+      contactPhone?: string;
+      instructions?: string;
+    },
+  ) =>
+    fetchWithAuth(`/admin/applications/${id}/interview`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  // Hires the candidate: renders the offer letter, archives it to S3 and
+  // emails it to them as a PDF attachment.
+  issueOffer: (
+    id: string,
+    data: {
+      designation: string;
+      department?: string;
+      ctcAnnual: number;
+      joiningDate: string;
+      location?: string;
+      reportingTo?: string;
+      notes?: string;
+    },
+  ) =>
+    fetchWithAuth(`/admin/applications/${id}/offer`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  // Panel evaluation, acceptance and appointment letter (§9.3, §9.5).
+  saveEvaluation: (id: string, data: Record<string, any>) =>
+    fetchWithAuth(`/admin/applications/${id}/evaluation`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  recordOfferResponse: (
+    id: string,
+    data: { accepted: boolean; note?: string; declineReason?: string },
+  ) =>
+    fetchWithAuth(`/admin/applications/${id}/offer-response`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  issueAppointment: (id: string, data: Record<string, any>) =>
+    fetchWithAuth(`/admin/applications/${id}/appointment`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   updateStatus: (id: string, status: string) =>
     fetchWithAuth(`/admin/applications/${id}/status`, {
       method: "PUT",
@@ -2260,6 +2318,31 @@ export const ivrApi = {
 
 // ==================== HR — EMPLOYEES API ====================
 export const hrEmployeeApi = {
+  meta: () => fetchWithAuth("/admin/hr/employees/meta/options"),
+  // Employee documents (§2) — multipart, so it bypasses the JSON helper.
+  addDocument: async (id: string, file: File, name: string, type?: string) => {
+    const token = localStorage.getItem("adminToken");
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("name", name);
+    if (type) fd.append("type", type);
+    const res = await fetch(`${API_URL}/admin/hr/employees/${id}/documents`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err: any = new Error(json.message || "Upload failed");
+      err.data = json.data;
+      throw err;
+    }
+    return json;
+  },
+  removeDocument: (id: string, docId: string) =>
+    fetchWithAuth(`/admin/hr/employees/${id}/documents/${docId}`, {
+      method: "DELETE",
+    }),
   list: (params: Record<string, string | number | boolean> = {}) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/hr/employees${qs ? `?${qs}` : ""}`);
@@ -2325,8 +2408,17 @@ export const leaveApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  approve: (id: string, decisionNote?: string) =>
+  // `overrideBalance` re-submits an approval the server refused because the
+  // employee is out of quota — HR confirming they mean to grant it anyway.
+  approve: (id: string, decisionNote?: string, overrideBalance?: boolean) =>
     fetchWithAuth(`/admin/hr/leave/requests/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ decisionNote, overrideBalance }),
+    }),
+  // Reverses an approval: removes the leave attendance rows and hands the
+  // balance back.
+  cancel: (id: string, decisionNote?: string) =>
+    fetchWithAuth(`/admin/hr/leave/requests/${id}/cancel`, {
       method: "POST",
       body: JSON.stringify({ decisionNote }),
     }),
@@ -2350,14 +2442,91 @@ export const holidayApi = {
 };
 
 // ==================== HR — PAYROLL API ====================
+/** HR — shift master (§3). */
+export const workShiftApi = {
+  list: (params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/hr/work-shifts${qs ? `?${qs}` : ""}`);
+  },
+  save: (data: Record<string, any>, id?: string) =>
+    fetchWithAuth(`/admin/hr/work-shifts${id ? `/${id}` : ""}`, {
+      method: id ? "PUT" : "POST",
+      body: JSON.stringify(data),
+    }),
+  remove: (id: string) =>
+    fetchWithAuth(`/admin/hr/work-shifts/${id}`, { method: "DELETE" }),
+};
+
+/** HR — attendance regularization (§4.5). */
+export const regularizationApi = {
+  list: (params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(
+      `/admin/hr/attendance/regularizations${qs ? `?${qs}` : ""}`,
+    );
+  },
+  create: (data: Record<string, any>) =>
+    fetchWithAuth("/admin/hr/attendance/regularizations", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  approve: (id: string, decisionNote?: string) =>
+    fetchWithAuth(`/admin/hr/attendance/regularizations/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ decisionNote }),
+    }),
+  reject: (id: string, decisionNote?: string) =>
+    fetchWithAuth(`/admin/hr/attendance/regularizations/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ decisionNote }),
+    }),
+};
+
+/** HR — attendance geofence locations (§4.2). */
+export const geofenceApi = {
+  list: () => fetchWithAuth("/admin/hr/geofences"),
+  save: (data: Record<string, any>, id?: string) =>
+    fetchWithAuth(`/admin/hr/geofences${id ? `/${id}` : ""}`, {
+      method: id ? "PUT" : "POST",
+      body: JSON.stringify(data),
+    }),
+  remove: (id: string) =>
+    fetchWithAuth(`/admin/hr/geofences/${id}`, { method: "DELETE" }),
+};
+
+/**
+ * HR — reports (§13). Every report returns { title, columns, rows } so one
+ * screen renders them all and the CSV can never drift from what is displayed.
+ */
+export const hrReportsApi = {
+  get: (kind: string, params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/hr/reports/${kind}${qs ? `?${qs}` : ""}`);
+  },
+};
+
 export const payrollApi = {
   runs: () => fetchWithAuth("/admin/hr/payroll/runs"),
-  generate: (data: { month: number; year: number; tds?: Record<string, number> }) =>
+  // `acknowledgeUnmarked` confirms a run for a month with no attendance marked
+  // at all — the server refuses that outright otherwise, because every
+  // employee would be paid a full month on no evidence.
+  generate: (data: {
+    month: number;
+    year: number;
+    tds?: Record<string, number>;
+    acknowledgeUnmarked?: boolean;
+  }) =>
     fetchWithAuth("/admin/hr/payroll/generate", {
       method: "POST",
       body: JSON.stringify(data),
     }),
   runDetail: (id: string) => fetchWithAuth(`/admin/hr/payroll/runs/${id}`),
+  // HR's sign-off; a run cannot be finalized until this has happened.
+  verify: (id: string, note?: string) =>
+    fetchWithAuth(`/admin/hr/payroll/runs/${id}/verify`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    }),
   finalize: (id: string) =>
     fetchWithAuth(`/admin/hr/payroll/runs/${id}/finalize`, { method: "POST" }),
   payslip: (id: string) => fetchWithAuth(`/admin/hr/payroll/payslip/${id}`),

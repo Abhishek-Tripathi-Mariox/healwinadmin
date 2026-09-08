@@ -3,8 +3,17 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Download } from "lucide-react";
 import { hrEmployeeApi, payrollApi } from "../../services/admin-api";
 import {
-  PageHeader, Button, Card, Table, THead, TBody, TR, Th, Td, TableState, Badge,
+  PageHeader, Button, Card, Table, THead, TBody, TR, Th, Td, TableState, Badge, Alert,
 } from "../../components/ui";
+import { useAuth } from "../../auth/useAuth";
+import { PERMISSIONS } from "../../auth/permissions";
+
+interface EmployeeDoc {
+  _id: string;
+  name: string;
+  url: string;
+  uploadedAt: string;
+}
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const inr = (n: number) => "₹" + (n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -14,6 +23,45 @@ export default function EmployeeDetail() {
   const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const { hasPermission } = useAuth();
+  const canEdit = hasPermission(PERMISSIONS.EMPLOYEES_UPDATE);
+  const [uploading, setUploading] = useState(false);
+  const [docError, setDocError] = useState("");
+
+  const addDocument = async (file: File) => {
+    if (!id) return;
+    // The name is what HR will look for later, so ask rather than defaulting
+    // to whatever the file happened to be called on someone's laptop.
+    const name = window.prompt("Document name", file.name.replace(/\.[^.]+$/, ""));
+    if (!name) return;
+    setUploading(true);
+    setDocError("");
+    try {
+      const res = await hrEmployeeApi.addDocument(id, file, name);
+      setData((d) => ({
+        ...d,
+        employee: { ...d.employee, documents: res.data?.documents || [] },
+      }));
+    } catch (err) {
+      setDocError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeDocument = async (docId: string) => {
+    if (!id) return;
+    if (!window.confirm("Remove this document from the employee record?")) return;
+    try {
+      const res = await hrEmployeeApi.removeDocument(id, docId);
+      setData((d) => ({
+        ...d,
+        employee: { ...d.employee, documents: res.data?.documents || [] },
+      }));
+    } catch (err) {
+      setDocError(err instanceof Error ? err.message : "Failed to remove");
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -30,6 +78,7 @@ export default function EmployeeDetail() {
     ["Employee Code", e.employeeCode],
     ["Phone", e.phone || "—"],
     ["Email", e.email || "—"],
+    ["Category", e.category ? e.category.charAt(0).toUpperCase() + e.category.slice(1) : "—"],
     ["Department", e.departmentId?.name || "—"],
     ["Designation", e.designationId?.name || "—"],
     ["Employment", e.employmentTypeId?.name || "—"],
@@ -62,6 +111,60 @@ export default function EmployeeDetail() {
             ))}
           </div>
         </Card>
+        {/* Employee documents (§2). Candidate paperwork is handled in
+            recruitment; once someone is hired their ID proof, certificates and
+            contract need a home on the employee record. */}
+        <Card className="p-5 lg:col-span-2">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-700">Documents</h3>
+            {canEdit && (
+              <label className="cursor-pointer text-sm text-cyan-700 hover:underline">
+                {uploading ? "Uploading…" : "+ Add document"}
+                <input
+                  type="file"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(ev) => {
+                    const file = ev.target.files?.[0];
+                    ev.target.value = "";
+                    if (file) addDocument(file);
+                  }}
+                />
+              </label>
+            )}
+          </div>
+          {docError && <Alert tone="danger">{docError}</Alert>}
+          {(e.documents || []).length === 0 ? (
+            <p className="text-sm text-gray-400">No documents on file.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100 text-sm">
+              {(e.documents || []).map((d: EmployeeDoc) => (
+                <li key={d._id} className="flex items-center gap-3 py-2">
+                  <a
+                    href={d.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 truncate text-cyan-700 hover:underline"
+                  >
+                    {d.name}
+                  </a>
+                  <span className="text-xs text-gray-400">
+                    {new Date(d.uploadedAt).toLocaleDateString("en-IN")}
+                  </span>
+                  {canEdit && (
+                    <button
+                      onClick={() => removeDocument(d._id)}
+                      className="text-xs text-red-600 hover:underline"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
         <Card className="p-5">
           <h3 className="mb-3 text-sm font-semibold text-gray-700">Salary Structure</h3>
           <div className="space-y-1 text-sm">

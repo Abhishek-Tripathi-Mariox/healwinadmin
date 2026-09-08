@@ -17,6 +17,7 @@ import {
   ChevronDown,
   CircleHelp,
   ClipboardList,
+  ClipboardCheck,
   Clock,
   Contact,
   FileText,
@@ -142,6 +143,9 @@ const Sidebar: React.FC<SidebarProps> = ({
       location.pathname.includes("/admin/hr") ||
       location.pathname.includes("/admin/employees") ||
       location.pathname.includes("/admin/attendance") ||
+      location.pathname.includes("/admin/work-shifts") ||
+      location.pathname.includes("/admin/geofences") ||
+      location.pathname.includes("/admin/hr-reports") ||
       location.pathname.includes("/admin/leave") ||
       location.pathname.includes("/admin/holidays") ||
       location.pathname.includes("/admin/payroll"),
@@ -656,8 +660,14 @@ const Sidebar: React.FC<SidebarProps> = ({
           path: "/admin/staff-directory",
         },
         {
+          id: "work-shifts",
+          label: "Shift Master",
+          icon: Clock,
+          path: "/admin/work-shifts",
+        },
+        {
           id: "employee-shifts",
-          label: "Employee Shifts",
+          label: "Shift Roster",
           icon: CalendarCheck,
           path: "/admin/employee-shifts",
         },
@@ -666,6 +676,18 @@ const Sidebar: React.FC<SidebarProps> = ({
           label: "Attendance",
           icon: CalendarCheck,
           path: "/admin/attendance",
+        },
+        {
+          id: "attendance-regularization",
+          label: "Regularization",
+          icon: ClipboardCheck,
+          path: "/admin/attendance-regularization",
+        },
+        {
+          id: "geofences",
+          label: "Attendance Locations",
+          icon: MapPin,
+          path: "/admin/geofences",
         },
         {
           id: "leave",
@@ -684,6 +706,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           label: "Payroll & Salary Slips",
           icon: Wallet,
           path: "/admin/payroll",
+        },
+        {
+          id: "hr-reports",
+          label: "HR Reports",
+          icon: FileText,
+          path: "/admin/hr-reports",
         },
       ],
     },

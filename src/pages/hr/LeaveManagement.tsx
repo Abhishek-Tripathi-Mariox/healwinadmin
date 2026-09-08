@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, X, Plus } from "lucide-react";
+import { Check, X, Plus, Undo2 } from "lucide-react";
 import { leaveApi, hrEmployeeApi } from "../../services/admin-api";
 import { useAuth } from "../../auth/useAuth";
 import { PERMISSIONS } from "../../auth/permissions";
@@ -102,13 +102,40 @@ export default function LeaveManagement() {
     }
   };
 
-  const decide = async (id: string, action: "approve" | "reject") => {
+  const decide = async (
+    id: string,
+    action: "approve" | "reject" | "cancel",
+    overrideBalance = false,
+  ) => {
     try {
-      if (action === "approve") await leaveApi.approve(id);
-      else await leaveApi.reject(id);
+      if (action === "approve") await leaveApi.approve(id, undefined, overrideBalance);
+      else if (action === "reject") await leaveApi.reject(id);
+      else await leaveApi.cancel(id);
       loadRequests();
     } catch (err: any) {
-      alert(err.message || "Failed");
+      // Out of quota: the server refuses rather than letting the balance go
+      // negative behind HR's back. Offer the override explicitly.
+      if (err?.data?.requiresOverride && action === "approve") {
+        if (
+          window.confirm(
+            `${err.data.hint || "Insufficient leave balance"}.\n\nApprove anyway? The balance will go negative.`,
+          )
+        ) {
+          return decide(id, "approve", true);
+        }
+        return;
+      }
+      alert(err?.data?.hint || err.message || "Failed");
+    }
+  };
+
+  const cancelLeave = (id: string) => {
+    if (
+      window.confirm(
+        "Cancel this approved leave?\n\nThe leave days will be removed from attendance and the balance handed back.",
+      )
+    ) {
+      decide(id, "cancel");
     }
   };
 
@@ -205,6 +232,18 @@ export default function LeaveManagement() {
                           <X className="h-4 w-4" />
                         </Button>
                       </>
+                    )}
+                    {canApprove && r.status === "approved" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="px-2 text-amber-600 hover:bg-amber-50"
+                        title="Cancel this leave"
+                        aria-label="Cancel leave"
+                        onClick={() => cancelLeave(r._id)}
+                      >
+                        <Undo2 className="h-4 w-4" />
+                      </Button>
                     )}
                   </Td>
                 </TR>

@@ -145,6 +145,18 @@ const TEMPLATE_TYPES = [
     description: "Sent to candidates when their application is marked rejected",
   },
   {
+    value: "APPLICATION_INTERVIEW_SCHEDULED",
+    label: "Interview Scheduled",
+    description:
+      "Sent when an interview is scheduled — carries the joining link (online) or the venue and contact (walk-in)",
+  },
+  {
+    value: "APPLICATION_OFFER_LETTER",
+    label: "Offer Letter",
+    description:
+      "Sent when a candidate is hired — the offer letter PDF is attached automatically",
+  },
+  {
     value: "APPLICATION_HR_NOTIFICATION",
     label: "HR New Application Notification",
     description: "Sent to HR when a new application is received",
@@ -306,6 +318,78 @@ const DEFAULT_TEMPLATES: Record<
     <p style="font-size: 14px; color: #374151; margin-top: 24px;">
       Best regards,<br/>
       <strong>{{companyName}} HR Team</strong>
+    </p>
+  </div>
+</div>`,
+  },
+  APPLICATION_INTERVIEW_SCHEDULED: {
+    name: "Interview Scheduled",
+    subject: "Interview Invitation - {{position}} | {{companyName}}",
+    body: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #0891b2, #0e7490); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+    <h1 style="color: #ffffff; margin: 0; font-size: 24px;">Interview Invitation</h1>
+  </div>
+  <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
+    <p style="font-size: 16px; color: #374151;">Dear <strong>{{candidateName}}</strong>,</p>
+    <p style="font-size: 14px; color: #6b7280; line-height: 1.6;">
+      Thank you for applying for <strong>{{position}}</strong>. We are pleased to invite you for an interview.
+    </p>
+    <div style="background: #f0f9ff; border-left: 4px solid #0891b2; padding: 16px; border-radius: 8px; margin: 20px 0;">
+      <p style="margin: 4px 0; font-size: 14px; color: #374151;"><strong>Date &amp; Time:</strong> {{when}} IST</p>
+      <p style="margin: 4px 0; font-size: 14px; color: #374151;"><strong>Duration:</strong> {{durationMinutes}} minutes</p>
+      <p style="margin: 4px 0; font-size: 14px; color: #374151;"><strong>Round:</strong> {{roundName}}</p>
+    </div>
+    <!-- ONLINE interviews: {{meetingLink}} is filled, the venue fields are blank.
+         WALK-IN interviews: the venue fields are filled and {{meetingLink}} is blank.
+         Keep both blocks — whichever does not apply simply renders empty. -->
+    <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+      <p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Joining link:</strong> {{meetingLink}}</p>
+      <p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Venue:</strong> {{venueName}}</p>
+      <p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Address:</strong> {{venueAddress}}</p>
+      <p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Ask for:</strong> {{contactPerson}}</p>
+      <p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Contact:</strong> {{contactPhone}}</p>
+    </div>
+    <p style="font-size: 14px; color: #6b7280; line-height: 1.6;">{{instructions}}</p>
+    <p style="font-size: 14px; color: #6b7280; line-height: 1.6;">
+      If this time does not suit you, reply to this email and we will try to reschedule.
+    </p>
+    <p style="font-size: 13px; color: #9ca3af;">Application No.: {{applicationNumber}}</p>
+    <p style="font-size: 14px; color: #374151; margin-top: 24px;">
+      Best regards,<br/>
+      <strong>{{companyName}} Recruitment Team</strong>
+    </p>
+  </div>
+</div>`,
+  },
+  APPLICATION_OFFER_LETTER: {
+    name: "Offer Letter",
+    subject: "Offer of Employment - {{designation}} | {{companyName}}",
+    body: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #059669, #047857); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+    <h1 style="color: #ffffff; margin: 0; font-size: 24px;">Congratulations!</h1>
+  </div>
+  <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
+    <p style="font-size: 16px; color: #374151;">Dear <strong>{{candidateName}}</strong>,</p>
+    <p style="font-size: 14px; color: #6b7280; line-height: 1.6;">
+      Following your interview, we are delighted to offer you a position at <strong>{{companyName}}</strong>.
+    </p>
+    <div style="background: #f0fdf4; border-left: 4px solid #059669; padding: 16px; border-radius: 8px; margin: 20px 0;">
+      <p style="margin: 4px 0; font-size: 14px; color: #374151;"><strong>Designation:</strong> {{designation}}</p>
+      <p style="margin: 4px 0; font-size: 14px; color: #374151;"><strong>Department:</strong> {{department}}</p>
+      <p style="margin: 4px 0; font-size: 14px; color: #374151;"><strong>Annual CTC:</strong> {{ctc}}</p>
+      <p style="margin: 4px 0; font-size: 14px; color: #374151;"><strong>Date of Joining:</strong> {{joiningDate}}</p>
+      <p style="margin: 4px 0; font-size: 14px; color: #374151;"><strong>Place of Posting:</strong> {{location}}</p>
+      <p style="margin: 4px 0; font-size: 14px; color: #374151;"><strong>Reporting To:</strong> {{reportingTo}}</p>
+    </div>
+    <p style="font-size: 14px; color: #6b7280; line-height: 1.6;">
+      Your formal offer letter is attached to this email as a PDF. Please review it and confirm
+      your acceptance by replying to this email.
+    </p>
+    <p style="font-size: 14px; color: #6b7280; line-height: 1.6;">{{notes}}</p>
+    <p style="font-size: 13px; color: #9ca3af;">Reference: {{applicationNumber}}</p>
+    <p style="font-size: 14px; color: #374151; margin-top: 24px;">
+      Best regards,<br/>
+      <strong>{{companyName}} Human Resources</strong>
     </p>
   </div>
 </div>`,
@@ -774,6 +858,10 @@ const EmailTemplateManagement: React.FC = () => {
         return "bg-indigo-100 text-indigo-800";
       case "APPLICATION_STATUS_REJECTED":
         return "bg-rose-100 text-rose-800";
+      case "APPLICATION_INTERVIEW_SCHEDULED":
+        return "bg-amber-100 text-amber-800";
+      case "APPLICATION_OFFER_LETTER":
+        return "bg-teal-100 text-teal-800";
       case "APPLICATION_HR_NOTIFICATION":
         return "bg-green-100 text-green-800";
       default:

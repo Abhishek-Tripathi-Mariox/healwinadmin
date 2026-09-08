@@ -3,6 +3,9 @@ import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ShieldCheck } from 'lucide-react';
 import AuthBackground from '../components/AuthBackground';
 
+// Digits in an OTP — matches the backend's OTP_LENGTH (utils/helpers.ts).
+const OTP_LENGTH = 4;
+
 const OTPVerification = () => {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
@@ -21,8 +24,8 @@ const OTPVerification = () => {
     e.preventDefault();
     setError('');
 
-    if (otp.length !== 6) {
-      setError('Please enter a valid 6-digit OTP');
+    if (otp.length !== OTP_LENGTH) {
+      setError(`Please enter a valid ${OTP_LENGTH}-digit OTP`);
       return;
     }
 
@@ -48,7 +51,7 @@ const OTPVerification = () => {
           </div>
           <h1 className="text-2xl font-bold text-gray-800">Verify OTP</h1>
           <p className="text-sm text-gray-500 mt-2">
-            Enter the 6-digit code sent to <span className="font-medium text-gray-700">{email}</span>
+            Enter the {OTP_LENGTH}-digit code sent to <span className="font-medium text-gray-700">{email}</span>
           </p>
         </div>
 
@@ -64,23 +67,23 @@ const OTPVerification = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">One-Time Password</label>
             <input
               type="text"
-              placeholder="000000"
+              placeholder="0000"
               value={otp}
               onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                const value = e.target.value.replace(/\D/g, '').slice(0, OTP_LENGTH);
                 setOtp(value);
                 setError('');
               }}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-healwin-500 text-center text-2xl tracking-widest font-mono"
-              maxLength={6}
+              maxLength={OTP_LENGTH}
               autoFocus
             />
-            <p className="text-xs text-gray-500 mt-2 text-center">Demo OTP: 123456</p>
+            <p className="text-xs text-gray-500 mt-2 text-center">Demo OTP: 1234</p>
           </div>
 
           <button
             type="submit"
-            disabled={loading || otp.length !== 6}
+            disabled={loading || otp.length !== OTP_LENGTH}
             className="w-full py-3 bg-gradient-to-r from-healwin-500 to-healwin-600 text-white rounded-lg text-lg font-medium hover:shadow-xl transition disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {loading ? 'Verifying...' : 'Verify OTP'}

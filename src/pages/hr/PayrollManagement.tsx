@@ -13,10 +13,19 @@ const inr = (n: number) => "₹" + (n || 0).toLocaleString("en-IN", { maximumFra
 interface Run {
   _id: string; month: number; year: number; status: string;
   employeeCount: number; totalGross: number; totalDeductions: number; totalNet: number;
+  totalOvertimeAmount?: number;
+  verifiedAt?: string;
+}
+/** Employees paid for days nobody marked — reported back by the generate call. */
+interface UnmarkedWarning {
+  name: string;
+  unmarkedDays: number;
+  serviceDays: number;
 }
 interface Payslip {
   _id: string; employeeCode: string; employeeName: string; month: number; year: number;
-  paidDays: number; lopDays: number; earnings: { gross: number }; deductions: { total: number }; netPay: number;
+  paidDays: number; lopDays: number; serviceDays?: number; totalDays?: number; unmarkedDays?: number;
+  earnings: { gross: number }; deductions: { total: number }; netPay: number;
 }
 
 const now = new Date();
@@ -25,6 +34,7 @@ export default function PayrollManagement() {
   const { hasPermission } = useAuth();
   const canProcess = hasPermission(PERMISSIONS.PAYROLL_PROCESS);
   const canFinalize = hasPermission(PERMISSIONS.PAYROLL_FINALIZE);
+  const canVerify = hasPermission(PERMISSIONS.PAYROLL_VERIFY);
 
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -49,16 +59,57 @@ export default function PayrollManagement() {
     loadRuns();
   }, [loadRuns]);
 
-  const generate = async () => {
+  const generate = async (acknowledgeUnmarked = false) => {
     setGenerating(true);
     try {
-      const res = await payrollApi.generate({ month, year });
+      const res = await payrollApi.generate({ month, year, acknowledgeUnmarked });
       await loadRuns();
+      const warn: UnmarkedWarning[] = res.data?.unmarkedWarnings || [];
+      if (warn.length) {
+        // Paid on assumption rather than on record — say so before HR finalises.
+        const lines = warn
+          .slice(0, 10)
+          .map((w) => `• ${w.name}: ${w.unmarkedDays} of ${w.serviceDays} days unmarked`)
+          .join("\n");
+        alert(
+          `Payroll generated, but attendance is incomplete.\n\n${lines}` +
+            (warn.length > 10 ? `\n…and ${warn.length - 10} more` : "") +
+            "\n\nUnmarked days are paid as worked. Mark attendance and re-generate if that is wrong.",
+        );
+      }
       if (res.data?.run) viewRun(res.data.run);
     } catch (err: any) {
-      alert(err.message || "Failed to generate payroll");
+      // The month has no attendance at all — everyone would be paid in full.
+      if (err?.data?.unmarkedMonth && !acknowledgeUnmarked) {
+        if (window.confirm(`${err.data.hint}\n\nGenerate anyway?`)) {
+          return generate(true);
+        }
+        return;
+      }
+      alert(err?.data?.hint || err.message || "Failed to generate payroll");
     } finally {
       setGenerating(false);
+    }
+  };
+
+  // HR signs the sheet off before it can be locked (§8). Re-generating clears
+  // the sign-off, because the figures being approved have changed.
+  const verify = async (run: Run) => {
+    if (
+      !window.confirm(
+        `Verify the ${MONTHS[run.month - 1]} ${run.year} payroll?\n\nThis records that you have checked the figures. The run can then be finalized.`,
+      )
+    )
+      return;
+    try {
+      await payrollApi.verify(run._id);
+      await loadRuns();
+      const res = await payrollApi.runDetail(run._id);
+      setOpenRun(res.data?.run || null);
+      setPayslips(res.data?.payslips || []);
+    } catch (err: unknown) {
+      const e = err as { data?: { hint?: string }; message?: string };
+      alert(e.data?.hint || e.message || "Failed to verify the run");
     }
   };
 
@@ -71,9 +122,15 @@ export default function PayrollManagement() {
   const finalize = async () => {
     if (!openRun) return;
     if (!window.confirm("Finalize this payroll run? It can no longer be re-generated.")) return;
-    const res = await payrollApi.finalize(openRun._id);
-    setOpenRun(res.data?.run || openRun);
-    loadRuns();
+    try {
+      const res = await payrollApi.finalize(openRun._id);
+      setOpenRun(res.data?.run || openRun);
+      loadRuns();
+    } catch (err: unknown) {
+      // The server refuses to finalize an unverified run — say why.
+      const e = err as { data?: { hint?: string }; message?: string };
+      alert(e.data?.hint || e.message || "Failed to finalize");
+    }
   };
 
   const years = [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
@@ -90,9 +147,35 @@ export default function PayrollManagement() {
           subtitle={`${openRun.employeeCount} employees`}
           actions={
             <div className="flex items-center gap-2">
-              <Badge tone={openRun.status === "finalized" ? "success" : "warning"}>{openRun.status}</Badge>
+              <Badge
+                tone={
+                  openRun.status === "finalized"
+                    ? "success"
+                    : openRun.status === "verified"
+                      ? "info"
+                      : "warning"
+                }
+              >
+                {openRun.status}
+              </Badge>
+              {canVerify && openRun.status === "draft" && (
+                <Button variant="secondary" onClick={() => verify(openRun)}>
+                  Verify
+                </Button>
+              )}
               {canFinalize && openRun.status !== "finalized" && (
-                <Button onClick={finalize} icon={<Lock className="h-4 w-4" />}>Finalize</Button>
+                <Button
+                  onClick={finalize}
+                  disabled={openRun.status !== "verified"}
+                  title={
+                    openRun.status !== "verified"
+                      ? "Verify the run before finalizing it"
+                      : undefined
+                  }
+                  icon={<Lock className="h-4 w-4" />}
+                >
+                  Finalize
+                </Button>
               )}
             </div>
           }
@@ -117,7 +200,24 @@ export default function PayrollManagement() {
                 <TR key={p._id}>
                   <Td className="font-mono text-xs">{p.employeeCode}</Td>
                   <Td className="font-medium text-gray-900">{p.employeeName}</Td>
-                  <Td className="text-right">{p.paidDays}{p.lopDays ? <span className="text-red-500"> (-{p.lopDays})</span> : null}</Td>
+                  <Td className="text-right">
+                    {p.paidDays}
+                    {p.lopDays ? <span className="text-red-500"> (-{p.lopDays})</span> : null}
+                    {/* Part-month employment — makes a small net pay explicable. */}
+                    {!!p.serviceDays && !!p.totalDays && p.serviceDays < p.totalDays ? (
+                      <span className="ml-1 text-xs text-gray-400" title="Part month — joined or left mid-cycle">
+                        of {p.serviceDays}
+                      </span>
+                    ) : null}
+                    {p.unmarkedDays ? (
+                      <span
+                        className="ml-1 text-xs text-amber-600"
+                        title={`${p.unmarkedDays} day(s) had no attendance marked and were paid as worked`}
+                      >
+                        ⚠{p.unmarkedDays}
+                      </span>
+                    ) : null}
+                  </Td>
                   <Td className="text-right">{inr(p.earnings.gross)}</Td>
                   <Td className="text-right">{inr(p.deductions.total)}</Td>
                   <Td className="text-right font-semibold">{inr(p.netPay)}</Td>
@@ -155,7 +255,7 @@ export default function PayrollManagement() {
               {years.map((y) => <option key={y} value={y}>{y}</option>)}
             </Select>
           </div>
-          <Button onClick={generate} disabled={generating} icon={<Play className="h-4 w-4" />}>
+          <Button onClick={() => generate()} disabled={generating} icon={<Play className="h-4 w-4" />}>
             {generating ? "Generating…" : "Generate Payroll"}
           </Button>
         </Card>
