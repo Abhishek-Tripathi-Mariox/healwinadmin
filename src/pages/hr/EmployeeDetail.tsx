@@ -38,7 +38,7 @@ export default function EmployeeDetail() {
     setDocError("");
     try {
       const res = await hrEmployeeApi.addDocument(id, file, name);
-      setData((d) => ({
+      setData((d: any) => ({
         ...d,
         employee: { ...d.employee, documents: res.data?.documents || [] },
       }));
@@ -54,7 +54,7 @@ export default function EmployeeDetail() {
     if (!window.confirm("Remove this document from the employee record?")) return;
     try {
       const res = await hrEmployeeApi.removeDocument(id, docId);
-      setData((d) => ({
+      setData((d: any) => ({
         ...d,
         employee: { ...d.employee, documents: res.data?.documents || [] },
       }));
