@@ -14,6 +14,7 @@ interface PlanRow {
   price: number;
   durationMonths: number;
   concessionPercent?: number;
+  maxFamilyMembers?: number;
   bullets?: string[];
   sortOrder?: number;
   isActive: boolean;
@@ -26,6 +27,7 @@ const empty = {
   price: "",
   durationMonths: "12",
   concessionPercent: "",
+  maxFamilyMembers: "",
   bullets: "",
   sortOrder: "0",
   isActive: true,
@@ -70,6 +72,7 @@ export default function MembershipPlansManagement() {
       price: String(p.price ?? ""),
       durationMonths: String(p.durationMonths ?? "12"),
       concessionPercent: p.concessionPercent != null ? String(p.concessionPercent) : "",
+      maxFamilyMembers: p.maxFamilyMembers != null ? String(p.maxFamilyMembers) : "",
       bullets: (p.bullets || []).join("\n"),
       sortOrder: String(p.sortOrder ?? 0),
       isActive: p.isActive,
@@ -89,6 +92,7 @@ export default function MembershipPlansManagement() {
         price: Number(form.price) || 0,
         durationMonths: Number(form.durationMonths) || 12,
         concessionPercent: Number(form.concessionPercent) || 0,
+        maxFamilyMembers: Number(form.maxFamilyMembers) || 0,
         bullets: String(form.bullets).split("\n").map((s: string) => s.trim()).filter(Boolean),
         sortOrder: Number(form.sortOrder) || 0,
         isActive: form.isActive,
@@ -121,13 +125,13 @@ export default function MembershipPlansManagement() {
 
       <Table>
         <THead>
-          <Th>Name</Th><Th>Tier</Th><Th>Price</Th><Th>Duration</Th><Th>Concession</Th><Th>Subscribers</Th><Th>Status</Th><Th className="text-right">Actions</Th>
+          <Th>Name</Th><Th>Tier</Th><Th>Price</Th><Th>Duration</Th><Th>Concession</Th><Th>Family</Th><Th>Subscribers</Th><Th>Status</Th><Th className="text-right">Actions</Th>
         </THead>
         <TBody>
           {loading && items.length === 0 ? (
-            <TableState colSpan={8}>Loading…</TableState>
+            <TableState colSpan={9}>Loading…</TableState>
           ) : items.length === 0 ? (
-            <TableState colSpan={8}>No plans yet.</TableState>
+            <TableState colSpan={9}>No plans yet.</TableState>
           ) : (
             items.map((p) => (
               <TR key={p._id}>
@@ -136,6 +140,7 @@ export default function MembershipPlansManagement() {
                 <Td>₹{p.price}</Td>
                 <Td>{p.durationMonths} mo</Td>
                 <Td>{p.concessionPercent ? `${p.concessionPercent}%` : "—"}</Td>
+                <Td>{p.maxFamilyMembers ? p.maxFamilyMembers : "Unlimited"}</Td>
                 <Td>{p.activeSubscribers ?? 0}</Td>
                 <Td><Badge tone={p.isActive ? "success" : "neutral"}>{p.isActive ? "Active" : "Inactive"}</Badge></Td>
                 <Td className="text-right whitespace-nowrap">
@@ -180,7 +185,8 @@ export default function MembershipPlansManagement() {
             </Field>
             <Field label="Price (₹)"><Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /></Field>
             <Field label="Duration (months)"><Input type="number" value={form.durationMonths} onChange={(e) => setForm({ ...form, durationMonths: e.target.value })} /></Field>
-            <Field label="Concession (%)"><Input type="number" value={form.concessionPercent} onChange={(e) => setForm({ ...form, concessionPercent: e.target.value })} /></Field>
+            <Field label="Concession (%)" hint="Discount applied to every ambulance fare for this member."><Input type="number" min="0" max="100" value={form.concessionPercent} onChange={(e) => setForm({ ...form, concessionPercent: e.target.value })} /></Field>
+            <Field label="Family members covered" hint="0 = unlimited. Adding beyond this is blocked in the app."><Input type="number" min="0" value={form.maxFamilyMembers} onChange={(e) => setForm({ ...form, maxFamilyMembers: e.target.value })} /></Field>
             <Field label="Sort order"><Input type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} /></Field>
           </div>
           <Field label="Benefits (one per line)">

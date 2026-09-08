@@ -36,6 +36,7 @@ import {
 import DispatchPanel from "../components/DispatchPanel";
 import type { NearbyAmbulance } from "../components/DispatchPanel";
 import { adminSocket } from "../services/socket";
+import CallButton from "../components/CallButton";
 import {
   PageHeader,
   Button,
@@ -340,14 +341,21 @@ const SOSDashboard: React.FC = () => {
     setActionLoading(null);
   };
 
-  // One-click real call — dials via the configured IVR provider (operator
-  // number first, then bridges to the submitter) and auto-journals a full
-  // IvrEscalation record; no manual "Start Escalation" form needed.
+  // One-click real call — MyOperator rings the signed-in admin's own phone
+  // first and bridges them to the caller, and the attempt is written to the
+  // call log so the recording lands against it when the webhook reports back.
   const handleCall = async (sub: SOSSubmission) => {
+    if (
+      !window.confirm(
+        `Call ${sub.name || sub.phone}?\n\nYour own phone rings first — answer it, and you will be connected to ${sub.phone}.`,
+      )
+    )
+      return;
     setCallingId(sub._id);
     try {
       const res = await sosSubmissionApi.call(sub._id);
       if (!res.success) throw new Error(res.message || "Call failed");
+      alert(res.message || `Ringing you now — you will be connected to ${sub.phone}.`);
     } catch (err: any) {
       alert(err?.message || "Failed to place call");
     }
@@ -968,6 +976,12 @@ const SOSDashboard: React.FC = () => {
                         <span className="flex items-center gap-1">
                           <Phone className="w-3.5 h-3.5 text-gray-400" />
                           {sub.phone}
+                          <CallButton
+                            phone={sub.phone}
+                            subjectType="sos_submission"
+                            subjectId={sub._id}
+                            subjectLabel={sub.name || `SOS ${sub.phone}`}
+                          />
                         </span>
                         {sub.email && (
                           <span className="text-gray-500">{sub.email}</span>

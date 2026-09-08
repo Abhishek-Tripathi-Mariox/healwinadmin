@@ -145,8 +145,9 @@ export const PERMISSIONS = {
   LABS_UPDATE: "labs:update",
   LABS_DELETE: "labs:delete",
   LABS_APPROVE: "labs:approve",
-  IVR_VIEW: "ivr:view",
-  IVR_MANAGE: "ivr:manage",
+  CALLS_VIEW: "calls:view",
+  CALLS_PLACE: "calls:place",
+  CALLS_MANAGE: "calls:manage",
   // HR & Payroll
   HR_DASHBOARD_VIEW: "hr_dashboard:view",
   EMPLOYEES_VIEW: "employees:view",
@@ -269,7 +270,7 @@ export const SIDEBAR_PERMISSION_MAP: Record<string, string[]> = {
   pharmacies: [PERMISSIONS.PHARMACIES_VIEW],
   labs: [PERMISSIONS.LABS_VIEW],
   "pharmacy-dispense": [PERMISSIONS.INVENTORY_VIEW],
-  "ivr-escalations": [PERMISSIONS.IVR_VIEW],
+  calls: [PERMISSIONS.CALLS_VIEW],
   "ambulance-requests": [PERMISSIONS.SOS_VIEW],
   // HR & Payroll
   hr: [PERMISSIONS.HR_DASHBOARD_VIEW],

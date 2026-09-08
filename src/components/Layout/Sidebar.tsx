@@ -171,10 +171,10 @@ const Sidebar: React.FC<SidebarProps> = ({
       path: "/admin/ambulance-requests",
     },
     {
-      id: "ivr-escalations",
-      label: "IVR Escalation",
+      id: "calls",
+      label: "Calls & Recordings",
       icon: PhoneCall,
-      path: "/admin/ivr-escalations",
+      path: "/admin/calls",
     },
     // Legacy ride-hailing "Bookings" (Booking model) — hidden from the nav.
     // The current ambulance flow lives entirely under "Ambulance Requests"

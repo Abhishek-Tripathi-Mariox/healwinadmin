@@ -13,6 +13,9 @@ const claimTone: Record<string, "neutral" | "info" | "success" | "danger" | "war
 
 export default function InsuranceManagement() {
   const [tab, setTab] = useState<Tab>("claims");
+  /** How many policies are waiting to be verified — drives the tab badge. */
+  const [pendingCount, setPendingCount] = useState(0);
+  const [policyFilter, setPolicyFilter] = useState("pending");
   const [loading, setLoading] = useState(false);
   const [payers, setPayers] = useState<any[]>([]);
   const [policies, setPolicies] = useState<any[]>([]);
@@ -55,14 +58,29 @@ export default function InsuranceManagement() {
     setLoading(true);
     try {
       if (tab === "payers") setPayers((await insuranceApi.listPayers()).data?.items || []);
-      else if (tab === "policies") setPolicies((await insuranceApi.listPolicies()).data?.items || []);
+      else if (tab === "policies") {
+        const res = await insuranceApi.listPoliciesBy(
+          policyFilter ? { approvalStatus: policyFilter } : {},
+        );
+        setPolicies(res.data?.items || []);
+        setPendingCount(res.data?.pendingCount ?? 0);
+      }
       else setClaims((await insuranceApi.listClaims()).data?.items || []);
     } finally {
       setLoading(false);
     }
-  }, [tab]);
+  }, [tab, policyFilter]);
 
   useEffect(() => { load(); }, [load]);
+  // The pending badge has to be right on first paint, before anyone opens
+  // the Policies tab — otherwise the queue is invisible from where people land.
+  useEffect(() => {
+    insuranceApi
+      .listPoliciesBy({ approvalStatus: "pending" })
+      .then((r) => setPendingCount(r.data?.pendingCount ?? 0))
+      .catch(() => setPendingCount(0));
+  }, []);
+
   // Payers are needed in the policy form dropdown.
   useEffect(() => { insuranceApi.listPayers().then((r) => setPayers(r.data?.items || [])).catch(() => {}); }, []);
 
@@ -106,6 +124,31 @@ export default function InsuranceManagement() {
     catch (e: any) { setError(e.message || "Failed"); } finally { setSaving(false); }
   };
 
+  /**
+   * Verify or reject a patient-submitted policy. A rejection needs a reason —
+   * the patient sees it in the app, and "rejected" alone is not actionable.
+   */
+  const decidePolicy = async (p: any, approvalStatus: "approved" | "rejected") => {
+    let reviewNote = "";
+    if (approvalStatus === "rejected") {
+      reviewNote = window.prompt("Why is this policy being rejected? (the patient sees this)") || "";
+      if (!reviewNote.trim()) return;
+    } else if (
+      !window.confirm(
+        `Approve ${p.policyNumber}?\n\nOnce approved, bills for ${p.patientId?.fullName || "this patient"} can be settled from this policy's cover.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await insuranceApi.setPolicyApproval(p._id, { approvalStatus, reviewNote });
+      load();
+    } catch (err: unknown) {
+      const e = err as { data?: { hint?: string }; message?: string };
+      setError(e.data?.hint || e.message || "Could not update the policy");
+    }
+  };
+
   const openPolicy = () => { setPolicyForm({ patientId: "", payerId: "", policyNumber: "", holderName: "", sumInsured: "", validTo: "" }); setPatientQuery(""); setPatientResults([]); setError(""); setPolicyModal(true); };
 
   return (
@@ -119,7 +162,15 @@ export default function InsuranceManagement() {
       <div className="mb-4 flex gap-2">
         {(["claims", "policies", "payers"] as Tab[]).map((t) => (
           <Button key={t} size="sm" variant={tab === t ? "primary" : "secondary"} onClick={() => setTab(t)}>
-            {t[0].toUpperCase() + t.slice(1)}
+            {t === "policies" ? "Policies & Approvals" : t[0].toUpperCase() + t.slice(1)}
+            {/* Approvals are the one thing here that blocks other people —
+                an unverified policy cannot pay a bill — so the count is on
+                the tab rather than only inside it. */}
+            {t === "policies" && pendingCount > 0 && (
+              <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                {pendingCount}
+              </span>
+            )}
           </Button>
         ))}
         <div className="ml-auto">
@@ -144,6 +195,36 @@ export default function InsuranceManagement() {
                   <Td className="text-right">
                     <Button size="sm" variant="secondary" onClick={() => { setPayerForm({ name: p.name, type: p.type, code: p.code || "", contactPhone: p.contactPhone || "", contactEmail: p.contactEmail || "" }); setError(""); setPayerModal(p); }}>Edit</Button>
                   </Td>
+                  {/* Only an APPROVED policy can settle a bill — this column
+                      is the gate that makes patient self-registration safe. */}
+                  <Td>
+                    <Badge
+                      tone={
+                        p.approvalStatus === "approved" ? "success"
+                        : p.approvalStatus === "rejected" ? "danger" : "warning"
+                      }
+                      dot
+                    >
+                      {p.approvalStatus || "pending"}
+                    </Badge>
+                    {p.reviewNote && (
+                      <div className="text-xs text-gray-400">{p.reviewNote}</div>
+                    )}
+                  </Td>
+                  <Td className="text-right whitespace-nowrap">
+                    {p.approvalStatus !== "approved" && (
+                      <Button size="sm" variant="ghost" className="px-2 text-emerald-600 hover:bg-emerald-50"
+                        onClick={() => decidePolicy(p, "approved")}>
+                        Approve
+                      </Button>
+                    )}
+                    {p.approvalStatus !== "rejected" && (
+                      <Button size="sm" variant="ghost" className="px-2 text-red-600 hover:bg-red-50"
+                        onClick={() => decidePolicy(p, "rejected")}>
+                        Reject
+                      </Button>
+                    )}
+                  </Td>
                 </TR>
               ))}
           </TBody>
@@ -151,11 +232,42 @@ export default function InsuranceManagement() {
       )}
 
       {tab === "policies" && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-gray-500">Show</span>
+          {[
+            ["pending", "Awaiting approval"],
+            ["approved", "Approved"],
+            ["rejected", "Rejected"],
+            ["", "All"],
+          ].map(([v, label]) => (
+            <Button
+              key={v || "all"}
+              size="sm"
+              variant={policyFilter === v ? "primary" : "secondary"}
+              onClick={() => setPolicyFilter(v)}
+            >
+              {label}
+              {v === "pending" && pendingCount > 0 ? ` (${pendingCount})` : ""}
+            </Button>
+          ))}
+          <span className="ml-auto text-xs text-gray-400">
+            Only an approved policy can settle a bill.
+          </span>
+        </div>
+      )}
+
+      {tab === "policies" && (
         <Table>
-          <THead><Th>Patient</Th><Th>Payer</Th><Th>Policy No.</Th><Th>Sum Insured</Th><Th>Valid To</Th></THead>
+          <THead><Th>Patient</Th><Th>Payer</Th><Th>Policy No.</Th><Th>Sum Insured</Th><Th>Valid To</Th><Th>Proof</Th><Th>Verification</Th><Th className="text-right">Action</Th></THead>
           <TBody>
-            {loading && policies.length === 0 ? <TableState colSpan={5}>Loading…</TableState>
-              : policies.length === 0 ? <TableState colSpan={5}>No policies.</TableState>
+            {loading && policies.length === 0 ? <TableState colSpan={8}>Loading…</TableState>
+              : policies.length === 0 ? (
+                <TableState colSpan={8}>
+                  {policyFilter === "pending"
+                    ? "Nothing waiting — every policy has been verified."
+                    : "No policies."}
+                </TableState>
+              )
               : pagePolicies.map((p) => (
                 <TR key={p._id}>
                   <Td className="font-medium text-gray-900">{p.patientId?.fullName || "—"}<div className="text-xs text-gray-400">{p.patientId?.patientId}</div></Td>
@@ -163,6 +275,34 @@ export default function InsuranceManagement() {
                   <Td className="text-gray-600">{p.policyNumber}</Td>
                   <Td>₹{(p.sumInsured || 0).toLocaleString("en-IN")}</Td>
                   <Td className="text-gray-500 text-xs">{p.validTo ? new Date(p.validTo).toLocaleDateString("en-IN") : "—"}</Td>
+                  {/* The card/scan the patient attached. Verifying cover means
+                      looking at this, so it belongs in the row, not buried. */}
+                  <Td className="whitespace-nowrap">
+                    {(p.documents || []).length === 0 ? (
+                      <span className="text-xs text-amber-600" title="No document on file — entered by staff, or added before documents were required">
+                        none
+                      </span>
+                    ) : (
+                      // Labelled by kind: the policy document is what proves
+                      // the cover, the card is only convenience.
+                      (p.documents || []).map(
+                        (d: { _id?: string; url: string; kind?: string }, i: number) => (
+                          <a
+                            key={d._id || i}
+                            href={d.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={`mr-2 text-xs underline ${
+                              d.kind === "policy" ? "text-cyan-700 font-medium" : "text-gray-500"
+                            }`}
+                            title={d.kind === "policy" ? "Policy document" : "Insurance card"}
+                          >
+                            {d.kind === "card" ? "Card" : "Policy"}
+                          </a>
+                        ),
+                      )
+                    )}
+                  </Td>
                 </TR>
               ))}
           </TBody>

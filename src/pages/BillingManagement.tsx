@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Eye } from "lucide-react";
-import { billingApi, hospitalPatientApi } from "../services/admin-api";
+import { billingApi, hospitalPatientApi, insuranceApi } from "../services/admin-api";
 import type { InvoiceLineItem } from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
@@ -60,6 +60,17 @@ const statusTone: Record<
   cancelled: "neutral",
 };
 
+/** A policy as the payment picker needs it — balance plus usability. */
+interface PayablePolicy {
+  policyId: string;
+  payerName: string;
+  policyNumber: string;
+  remaining: number;
+  approvalStatus: string;
+  usable: boolean;
+  reason?: string;
+}
+
 export default function BillingManagement() {
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSIONS.BILLING_CREATE);
@@ -86,7 +97,9 @@ export default function BillingManagement() {
 
   // Detail / payment
   const [detail, setDetail] = useState<any>(null);
-  const [pay, setPay] = useState({ method: "cash", amount: "", reference: "" });
+  const [pay, setPay] = useState({ method: "cash", amount: "", reference: "", policyId: "" });
+  /** This patient's policies, with live balances and why any is unusable. */
+  const [policies, setPolicies] = useState<PayablePolicy[]>([]);
 
   // Reports
   const [report, setReport] = useState<any>(null);
@@ -177,8 +190,22 @@ export default function BillingManagement() {
 
   const openDetail = async (id: string) => {
     const res = await billingApi.detail(id);
-    setDetail(res.data?.invoice);
-    setPay({ method: "cash", amount: "", reference: "" });
+    const inv = res.data?.invoice;
+    setDetail(inv);
+    setPay({ method: "cash", amount: "", reference: "", policyId: "" });
+    // Load this patient's policies up front so "Insurance" can offer real
+    // options with live balances rather than failing after the fact.
+    setPolicies([]);
+    if (inv?.patientId?._id || inv?.patientId) {
+      try {
+        const p = await insuranceApi.payableFor(
+          String(inv.patientId?._id || inv.patientId),
+        );
+        setPolicies(p.data?.items || []);
+      } catch {
+        setPolicies([]);
+      }
+    }
   };
 
   const submitPayment = async (e: React.FormEvent) => {
@@ -189,12 +216,16 @@ export default function BillingManagement() {
         method: pay.method,
         amount: Number(pay.amount),
         reference: pay.reference || undefined,
+        policyId: pay.method === "insurance" ? pay.policyId || undefined : undefined,
       });
       setDetail(res.data?.invoice);
-      setPay({ method: "cash", amount: "", reference: "" });
+      setPay({ method: "cash", amount: "", reference: "", policyId: "" });
       load();
-    } catch (err: any) {
-      alert(err.message || "Failed to record payment");
+    } catch (err: unknown) {
+      // The server explains exactly why a claim was refused — unapproved
+      // policy, wrong patient, no cover left. Show that, not a generic error.
+      const e = err as { data?: { hint?: string }; message?: string };
+      alert(e.data?.hint || e.message || "Failed to record payment");
     }
   };
 
@@ -685,32 +716,79 @@ ${pays ? `<div style="margin-top:16px;font-size:12px;color:#444"><b>Payments</b>
             )}
 
             {canPay && detail.balanceDue > 0 && (
-              <form onSubmit={submitPayment} className="flex gap-2 pt-2 border-t border-gray-200">
-                <Select
-                  value={pay.method}
-                  onChange={(e) => setPay({ ...pay, method: e.target.value })}
-                  className="w-auto capitalize"
-                >
-                  {METHODS.map((m) => (
-                    <option key={m} value={m} className="capitalize">
-                      {m}
-                    </option>
-                  ))}
-                </Select>
-                <Input
-                  type="number"
-                  placeholder="Amount"
-                  value={pay.amount}
-                  onChange={(e) => setPay({ ...pay, amount: e.target.value })}
-                  className="flex-1"
-                />
-                <Input
-                  placeholder="Ref"
-                  value={pay.reference}
-                  onChange={(e) => setPay({ ...pay, reference: e.target.value })}
-                  className="w-20"
-                />
-                <Button type="submit">Pay</Button>
+              <form onSubmit={submitPayment} className="space-y-2 pt-2 border-t border-gray-200">
+                <div className="flex gap-2">
+                  <Select
+                    value={pay.method}
+                    onChange={(e) => setPay({ ...pay, method: e.target.value, policyId: "" })}
+                    className="w-auto capitalize"
+                  >
+                    {METHODS.map((m) => (
+                      <option key={m} value={m} className="capitalize">
+                        {m}
+                      </option>
+                    ))}
+                  </Select>
+                  <Input
+                    type="number"
+                    placeholder="Amount"
+                    value={pay.amount}
+                    onChange={(e) => setPay({ ...pay, amount: e.target.value })}
+                    className="flex-1"
+                  />
+                  <Input
+                    placeholder="Ref"
+                    value={pay.reference}
+                    onChange={(e) => setPay({ ...pay, reference: e.target.value })}
+                    className="w-20"
+                    disabled={pay.method === "insurance"}
+                    title={pay.method === "insurance" ? "The claim number is used as the reference" : undefined}
+                  />
+                  <Button
+                    type="submit"
+                    disabled={pay.method === "insurance" && !pay.policyId}
+                  >
+                    Pay
+                  </Button>
+                </div>
+
+                {/* Insurance can only come off an APPROVED policy belonging to
+                    this patient, with cover left. Unusable policies are shown
+                    with the reason rather than hidden, so the desk can tell the
+                    patient what is wrong. */}
+                {pay.method === "insurance" && (
+                  <div className="rounded-lg bg-gray-50 p-2">
+                    {policies.length === 0 ? (
+                      <p className="text-xs text-gray-500">
+                        This patient has no insurance policy on file.
+                      </p>
+                    ) : (
+                      <>
+                        <Select
+                          value={pay.policyId}
+                          onChange={(e) => setPay({ ...pay, policyId: e.target.value })}
+                          className="w-full"
+                        >
+                          <option value="">— Choose a policy to claim against —</option>
+                          {policies.map((p) => (
+                            <option key={p.policyId} value={p.policyId} disabled={!p.usable}>
+                              {p.payerName} · {p.policyNumber} ·{" "}
+                              {p.usable
+                                ? `₹${p.remaining.toLocaleString("en-IN")} left`
+                                : p.reason}
+                            </option>
+                          ))}
+                        </Select>
+                        {policies.some((p) => !p.usable) && (
+                          <p className="mt-1 text-xs text-amber-600">
+                            Only verified policies can settle a bill. Approve one
+                            under Insurance → Policies to use it here.
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </form>
             )}
           </div>

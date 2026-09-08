@@ -459,7 +459,7 @@ export const sosSubmissionApi = {
   getDispatches: (id: string) =>
     fetchWithAuth(`/admin/sos-submissions/${id}/dispatches`),
 
-  // One-click real call to the submitter — auto-creates/reuses the IVR
+  // One-click real call to the submitter — MyOperator click-to-call
   // escalation record, no manual "Start Escalation" form needed.
   call: (id: string) =>
     fetchWithAuth(`/admin/sos-submissions/${id}/call`, { method: "POST" }),
@@ -1954,9 +1954,11 @@ export const billingApi = {
       method: "PUT",
       body: JSON.stringify(data),
     }),
+  // `policyId` is REQUIRED when method is "insurance" — the server refuses
+  // otherwise and returns the patient's policies to choose from.
   recordPayment: (
     id: string,
-    data: { method: string; amount: number; reference?: string },
+    data: { method: string; amount: number; reference?: string; policyId?: string },
   ) =>
     fetchWithAuth(`/admin/billing/${id}/payment`, {
       method: "POST",
@@ -2039,8 +2041,25 @@ export const insuranceApi = {
   // Policies
   listPolicies: (patientId?: string) =>
     fetchWithAuth(`/admin/insurance/policies${patientId ? `?patientId=${patientId}` : ""}`),
+  // Filter the verification queue — "pending" is what a verifier wants.
+  listPoliciesBy: (params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/insurance/policies${qs ? `?${qs}` : ""}`);
+  },
   createPolicy: (data: any) =>
     fetchWithAuth("/admin/insurance/policies", { method: "POST", body: JSON.stringify(data) }),
+  // Verifying a patient-submitted policy — only an approved one can pay a bill.
+  setPolicyApproval: (
+    id: string,
+    data: { approvalStatus: "pending" | "approved" | "rejected"; reviewNote?: string },
+  ) =>
+    fetchWithAuth(`/admin/insurance/policies/${id}/approval`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  // Policies that could settle this patient's bill, with live balances.
+  payableFor: (patientId: string) =>
+    fetchWithAuth(`/admin/insurance/patients/${patientId}/payable`),
   updatePolicy: (id: string, data: any) =>
     fetchWithAuth(`/admin/insurance/policies/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   // Claims
@@ -2286,34 +2305,33 @@ export const labApi = {
     fetchWithAuth(`/admin/labs/${id}`, { method: "DELETE" }),
 };
 
-// IVR escalation
-export const ivrApi = {
+/**
+ * Calls & recordings (MyOperator). Click-to-call rings the signed-in admin
+ * first, then bridges them to the customer.
+ */
+export const callsApi = {
   list: (params: Record<string, string | number> = {}) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
-    return fetchWithAuth(`/admin/ivr-escalations${qs ? `?${qs}` : ""}`);
+    return fetchWithAuth(`/admin/calls${qs ? `?${qs}` : ""}`);
   },
-  detail: (id: string) => fetchWithAuth(`/admin/ivr-escalations/${id}`),
-  start: (data: {
-    sosSubmission?: string;
-    emergencyDispatch?: string;
-    triggerReason?: string;
-    contacts: { tier: number; name?: string; phone: string; role?: string }[];
+  stats: () => fetchWithAuth("/admin/calls/stats"),
+  detail: (id: string) => fetchWithAuth(`/admin/calls/${id}`),
+  clickToCall: (data: {
+    customerNumber: string;
+    agentNumber?: string;
+    subjectType?: string;
+    subjectId?: string;
+    subjectLabel?: string;
   }) =>
-    fetchWithAuth("/admin/ivr-escalations", {
+    fetchWithAuth("/admin/calls/click-to-call", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  advance: (id: string) =>
-    fetchWithAuth(`/admin/ivr-escalations/${id}/advance`, { method: "POST" }),
-  callNow: (id: string, tier: number) =>
-    fetchWithAuth(`/admin/ivr-escalations/${id}/call/${tier}`, { method: "POST" }),
-  acknowledge: (id: string, phone?: string) =>
-    fetchWithAuth(`/admin/ivr-escalations/${id}/acknowledge`, {
-      method: "POST",
-      body: JSON.stringify({ phone }),
+  saveNotes: (id: string, notes: string) =>
+    fetchWithAuth(`/admin/calls/${id}/notes`, {
+      method: "PUT",
+      body: JSON.stringify({ notes }),
     }),
-  cancel: (id: string) =>
-    fetchWithAuth(`/admin/ivr-escalations/${id}/cancel`, { method: "POST" }),
 };
 
 // ==================== HR — EMPLOYEES API ====================
@@ -2641,6 +2659,22 @@ export const membershipPlanApi = {
     fetchWithAuth(`/admin/membership-plans/${id}/toggle`, { method: "PATCH" }),
   remove: (id: string) =>
     fetchWithAuth(`/admin/membership-plans/${id}`, { method: "DELETE" }),
+
+  // Subscribers — who is enrolled, and what has actually been collected.
+  subscribers: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/membership-plans/subscribers/list${qs ? `?${qs}` : ""}`);
+  },
+  recordPayment: (
+    id: string,
+    data: { paymentStatus: "pending" | "paid" | "waived"; amountPaid?: number; paymentRef?: string },
+  ) =>
+    fetchWithAuth(`/admin/membership-plans/subscribers/${id}/payment`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  expireLapsed: () =>
+    fetchWithAuth(`/admin/membership-plans/subscribers/expire-lapsed`, { method: "POST" }),
 };
 
 // ==================== HOME PROMOS ====================
@@ -2883,7 +2917,7 @@ export default {
   opd: opdApi,
   ipd: ipdApi,
   pharmacies: pharmacyApi,
-  ivr: ivrApi,
+  calls: callsApi,
   hrEmployees: hrEmployeeApi,
   attendance: attendanceApi,
   leave: leaveApi,

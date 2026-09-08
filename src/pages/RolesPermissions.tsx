@@ -822,10 +822,11 @@ const PERMISSION_MODULES = [
     ],
   },
   {
-    module: "IVR Escalation",
+    module: "Calls & Recordings",
     permissions: [
-      { id: "ivr:view", name: "View IVR Escalations", description: "Can view SOS phone-tree escalations" },
-      { id: "ivr:manage", name: "Manage IVR Escalations", description: "Can act on escalations" },
+      { id: "calls:view", name: "View Calls", description: "Can view the call log and play recordings" },
+      { id: "calls:place", name: "Place Calls", description: "Can use click-to-call" },
+      { id: "calls:manage", name: "Manage Calls", description: "Can edit call notes and outcomes" },
     ],
   },
   {

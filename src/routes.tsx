@@ -138,9 +138,7 @@ const IPDManagement = lazy(() => import("./pages/IPDManagement"));
 const PharmaciesManagement = lazy(() => import("./pages/PharmaciesManagement"));
 const PharmacyDispense = lazy(() => import("./pages/PharmacyDispense"));
 const LabsManagement = lazy(() => import("./pages/LabsManagement"));
-const IvrEscalationsManagement = lazy(
-  () => import("./pages/IvrEscalationsManagement"),
-);
+const CallLogs = lazy(() => import("./pages/CallLogs"));
 // Operations
 const BookingManagement = lazy(() => import("./pages/BookingManagement"));
 const AmbulancePricingManagement = lazy(
@@ -563,9 +561,9 @@ export const adminRoutes = [
     icon: FlaskConical,
   },
   {
-    path: "ivr-escalations",
-    element: IvrEscalationsManagement,
-    name: "IVR Escalation",
+    path: "calls",
+    element: CallLogs,
+    name: "Calls & Recordings",
     icon: PhoneCall,
   },
   {
