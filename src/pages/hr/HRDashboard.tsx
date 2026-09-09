@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Users, UserCheck, CalendarOff, Clock, Wallet } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Users, UserCheck, CalendarOff, Clock, Wallet, ArrowRight } from "lucide-react";
 import { hrDashboardApi } from "../../services/admin-api";
 import { PageHeader, Card, Table, THead, TBody, TR, Th, Td, TableState } from "../../components/ui";
 
@@ -27,6 +28,13 @@ const MONTHS = [
 const inr = (n: number) =>
   "₹" + (n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
+/** Today in the local calendar. `toISOString` would shift the date in IST. */
+const today = () => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
 export default function HRDashboard() {
   const [data, setData] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,12 +46,50 @@ export default function HRDashboard() {
       .finally(() => setLoading(false));
   }, []);
 
+  /**
+   * Every card drills into the list its number came from, carrying the same
+   * filter the count was made with — so the page you land on shows those exact
+   * records, not a full unfiltered list you then have to narrow by hand.
+   */
   const cards = [
-    { label: "Total Employees", value: data?.headcount ?? "—", icon: Users, tone: "bg-blue-50 text-blue-700" },
-    { label: "Active", value: data?.activeCount ?? "—", icon: UserCheck, tone: "bg-emerald-50 text-emerald-700" },
-    { label: "Present Today", value: data?.presentToday ?? "—", icon: Clock, tone: "bg-healwin-50 text-healwin-700" },
-    { label: "On Leave Today", value: data?.onLeaveToday ?? "—", icon: CalendarOff, tone: "bg-amber-50 text-amber-700" },
-    { label: "Pending Leave Requests", value: data?.pendingLeaves ?? "—", icon: CalendarOff, tone: "bg-red-50 text-red-700" },
+    {
+      label: "Total Employees",
+      value: data?.headcount ?? "—",
+      icon: Users,
+      tone: "bg-blue-50 text-blue-700",
+      to: "/admin/employees",
+    },
+    {
+      label: "Active",
+      value: data?.activeCount ?? "—",
+      icon: UserCheck,
+      tone: "bg-emerald-50 text-emerald-700",
+      to: "/admin/employees?status=active",
+    },
+    {
+      label: "Present Today",
+      value: data?.presentToday ?? "—",
+      icon: Clock,
+      tone: "bg-healwin-50 text-healwin-700",
+      to: `/admin/attendance?date=${today()}&status=present`,
+    },
+    {
+      // Counted from today's attendance register, so it drills into that —
+      // not the leave list, which counts requests over a date range and would
+      // show a different number.
+      label: "On Leave Today",
+      value: data?.onLeaveToday ?? "—",
+      icon: CalendarOff,
+      tone: "bg-amber-50 text-amber-700",
+      to: `/admin/attendance?date=${today()}&status=leave`,
+    },
+    {
+      label: "Pending Leave Requests",
+      value: data?.pendingLeaves ?? "—",
+      icon: CalendarOff,
+      tone: "bg-red-50 text-red-700",
+      to: "/admin/leave?status=pending",
+    },
   ];
 
   return (
@@ -54,13 +100,23 @@ export default function HRDashboard() {
         {cards.map((c) => {
           const Icon = c.icon;
           return (
-            <Card key={c.label} className="p-4">
-              <div className={`mb-2 inline-flex h-9 w-9 items-center justify-center rounded-lg ${c.tone}`}>
-                <Icon className="h-5 w-5" />
-              </div>
-              <div className="text-2xl font-semibold text-gray-900">{loading ? "…" : c.value}</div>
-              <div className="text-xs text-gray-500">{c.label}</div>
-            </Card>
+            <Link
+              key={c.label}
+              to={c.to}
+              className="group rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-healwin-500"
+              aria-label={`${c.label} — view the list`}
+            >
+              <Card className="h-full p-4 transition-shadow group-hover:shadow-[0_14px_36px_-12px_rgba(30,64,175,0.32)]">
+                <div className="flex items-start justify-between">
+                  <div className={`mb-2 inline-flex h-9 w-9 items-center justify-center rounded-lg ${c.tone}`}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-gray-300 transition-colors group-hover:text-healwin-600" />
+                </div>
+                <div className="text-2xl font-semibold text-gray-900">{loading ? "…" : c.value}</div>
+                <div className="text-xs text-gray-500">{c.label}</div>
+              </Card>
+            </Link>
           );
         })}
       </div>
@@ -71,16 +127,24 @@ export default function HRDashboard() {
             <Wallet className="h-4 w-4" /> Latest Payroll Run
           </div>
           {data?.latestRun ? (
-            <div className="space-y-1 text-sm">
-              <div className="text-2xl font-semibold text-gray-900">
-                {inr(data.latestRun.totalNet)}
+            // Opens payroll already showing this run's month, rather than
+            // whatever month happens to be current.
+            <Link
+              to={`/admin/payroll?month=${data.latestRun.month}&year=${data.latestRun.year}`}
+              className="group block space-y-1 text-sm"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-2xl font-semibold text-gray-900">
+                  {inr(data.latestRun.totalNet)}
+                </span>
+                <ArrowRight className="h-4 w-4 text-gray-300 transition-colors group-hover:text-healwin-600" />
               </div>
-              <div className="text-gray-500">
+              <div className="text-gray-500 group-hover:text-gray-700">
                 {MONTHS[data.latestRun.month - 1]} {data.latestRun.year} ·{" "}
                 {data.latestRun.employeeCount} employees ·{" "}
                 <span className="capitalize">{data.latestRun.status}</span>
               </div>
-            </div>
+            </Link>
           ) : (
             <p className="text-sm text-gray-400">No payroll run yet.</p>
           )}
@@ -103,7 +167,17 @@ export default function HRDashboard() {
               ) : (
                 data.byDepartment.map((d) => (
                   <TR key={String(d._id)}>
-                    <Td className="font-medium text-gray-900">{d.name}</Td>
+                    <Td className="font-medium text-gray-900">
+                      {/* Employees with no department are grouped as
+                          "Unassigned" — `none` is what the API accepts for
+                          that, since an empty value reads as "no filter". */}
+                      <Link
+                        to={`/admin/employees?departmentId=${d._id ? String(d._id) : "none"}`}
+                        className="hover:text-healwin-700 hover:underline"
+                      >
+                        {d.name}
+                      </Link>
+                    </Td>
                     <Td className="text-right">{d.count}</Td>
                   </TR>
                 ))

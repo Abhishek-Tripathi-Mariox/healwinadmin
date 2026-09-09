@@ -22,6 +22,7 @@ import {
   Input,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface DivisionItem {
   _id: string;
@@ -153,7 +154,7 @@ const DivisionManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this division?")) return;
+    if (!await dialog.confirm({ message: "Delete this division?", confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await divisionApi.remove(id);
       loadDivisions();

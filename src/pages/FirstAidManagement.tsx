@@ -4,6 +4,7 @@ import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 export default function FirstAidManagement() {
   const [rows, setRows] = useState<any[]>([]);
@@ -32,7 +33,7 @@ export default function FirstAidManagement() {
       setModal(null); load();
     } catch (e: any) { setError(e.message || "Failed"); } finally { setSaving(false); }
   };
-  const remove = async (id: string) => { if (confirm("Delete this guide?")) { await firstAidApi.remove(id); load(); } };
+  const remove = async (id: string) => { if (await dialog.confirm({ message: "Delete this guide?", confirmLabel: "Delete", tone: "danger" })) { await firstAidApi.remove(id); load(); } };
 
   return (
     <div className="p-6">

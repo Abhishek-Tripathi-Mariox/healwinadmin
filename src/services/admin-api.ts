@@ -1,3 +1,4 @@
+import { dialog } from "./dialog";
 // Admin API Service
 // Resolve the API base robustly: an explicit VITE_API_URL wins; otherwise
 // localhost dev hits the local backend, but ANY non-localhost host (e.g. the
@@ -65,7 +66,7 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
       const errorData = await response.json().catch(() => ({}));
       console.error("[API] 401 Unauthorized:", errorData);
       // DON'T auto-logout - let the user see the error first
-      alert(
+      void dialog.alert(
         `API returned 401: ${errorData.message || "Session expired"}\n\nCheck console for details.`,
       );
       throw new Error(
@@ -102,7 +103,7 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
     // Network error or other fetch error
     if (error.name === "TypeError" && error.message === "Failed to fetch") {
       console.error("[API] Network error - is the backend running?");
-      alert("Cannot connect to backend. Is the server running on port 9050?");
+      void dialog.alert("Cannot connect to backend. Is the server running on port 9050?");
       throw new Error(
         "Unable to connect to server. Please check your connection.",
       );
@@ -259,7 +260,7 @@ const fetchWithAuthMultipart = async (
 
   if (response.status === 401) {
     const errorData = await response.json().catch(() => ({}));
-    alert(`API returned 401: ${errorData.message || "Session expired"}`);
+    void dialog.alert(`API returned 401: ${errorData.message || "Session expired"}`);
     throw new Error(errorData.message || "Session expired.");
   }
   if (response.status === 403) {
@@ -2334,6 +2335,25 @@ export const callsApi = {
     }),
 };
 
+/**
+ * Payment gateway configuration. Secrets go up in the clear over HTTPS and
+ * come back masked — the server never returns a stored secret in full.
+ */
+export const paymentConfigApi = {
+  get: () => fetchWithAuth("/admin/payment-settings"),
+  update: (data: {
+    keyId: string;
+    keySecret?: string;
+    webhookSecret?: string;
+    enabled?: boolean;
+  }) =>
+    fetchWithAuth("/admin/payment-settings", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  test: () => fetchWithAuth("/admin/payment-settings/test", { method: "POST" }),
+};
+
 // ==================== HR — EMPLOYEES API ====================
 export const hrEmployeeApi = {
   meta: () => fetchWithAuth("/admin/hr/employees/meta/options"),
@@ -2601,8 +2621,12 @@ export const catalogApi = {
 
 // ==================== AMBULANCE REQUESTS (patient dispatch) ====================
 export const ambulanceRequestApi = {
-  list: (status?: string) =>
-    fetchWithAuth(`/admin/ambulance-requests${status ? `?status=${status}` : ""}`),
+  list: (status?: string, params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(
+      sanitizeParams({ ...(status ? { status } : {}), ...params }),
+    ).toString();
+    return fetchWithAuth(`/admin/ambulance-requests${qs ? `?${qs}` : ""}`);
+  },
   // Geo-ranked available ambulances for a request's pickup — same as SOS dispatch.
   nearby: (id: string, radiusKm?: number) =>
     fetchWithAuth(
@@ -2918,6 +2942,7 @@ export default {
   ipd: ipdApi,
   pharmacies: pharmacyApi,
   calls: callsApi,
+  paymentConfig: paymentConfigApi,
   hrEmployees: hrEmployeeApi,
   attendance: attendanceApi,
   leave: leaveApi,

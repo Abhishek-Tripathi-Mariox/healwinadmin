@@ -21,6 +21,7 @@ import {
   Textarea,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface ServiceTypeItem {
   _id: string;
@@ -128,7 +129,7 @@ const LocatorServiceTypeManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this service type?")) return;
+    if (!await dialog.confirm({ message: "Delete this service type?", confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await locatorServiceTypeApi.remove(id);
       loadTypes();

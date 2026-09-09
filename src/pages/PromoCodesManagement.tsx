@@ -7,6 +7,7 @@ import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface PromoRow {
   _id: string;
@@ -145,7 +146,7 @@ export default function PromoCodesManagement() {
 
   const toggle = async (p: PromoRow) => { await promoApi.toggle(p._id); load(); };
   const remove = async (p: PromoRow) => {
-    if (!window.confirm(`Delete promo code ${p.code}?`)) return;
+    if (!await dialog.confirm({ message: `Delete promo code ${p.code}?`, confirmLabel: "Delete", tone: "danger" })) return;
     await promoApi.remove(p._id);
     load();
   };

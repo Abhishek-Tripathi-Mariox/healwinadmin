@@ -4,6 +4,7 @@ import { AuthProvider } from "./auth/AuthContext";
 import PrivateRoute from "./routes/privateRoute";
 import ModuleGuard from "./routes/ModuleGuard";
 import ErrorBoundary from "./components/ErrorBoundary";
+import DialogHost from "./components/dialog/DialogHost";
 
 import AuthLayout from "./layouts/AuthLayout";
 import AdminLayout from "./layouts/AdminLayout";
@@ -67,6 +68,9 @@ const App = () => {
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>
       </BrowserRouter>
+      {/* Renders confirm/alert dialogs from anywhere in the app, including
+          code outside the router. */}
+      <DialogHost />
     </AuthProvider>
   );
 };

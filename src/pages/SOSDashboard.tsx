@@ -58,6 +58,7 @@ import type {
   SOSSubmissionStats,
   EmergencyDispatch,
 } from "../types/admin";
+import { dialog } from "../services/dialog";
 
 type TabType = "CALL" | "FORM" | "APP_DOWNLOAD";
 
@@ -346,18 +347,16 @@ const SOSDashboard: React.FC = () => {
   // call log so the recording lands against it when the webhook reports back.
   const handleCall = async (sub: SOSSubmission) => {
     if (
-      !window.confirm(
-        `Call ${sub.name || sub.phone}?\n\nYour own phone rings first — answer it, and you will be connected to ${sub.phone}.`,
-      )
+      !await dialog.confirm({ message: `Call ${sub.name || sub.phone}?\n\nYour own phone rings first — answer it, and you will be connected to ${sub.phone}.`, confirmLabel: "Call" },)
     )
       return;
     setCallingId(sub._id);
     try {
       const res = await sosSubmissionApi.call(sub._id);
       if (!res.success) throw new Error(res.message || "Call failed");
-      alert(res.message || `Ringing you now — you will be connected to ${sub.phone}.`);
+      void dialog.alert(res.message || `Ringing you now — you will be connected to ${sub.phone}.`);
     } catch (err: any) {
-      alert(err?.message || "Failed to place call");
+      void dialog.alert(err?.message || "Failed to place call");
     }
     setCallingId(null);
   };
@@ -529,7 +528,7 @@ const SOSDashboard: React.FC = () => {
       }
     } catch (err: any) {
       console.error("Failed to dispatch:", err);
-      alert(err?.message || "Dispatch failed");
+      void dialog.alert(err?.message || "Dispatch failed");
     }
     setActionLoading(null);
   };
@@ -658,7 +657,75 @@ const SOSDashboard: React.FC = () => {
     },
   ];
 
+  // The red banner stays deliberately GLOBAL — a pending emergency matters
+  // whichever tab it happens to sit under, and hiding it behind a tab is how
+  // one gets missed.
   const pendingCount = stats?.byStatus.PENDING || 0;
+
+  /**
+   * Card counts for the tab on screen.
+   *
+   * The list is always scoped to the active tab, so the cards have to be too:
+   * a "Pending 3" card that opens a list of 1 is worse than no card at all.
+   * Falls back to the global figures if an older backend has not sent the
+   * per-type split yet.
+   */
+  const tabStats = stats?.byTypeStatus?.[activeTab];
+  const statusCards: Array<{
+    key: string;
+    label: string;
+    value: number;
+    tone: string;
+    valueTone: string;
+    ring: string;
+  }> = [
+    {
+      key: "",
+      label: "Total",
+      value: tabStats ? tabStats.total : stats?.total || 0,
+      tone: "text-gray-500",
+      valueTone: "text-gray-800",
+      ring: "ring-gray-400",
+    },
+    {
+      key: "PENDING",
+      label: "Pending",
+      value: tabStats ? tabStats.PENDING : stats?.byStatus.PENDING || 0,
+      tone: "text-red-500",
+      valueTone: "text-red-600",
+      ring: "ring-red-400",
+    },
+    {
+      key: "IN_PROGRESS",
+      label: "In Progress",
+      value: tabStats ? tabStats.IN_PROGRESS : stats?.byStatus.IN_PROGRESS || 0,
+      tone: "text-yellow-600",
+      valueTone: "text-yellow-600",
+      ring: "ring-yellow-400",
+    },
+    {
+      key: "RESOLVED",
+      label: "Resolved",
+      value: tabStats ? tabStats.RESOLVED : stats?.byStatus.RESOLVED || 0,
+      tone: "text-green-600",
+      valueTone: "text-green-600",
+      ring: "ring-green-400",
+    },
+    {
+      key: "CLOSED",
+      label: "Closed",
+      value: tabStats ? tabStats.CLOSED : stats?.byStatus.CLOSED || 0,
+      tone: "text-gray-500",
+      valueTone: "text-gray-600",
+      ring: "ring-gray-400",
+    },
+  ];
+
+  /** Clicking the card that is already applied clears it, so it toggles. */
+  const applyStatusCard = (key: string) => {
+    setStatusFilter((current) => (current === key ? "" : key));
+    setPage(1);
+  };
 
   // ======================== RENDER ========================
   return (
@@ -708,38 +775,37 @@ const SOSDashboard: React.FC = () => {
         </Alert>
       )}
 
-      {/* Stats Cards */}
+      {/* Stats Cards — each one filters the list below it */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-        <Card padded>
-          <p className="text-sm text-gray-500">Total</p>
-          <p className="mt-1 text-2xl font-bold text-gray-800">
-            {stats?.total || 0}
-          </p>
-        </Card>
-        <Card padded className="border-red-100">
-          <p className="text-sm text-red-500">Pending</p>
-          <p className="mt-1 text-2xl font-bold text-red-600">
-            {stats?.byStatus.PENDING || 0}
-          </p>
-        </Card>
-        <Card padded className="border-yellow-100">
-          <p className="text-sm text-yellow-600">In Progress</p>
-          <p className="mt-1 text-2xl font-bold text-yellow-600">
-            {stats?.byStatus.IN_PROGRESS || 0}
-          </p>
-        </Card>
-        <Card padded className="border-green-100">
-          <p className="text-sm text-green-600">Resolved</p>
-          <p className="mt-1 text-2xl font-bold text-green-600">
-            {stats?.byStatus.RESOLVED || 0}
-          </p>
-        </Card>
-        <Card padded>
-          <p className="text-sm text-gray-500">Closed</p>
-          <p className="mt-1 text-2xl font-bold text-gray-600">
-            {stats?.byStatus.CLOSED || 0}
-          </p>
-        </Card>
+        {statusCards.map((c) => {
+          const active = statusFilter === c.key;
+          return (
+            <button
+              key={c.label}
+              type="button"
+              onClick={() => applyStatusCard(c.key)}
+              aria-pressed={active}
+              title={
+                active
+                  ? "Showing only these — click to clear"
+                  : `Show only ${c.label.toLowerCase()}`
+              }
+              className="text-left"
+            >
+              <Card
+                padded
+                className={`h-full transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                  active ? `ring-2 ${c.ring} ring-offset-1` : ""
+                }`}
+              >
+                <p className={`text-sm ${c.tone}`}>{c.label}</p>
+                <p className={`mt-1 text-2xl font-bold ${c.valueTone}`}>
+                  {c.value}
+                </p>
+              </Card>
+            </button>
+          );
+        })}
       </div>
 
       {/* Tabs + Content */}

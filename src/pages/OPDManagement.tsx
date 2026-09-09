@@ -25,6 +25,7 @@ import {
   Field,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface Appt {
   _id: string;
@@ -95,7 +96,7 @@ export default function OPDManagement() {
   // Jump to the patient's EMR and auto-open a SOAP encounter for this visit.
   const startConsult = (a: Appt) => {
     if (!a.patientId?._id) {
-      alert("This appointment is not linked to a registered patient.");
+      void dialog.alert("This appointment is not linked to a registered patient.");
       return;
     }
     navigate(
@@ -300,7 +301,7 @@ export default function OPDManagement() {
   };
 
   const cancel = async (a: Appt) => {
-    if (!window.confirm("Cancel this appointment?")) return;
+    if (!await dialog.confirm({ message: "Cancel this appointment?", confirmLabel: "Yes, cancel", cancelLabel: "Keep it", tone: "danger" })) return;
     await opdApi.update(a._id, { status: "cancelled" });
     load();
   };

@@ -14,6 +14,7 @@ import {
   Input,
   Textarea,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface GalleryImageItem {
   _id: string;
@@ -183,7 +184,7 @@ const GalleryManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this gallery image?")) return;
+    if (!await dialog.confirm({ message: "Delete this gallery image?", confirmLabel: "Delete", tone: "danger" })) return;
     setError(null);
     try {
       await galleryApi.remove(id);

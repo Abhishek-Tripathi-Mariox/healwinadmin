@@ -7,6 +7,7 @@ import {
 } from "../../components/ui";
 import { useAuth } from "../../auth/useAuth";
 import { PERMISSIONS } from "../../auth/permissions";
+import { dialog } from "../../services/dialog";
 
 interface EmployeeDoc {
   _id: string;
@@ -51,7 +52,7 @@ export default function EmployeeDetail() {
 
   const removeDocument = async (docId: string) => {
     if (!id) return;
-    if (!window.confirm("Remove this document from the employee record?")) return;
+    if (!await dialog.confirm({ message: "Remove this document from the employee record?", confirmLabel: "Remove", tone: "danger" })) return;
     try {
       const res = await hrEmployeeApi.removeDocument(id, docId);
       setData((d: any) => ({

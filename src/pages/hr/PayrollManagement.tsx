@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Download, Lock, Play, ArrowLeft } from "lucide-react";
 import { payrollApi } from "../../services/admin-api";
 import { useAuth } from "../../auth/useAuth";
@@ -6,6 +7,7 @@ import { PERMISSIONS } from "../../auth/permissions";
 import {
   PageHeader, Button, Select, Card, Table, THead, TBody, TR, Th, Td, TableState, Badge,
 } from "../../components/ui";
+import { dialog } from "../../services/dialog";
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const inr = (n: number) => "₹" + (n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -36,8 +38,18 @@ export default function PayrollManagement() {
   const canFinalize = hasPermission(PERMISSIONS.PAYROLL_FINALIZE);
   const canVerify = hasPermission(PERMISSIONS.PAYROLL_VERIFY);
 
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
+  // The dashboard's payroll card links here with the month of the latest run,
+  // which is often not the current one. Reading them from the URL means the
+  // page opens on the run you clicked rather than on today's month.
+  const [searchParams] = useSearchParams();
+  const monthParam = Number(searchParams.get("month"));
+  const yearParam = Number(searchParams.get("year"));
+  const [month, setMonth] = useState(
+    monthParam >= 1 && monthParam <= 12 ? monthParam : now.getMonth() + 1,
+  );
+  const [year, setYear] = useState(
+    yearParam >= 2000 && yearParam <= 2200 ? yearParam : now.getFullYear(),
+  );
   const [runs, setRuns] = useState<Run[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -71,7 +83,7 @@ export default function PayrollManagement() {
           .slice(0, 10)
           .map((w) => `• ${w.name}: ${w.unmarkedDays} of ${w.serviceDays} days unmarked`)
           .join("\n");
-        alert(
+        void dialog.alert(
           `Payroll generated, but attendance is incomplete.\n\n${lines}` +
             (warn.length > 10 ? `\n…and ${warn.length - 10} more` : "") +
             "\n\nUnmarked days are paid as worked. Mark attendance and re-generate if that is wrong.",
@@ -81,12 +93,12 @@ export default function PayrollManagement() {
     } catch (err: any) {
       // The month has no attendance at all — everyone would be paid in full.
       if (err?.data?.unmarkedMonth && !acknowledgeUnmarked) {
-        if (window.confirm(`${err.data.hint}\n\nGenerate anyway?`)) {
+        if (await dialog.confirm(`${err.data.hint}\n\nGenerate anyway?`)) {
           return generate(true);
         }
         return;
       }
-      alert(err?.data?.hint || err.message || "Failed to generate payroll");
+      void dialog.alert(err?.data?.hint || err.message || "Failed to generate payroll");
     } finally {
       setGenerating(false);
     }
@@ -96,9 +108,12 @@ export default function PayrollManagement() {
   // the sign-off, because the figures being approved have changed.
   const verify = async (run: Run) => {
     if (
-      !window.confirm(
-        `Verify the ${MONTHS[run.month - 1]} ${run.year} payroll?\n\nThis records that you have checked the figures. The run can then be finalized.`,
-      )
+      !(await dialog.confirm({
+        title: `Verify the ${MONTHS[run.month - 1]} ${run.year} payroll?`,
+        message:
+          "This records that you have checked the figures. The run can then be finalized.",
+        confirmLabel: "Verify",
+      }))
     )
       return;
     try {
@@ -109,7 +124,7 @@ export default function PayrollManagement() {
       setPayslips(res.data?.payslips || []);
     } catch (err: unknown) {
       const e = err as { data?: { hint?: string }; message?: string };
-      alert(e.data?.hint || e.message || "Failed to verify the run");
+      void dialog.alert(e.data?.hint || e.message || "Failed to verify the run");
     }
   };
 
@@ -121,7 +136,7 @@ export default function PayrollManagement() {
 
   const finalize = async () => {
     if (!openRun) return;
-    if (!window.confirm("Finalize this payroll run? It can no longer be re-generated.")) return;
+    if (!await dialog.confirm({ message: "Finalize this payroll run? It can no longer be re-generated.", confirmLabel: "Finalize", tone: "danger" })) return;
     try {
       const res = await payrollApi.finalize(openRun._id);
       setOpenRun(res.data?.run || openRun);
@@ -129,7 +144,7 @@ export default function PayrollManagement() {
     } catch (err: unknown) {
       // The server refuses to finalize an unverified run — say why.
       const e = err as { data?: { hint?: string }; message?: string };
-      alert(e.data?.hint || e.message || "Failed to finalize");
+      void dialog.alert(e.data?.hint || e.message || "Failed to finalize");
     }
   };
 

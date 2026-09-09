@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ambulanceRequestApi, ambulanceStaffApi, inventoryApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
 import {
@@ -84,6 +84,7 @@ export default function AmbulanceRequestsManagement() {
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
 
   const [assignFor, setAssignFor] = useState<ReqRow | null>(null);
   const [form, setForm] = useState({ driverName: "", driverPhone: "", vehicleNumber: "", etaMinutes: "", driverStaffId: "" });
@@ -104,15 +105,26 @@ export default function AmbulanceRequestsManagement() {
   const [mediaFor, setMediaFor] = useState<ReqRow | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
+  /**
+   * One page from the server.
+   *
+   * The endpoint used to answer with a bare `.limit(200)` and this screen
+   * sliced those 200 locally — so beyond 200 requests the queue quietly hid
+   * the rest. It pages properly now, and reports the real total.
+   */
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await ambulanceRequestApi.list(statusFilter || undefined);
+      const res = await ambulanceRequestApi.list(statusFilter || undefined, {
+        page,
+        limit,
+      });
       setItems(res.data?.items || []);
+      setTotal(res.data?.pagination?.total ?? (res.data?.items || []).length);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, page, limit]);
 
   // Poll as a fallback safety net behind the realtime socket below.
   useEffect(() => {
@@ -122,14 +134,9 @@ export default function AmbulanceRequestsManagement() {
   }, [load]);
 
   useEffect(() => { setPage(1); }, [statusFilter]);
-  const totalPages = Math.max(1, Math.ceil(items.length / limit));
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-  const pageItems = useMemo(
-    () => items.slice((page - 1) * limit, page * limit),
-    [items, page, limit],
-  );
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  // The rows returned ARE the page — no client-side slicing.
+  const pageItems = items;
 
   // Realtime: a new patient "Where To?" ambulance request shows up the instant
   // it's created (`ambulance-request:new`), and the row refreshes the moment
@@ -414,7 +421,7 @@ export default function AmbulanceRequestsManagement() {
             ))}
           </select>
         </label>
-        <Pagination page={page} totalPages={totalPages} total={items.length} label="requests" onPageChange={setPage} />
+        <Pagination page={page} totalPages={totalPages} total={total} label="requests" onPageChange={setPage} />
       </div>
 
       <Modal

@@ -20,6 +20,7 @@ import {
   Field,
   Input,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 type Staff = {
   _id: string;
@@ -285,7 +286,7 @@ export default function AmbulanceStaffManagement() {
                     title="Deactivate"
                     aria-label="Deactivate"
                     onClick={async () => {
-                      if (!confirm("Deactivate staff? They will be logged out."))
+                      if (!await dialog.confirm({ message: "Deactivate staff? They will be logged out.", confirmLabel: "Deactivate", tone: "danger" }))
                         return;
                       await ambulanceStaffApi.deactivate(s._id);
                       load();
@@ -300,7 +301,7 @@ export default function AmbulanceStaffManagement() {
                     title="Delete"
                     aria-label="Delete"
                     onClick={async () => {
-                      if (!confirm("Delete staff?")) return;
+                      if (!await dialog.confirm({ message: "Delete staff?", confirmLabel: "Delete", tone: "danger" })) return;
                       await ambulanceStaffApi.remove(s._id);
                       load();
                     }}

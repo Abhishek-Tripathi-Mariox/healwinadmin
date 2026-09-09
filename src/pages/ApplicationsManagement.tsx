@@ -20,6 +20,7 @@ import {
   Field,
   Textarea,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 const statusOptions = [
   "NEW",
@@ -312,7 +313,7 @@ const ApplicationsManagement: React.FC = () => {
       ? undefined
       : window.prompt("Reason for declining (optional)") || undefined;
     if (
-      !window.confirm(
+      !await dialog.confirm(
         accepted
           ? "Record that the candidate ACCEPTED the offer?"
           : "Record that the candidate DECLINED the offer? They will be marked rejected.",

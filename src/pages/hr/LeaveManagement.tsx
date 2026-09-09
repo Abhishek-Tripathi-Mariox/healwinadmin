@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Check, X, Plus, Undo2 } from "lucide-react";
 import { leaveApi, hrEmployeeApi } from "../../services/admin-api";
 import { useAuth } from "../../auth/useAuth";
@@ -7,6 +8,7 @@ import {
   PageHeader, Button, Select, Table, THead, TBody, TR, Th, Td, TableState,
   Badge, Modal, Field, Input, Textarea, Alert,
 } from "../../components/ui";
+import { dialog } from "../../services/dialog";
 
 interface LeaveType { _id: string; name: string; code: string; annualQuota: number; isPaid: boolean; isActive: boolean }
 interface LeaveRequest {
@@ -34,7 +36,16 @@ export default function LeaveManagement() {
   const canApprove = hasPermission(PERMISSIONS.LEAVE_APPROVE);
 
   const [tab, setTab] = useState<"requests" | "types">("requests");
-  const [statusFilter, setStatusFilter] = useState("");
+  // In the URL so the HR dashboard's "Pending Leave Requests" card can open
+  // this page already showing the pending ones.
+  const [params, setParams] = useSearchParams();
+  const statusFilter = params.get("status") || "";
+  const setStatusFilter = (value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set("status", value);
+    else next.delete("status");
+    setParams(next, { replace: true });
+  };
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [types, setTypes] = useState<LeaveType[]>([]);
   const [loading, setLoading] = useState(false);
@@ -117,23 +128,24 @@ export default function LeaveManagement() {
       // negative behind HR's back. Offer the override explicitly.
       if (err?.data?.requiresOverride && action === "approve") {
         if (
-          window.confirm(
-            `${err.data.hint || "Insufficient leave balance"}.\n\nApprove anyway? The balance will go negative.`,
-          )
+          await dialog.confirm({
+            title: "Insufficient leave balance",
+            message: `${err.data.hint || "This employee has no balance left"}.\n\nApproving anyway will take the balance negative.`,
+            confirmLabel: "Approve anyway",
+            tone: "danger",
+          })
         ) {
           return decide(id, "approve", true);
         }
         return;
       }
-      alert(err?.data?.hint || err.message || "Failed");
+      void dialog.alert(err?.data?.hint || err.message || "Failed");
     }
   };
 
-  const cancelLeave = (id: string) => {
+  const cancelLeave = async (id: string) => {
     if (
-      window.confirm(
-        "Cancel this approved leave?\n\nThe leave days will be removed from attendance and the balance handed back.",
-      )
+      await dialog.confirm({ message: "Cancel this approved leave?\n\nThe leave days will be removed from attendance and the balance handed back.", confirmLabel: "Yes, cancel", cancelLabel: "Keep it", tone: "danger" },)
     ) {
       decide(id, "cancel");
     }

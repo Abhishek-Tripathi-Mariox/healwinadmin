@@ -20,6 +20,7 @@ import {
   Textarea,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface TeamMember {
   _id: string;
@@ -372,7 +373,7 @@ const TeamManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this team member?")) return;
+    if (!await dialog.confirm({ message: "Delete this team member?", confirmLabel: "Delete", tone: "danger" })) return;
     setError(null);
     try {
       await teamApi.remove(id);

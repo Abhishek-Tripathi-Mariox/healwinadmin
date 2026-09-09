@@ -830,6 +830,13 @@ const PERMISSION_MODULES = [
     ],
   },
   {
+    module: "Payment Configuration",
+    permissions: [
+      { id: "payment_config:view", name: "View Payment Config", description: "Can see the gateway status and masked keys" },
+      { id: "payment_config:manage", name: "Manage Payment Config", description: "Can change the payment gateway credentials" },
+    ],
+  },
+  {
     module: "Ambulance — Types & Pricing",
     permissions: [
       { id: "ambulance_config:view", name: "View Ambulance Config", description: "Can view fare config & vehicle types" },

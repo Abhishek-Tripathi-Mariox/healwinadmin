@@ -24,6 +24,7 @@ import {
   Field,
   Input,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 type Ambulance = {
   _id: string;
@@ -346,7 +347,7 @@ export default function AmbulanceManagement() {
                       title="Free ambulance (cancel its dispatch)"
                       aria-label="Free ambulance"
                       onClick={async () => {
-                        if (!confirm("Cancel this ambulance's active dispatch and free it?")) return;
+                        if (!await dialog.confirm({ message: "Cancel this ambulance's active dispatch and free it?", confirmLabel: "Yes, cancel", cancelLabel: "Keep it", tone: "danger" })) return;
                         await ambulanceApi.free(a._id);
                         load();
                       }}
@@ -392,7 +393,7 @@ export default function AmbulanceManagement() {
                     title="Delete"
                     aria-label="Delete"
                     onClick={async () => {
-                      if (!confirm("Delete ambulance?")) return;
+                      if (!await dialog.confirm({ message: "Delete ambulance?", confirmLabel: "Delete", tone: "danger" })) return;
                       await ambulanceApi.remove(a._id);
                       load();
                     }}

@@ -17,6 +17,7 @@ import {
   Field,
   Input,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 type Reason = {
   _id: string;
@@ -158,7 +159,7 @@ export default function OffDutyReasonsManagement() {
                     title="Delete"
                     aria-label="Delete"
                     onClick={async () => {
-                      if (!confirm(`Delete "${r.label}"?`)) return;
+                      if (!await dialog.confirm({ message: `Delete "${r.label}"?`, confirmLabel: "Delete", tone: "danger" })) return;
                       await offDutyReasonsApi.remove(r._id);
                       load();
                     }}

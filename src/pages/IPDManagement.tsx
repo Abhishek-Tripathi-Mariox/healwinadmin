@@ -30,6 +30,7 @@ import {
   Alert,
   cn,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface Bed {
   _id: string;
@@ -99,12 +100,12 @@ export default function IPDManagement() {
   }, []);
 
   const deleteWard = async (w: Ward) => {
-    if (!window.confirm(`Delete ward "${w.name}"?`)) return;
+    if (!await dialog.confirm({ message: `Delete ward "${w.name}"?`, confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await ipdApi.deleteWard(w._id);
       loadWards();
     } catch (e: any) {
-      window.alert(e?.message || "Failed to delete ward");
+      void dialog.alert(e?.message || "Failed to delete ward");
     }
   };
 
@@ -434,7 +435,7 @@ export default function IPDManagement() {
                       setTab("admissions");
                       setDetail(res.data?.admission);
                     } catch {
-                      alert("Could not open this admission.");
+                      void dialog.alert("Could not open this admission.");
                     }
                   }}
                 >
@@ -464,7 +465,7 @@ export default function IPDManagement() {
                       setBedDetail(null);
                       loadBeds();
                     } catch (e: any) {
-                      alert(e?.message || "Could not update the bed.");
+                      void dialog.alert(e?.message || "Could not update the bed.");
                     }
                   }}
                 >
@@ -953,7 +954,7 @@ function AdmissionDrawer({
   };
   const discharge = async () => {
     const summary = window.prompt("Discharge summary (optional):") || undefined;
-    if (!window.confirm("Confirm discharge?")) return;
+    if (!await dialog.confirm("Confirm discharge?")) return;
     await ipdApi.discharge(admission._id, summary);
     onDischarged();
   };
@@ -967,13 +968,13 @@ function AdmissionDrawer({
         includeBedCharges: true,
       });
       const inv = res.data?.invoice;
-      alert(
+      void dialog.alert(
         `Invoice ${inv?.invoiceNo} generated from bed charges — total ₹${inv?.total?.toFixed(
           2,
         )}. Open Billing to record payment.`,
       );
     } catch (e: any) {
-      alert(e.message || "Failed to generate bill");
+      void dialog.alert(e.message || "Failed to generate bill");
     }
   };
 
@@ -1034,7 +1035,7 @@ function AdmissionDrawer({
             className="w-full"
             onClick={() => {
               const pid = admission.patientId?._id || admission.patientId;
-              if (!pid) return alert("This admission has no linked patient.");
+              if (!pid) return void dialog.alert("This admission has no linked patient.");
               navigate(`/admin/patients/${pid}?newEncounter=1&encounterType=IPD`);
             }}
           >
@@ -1117,7 +1118,7 @@ function AdmissionDrawer({
             <Button
               variant="subtle"
               className="w-full"
-              onClick={() => ipdApi.downloadDischargeSummary(admission._id, admission.admissionNo).catch((e: any) => alert(e.message))}
+              onClick={() => ipdApi.downloadDischargeSummary(admission._id, admission.admissionNo).catch((e: any) => void dialog.alert(e.message))}
             >
               Download Discharge Summary (PDF)
             </Button>

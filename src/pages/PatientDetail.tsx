@@ -24,6 +24,7 @@ import {
   Select,
 } from "../components/ui";
 import { VoiceInput } from "../components/VoiceInput";
+import { dialog } from "../services/dialog";
 
 interface Patient {
   _id: string;
@@ -121,11 +122,11 @@ export default function PatientDetail() {
         diagnosticRate: rate,
       });
       const inv = res.data?.invoice;
-      alert(
+      void dialog.alert(
         `Invoice ${inv?.invoiceNo} generated — total ₹${inv?.total?.toFixed(2)}. Open Billing to collect payment.`,
       );
     } catch (e: any) {
-      alert(e.message || "Failed to generate invoice");
+      void dialog.alert(e.message || "Failed to generate invoice");
     }
   };
 
@@ -200,7 +201,7 @@ export default function PatientDetail() {
       setNewDx({ category: newDx.category, name: "" });
       load();
     } catch (e: any) {
-      alert(e.message || "Failed to add order");
+      void dialog.alert(e.message || "Failed to add order");
     }
   };
 
@@ -217,7 +218,7 @@ export default function PatientDetail() {
       setNotesDraft((d) => ({ ...d, [orderId]: "" }));
       load();
     } catch (e: any) {
-      alert(e.message || "Failed to save result");
+      void dialog.alert(e.message || "Failed to save result");
     }
   };
 
@@ -226,7 +227,7 @@ export default function PatientDetail() {
       await diagnosticsApi.update(orderId, { status: "collected" });
       load();
     } catch (e: any) {
-      alert(e.message || "Failed to update");
+      void dialog.alert(e.message || "Failed to update");
     }
   };
 
@@ -237,17 +238,17 @@ export default function PatientDetail() {
       await diagnosticsApi.uploadReport(orderId, fd);
       load();
     } catch (e: any) {
-      alert(e.message || "Failed to upload report");
+      void dialog.alert(e.message || "Failed to upload report");
     }
   };
 
   const deleteDiagnostic = async (orderId: string) => {
-    if (!window.confirm("Delete this diagnostic order?")) return;
+    if (!await dialog.confirm({ message: "Delete this diagnostic order?", confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await diagnosticsApi.remove(orderId);
       load();
     } catch (e: any) {
-      alert(e.message || "Failed to delete");
+      void dialog.alert(e.message || "Failed to delete");
     }
   };
 
@@ -538,7 +539,7 @@ export default function PatientDetail() {
       // actually blocks and requires an explicit override.
       const warnings = res.data?.allergyWarnings as { drug: string; allergyTerm: string }[] | undefined;
       if (warnings?.length) {
-        alert(
+        void dialog.alert(
           `⚠ Allergy warning — patient has a recorded allergy that may conflict:\n\n` +
             warnings.map((w) => `${w.drug} — conflicts with recorded allergy "${w.allergyTerm}"`).join("\n"),
         );
@@ -1060,7 +1061,7 @@ export default function PatientDetail() {
                           onClick={() =>
                             emrApi
                               .downloadPrescription(enc._id)
-                              .catch((e: any) => alert(e.message))
+                              .catch((e: any) => void dialog.alert(e.message))
                           }
                           className="text-xs text-healwin-700 hover:underline"
                         >

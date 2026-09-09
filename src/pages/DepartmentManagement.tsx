@@ -20,6 +20,7 @@ import {
   Input,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface DepartmentItem {
   _id: string;
@@ -109,7 +110,7 @@ const DepartmentManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this department?")) return;
+    if (!await dialog.confirm({ message: "Delete this department?", confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await departmentApi.remove(id);
       loadDepartments();

@@ -20,6 +20,7 @@ import {
   Input,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface EmploymentTypeItem {
   _id: string;
@@ -109,7 +110,7 @@ const EmploymentTypeManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this employment type?")) return;
+    if (!await dialog.confirm({ message: "Delete this employment type?", confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await employmentTypeApi.remove(id);
       loadTypes();

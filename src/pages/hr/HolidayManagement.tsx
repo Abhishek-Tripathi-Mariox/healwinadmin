@@ -7,6 +7,7 @@ import {
   PageHeader, Button, Select, Table, THead, TBody, TR, Th, Td,
   TableState, Badge, Modal, Field, Input, Alert,
 } from "../../components/ui";
+import { dialog } from "../../services/dialog";
 
 interface Holiday {
   _id: string;
@@ -76,7 +77,7 @@ export default function HolidayManagement() {
   };
 
   const onDelete = async (h: Holiday) => {
-    if (!window.confirm(`Delete holiday "${h.name}"?`)) return;
+    if (!await dialog.confirm({ message: `Delete holiday "${h.name}"?`, confirmLabel: "Delete", tone: "danger" })) return;
     await holidayApi.remove(h._id);
     load();
   };

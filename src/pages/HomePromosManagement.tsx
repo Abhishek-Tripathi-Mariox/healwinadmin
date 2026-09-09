@@ -6,6 +6,7 @@ import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface PromoRow {
   _id: string;
@@ -100,7 +101,7 @@ export default function HomePromosManagement() {
 
   const toggle = async (p: PromoRow) => { await homePromoApi.toggle(p._id); load(); };
   const remove = async (p: PromoRow) => {
-    if (!window.confirm("Delete this promo card?")) return;
+    if (!await dialog.confirm({ message: "Delete this promo card?", confirmLabel: "Delete", tone: "danger" })) return;
     await homePromoApi.remove(p._id);
     load();
   };

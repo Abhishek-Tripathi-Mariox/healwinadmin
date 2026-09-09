@@ -7,6 +7,7 @@ import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge, Modal, Field, Input, Alert,
 } from "../components/ui";
 import Pagination from "../components/Pagination";
+import { dialog } from "../services/dialog";
 
 /**
  * Manage the Help & Support FAQs shown in the patient app (Help & Support
@@ -104,7 +105,7 @@ export default function FaqManagement() {
     load();
   };
   const del = async (f: Faq) => {
-    if (!window.confirm("Delete this FAQ?")) return;
+    if (!await dialog.confirm({ message: "Delete this FAQ?", confirmLabel: "Delete", tone: "danger" })) return;
     await faqApi.remove(f._id);
     load();
   };

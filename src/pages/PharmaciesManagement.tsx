@@ -24,6 +24,7 @@ import {
   Textarea,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface Pharmacy {
   _id: string;
@@ -152,7 +153,7 @@ export default function PharmaciesManagement() {
   };
 
   const remove = async (p: Pharmacy) => {
-    if (!window.confirm(`Delete ${p.name}?`)) return;
+    if (!await dialog.confirm({ message: `Delete ${p.name}?`, confirmLabel: "Delete", tone: "danger" })) return;
     await pharmacyApi.remove(p._id);
     load();
   };

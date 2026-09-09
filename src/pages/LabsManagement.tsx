@@ -30,6 +30,7 @@ import {
   Textarea,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface Lab {
   _id: string;
@@ -158,7 +159,7 @@ export default function LabsManagement() {
   };
 
   const remove = async (p: Lab) => {
-    if (!window.confirm(`Delete ${p.name}?`)) return;
+    if (!await dialog.confirm({ message: `Delete ${p.name}?`, confirmLabel: "Delete", tone: "danger" })) return;
     await labApi.remove(p._id);
     load();
   };

@@ -95,6 +95,21 @@ export interface SOSSubmissionStats {
     RESOLVED: number;
     CLOSED: number;
   };
+  /**
+   * The same status counts, split by type. The list is always scoped to one
+   * tab, so the cards read from this — otherwise a card could show a number
+   * the filtered list beneath it does not contain.
+   */
+  byTypeStatus?: Record<
+    "CALL" | "FORM" | "APP_DOWNLOAD",
+    {
+      PENDING: number;
+      IN_PROGRESS: number;
+      RESOLVED: number;
+      CLOSED: number;
+      total: number;
+    }
+  >;
   today: {
     CALL: number;
     FORM: number;

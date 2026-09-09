@@ -43,6 +43,7 @@ import {
   Package,
   Phone,
   PhoneCall,
+  CreditCard,
   Pill,
   Receipt,
   ScrollText,
@@ -737,6 +738,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           label: "Activity Logs",
           icon: History,
           path: "/admin/activity-logs",
+        },
+        {
+          id: "payment-config",
+          label: "Payment Configuration",
+          icon: CreditCard,
+          path: "/admin/payment-config",
         },
         {
           id: "roles",

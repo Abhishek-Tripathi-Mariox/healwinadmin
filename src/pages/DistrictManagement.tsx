@@ -22,6 +22,7 @@ import {
   Input,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface DistrictItem {
   _id: string;
@@ -148,7 +149,7 @@ const DistrictManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this district?")) return;
+    if (!await dialog.confirm({ message: "Delete this district?", confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await districtApi.remove(id);
       loadDistricts();

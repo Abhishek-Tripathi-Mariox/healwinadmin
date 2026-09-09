@@ -7,6 +7,7 @@ import {
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
+import { dialog } from "../services/dialog";
 
 // Fix default marker icon issue with webpack/vite
 // @ts-ignore
@@ -127,7 +128,7 @@ const MapPicker: React.FC<MapPickerProps> = ({ value, onChange }) => {
 
   const handleUseMyLocation = () => {
     if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser");
+      void dialog.alert("Geolocation is not supported by your browser");
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -136,7 +137,7 @@ const MapPicker: React.FC<MapPickerProps> = ({ value, onChange }) => {
         const lng = pos.coords.longitude;
         await handleLocationSelect(lat, lng);
       },
-      () => alert("Unable to get your location. Please allow location access."),
+      () => void dialog.alert("Unable to get your location. Please allow location access."),
     );
   };
 

@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { attendanceApi } from "../../services/admin-api";
 import { useAuth } from "../../auth/useAuth";
 import { PERMISSIONS } from "../../auth/permissions";
 import {
   PageHeader, Button, Input, Table, THead, TBody, TR, Th, Td, TableState, Badge,
 } from "../../components/ui";
+import { dialog } from "../../services/dialog";
 
 interface RosterRow {
   employee: { _id: string; fullName: string; employeeCode: string; departmentId?: { name: string } };
@@ -20,13 +22,34 @@ const STATUSES = [
   { value: "week_off", label: "WO", tone: "neutral" as const },
 ];
 
-const today = () => new Date().toISOString().substring(0, 10);
+// Local calendar date. `toISOString()` converts to UTC first, which in IST
+// rolls the date back a day for anything before 05:30.
+const today = () => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
 
 export default function AttendanceManagement() {
   const { hasPermission } = useAuth();
   const canManage = hasPermission(PERMISSIONS.ATTENDANCE_MANAGE);
 
-  const [date, setDate] = useState(today());
+  /**
+   * Date and status sit in the URL so the HR dashboard's "Present Today" /
+   * "On Leave Today" cards can open this page already showing those people —
+   * the same records the count on the card was made from.
+   */
+  const [params, setParams] = useSearchParams();
+  const date = params.get("date") || today();
+  const statusFilter = params.get("status") || "";
+
+  const setParam = (key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next, { replace: true });
+  };
+
   const [roster, setRoster] = useState<RosterRow[]>([]);
   const [marks, setMarks] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -52,9 +75,21 @@ export default function AttendanceManagement() {
     load();
   }, [load]);
 
+  // What the table is actually showing. A status filter must narrow the rows
+  // AND everything that acts on them.
+  const visible = useMemo(
+    () =>
+      statusFilter
+        ? roster.filter((r) => (marks[r.employee._id] || r.attendance?.status) === statusFilter)
+        : roster,
+    [roster, marks, statusFilter],
+  );
+
   const setAll = (status: string) => {
-    const next: Record<string, string> = {};
-    roster.forEach((r) => (next[r.employee._id] = status));
+    // Only the visible rows. Marking people you cannot see — because a filter
+    // is hiding them — would rewrite the day's register by accident.
+    const next: Record<string, string> = { ...marks };
+    visible.forEach((r) => (next[r.employee._id] = status));
     setMarks(next);
   };
 
@@ -66,7 +101,7 @@ export default function AttendanceManagement() {
       await attendanceApi.mark({ date, entries });
       await load();
     } catch (err: any) {
-      alert(err.message || "Failed to save attendance");
+      void dialog.alert(err.message || "Failed to save attendance");
     } finally {
       setSaving(false);
     }
@@ -87,10 +122,28 @@ export default function AttendanceManagement() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
+        <Input
+          type="date"
+          value={date}
+          onChange={(e) => setParam("date", e.target.value)}
+          className="w-44"
+        />
+        {statusFilter && (
+          <span className="inline-flex items-center gap-2 rounded-full bg-healwin-50 px-3 py-1 text-xs font-medium text-healwin-700">
+            Showing {visible.length} marked “{statusFilter.replace("_", " ")}”
+            <button
+              type="button"
+              onClick={() => setParam("status", "")}
+              className="text-healwin-500 hover:text-healwin-800"
+              aria-label="Show everyone"
+            >
+              ✕
+            </button>
+          </span>
+        )}
         {canManage && (
           <div className="flex items-center gap-1 text-xs text-gray-500">
-            <span>Mark all:</span>
+            <span>Mark {statusFilter ? "shown" : "all"}:</span>
             {STATUSES.map((s) => (
               <Button key={s.value} size="sm" variant="secondary" onClick={() => setAll(s.value)}>
                 {s.label}
@@ -110,10 +163,14 @@ export default function AttendanceManagement() {
         <TBody>
           {loading ? (
             <TableState colSpan={4}>Loading…</TableState>
-          ) : roster.length === 0 ? (
-            <TableState colSpan={4}>No employees.</TableState>
+          ) : visible.length === 0 ? (
+            <TableState colSpan={4}>
+              {roster.length === 0
+                ? "No employees."
+                : `Nobody is marked “${statusFilter.replace("_", " ")}” on this date.`}
+            </TableState>
           ) : (
-            roster.map((r) => (
+            visible.map((r) => (
               <TR key={r.employee._id}>
                 <Td className="font-mono text-xs">{r.employee.employeeCode}</Td>
                 <Td className="font-medium text-gray-900">{r.employee.fullName}</Td>

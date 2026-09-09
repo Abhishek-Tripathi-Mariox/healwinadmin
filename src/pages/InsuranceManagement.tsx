@@ -5,6 +5,7 @@ import {
   Modal, Field, Input, Alert,
 } from "../components/ui";
 import Pagination from "../components/Pagination";
+import { dialog } from "../services/dialog";
 
 type Tab = "claims" | "policies" | "payers";
 const claimTone: Record<string, "neutral" | "info" | "success" | "danger" | "warning"> = {
@@ -134,9 +135,7 @@ export default function InsuranceManagement() {
       reviewNote = window.prompt("Why is this policy being rejected? (the patient sees this)") || "";
       if (!reviewNote.trim()) return;
     } else if (
-      !window.confirm(
-        `Approve ${p.policyNumber}?\n\nOnce approved, bills for ${p.patientId?.fullName || "this patient"} can be settled from this policy's cover.`,
-      )
+      !await dialog.confirm({ message: `Approve ${p.policyNumber}?\n\nOnce approved, bills for ${p.patientId?.fullName || "this patient"} can be settled from this policy's cover.`, confirmLabel: "Approve" },)
     ) {
       return;
     }

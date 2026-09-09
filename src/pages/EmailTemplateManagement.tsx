@@ -18,6 +18,7 @@ import {
   Textarea,
   Select,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface EmailTemplateItem {
   _id: string;
@@ -805,7 +806,7 @@ const EmailTemplateManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this email template?")) return;
+    if (!await dialog.confirm({ message: "Delete this email template?", confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await emailTemplateApi.remove(id);
       setSuccess("Template deleted");

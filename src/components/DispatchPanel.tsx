@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { ambulanceDispatchApi } from "../services/admin-api";
+import { dialog } from "../services/dialog";
 
 // Fix default icon paths for Leaflet in Vite bundles
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -64,13 +65,13 @@ export default function DispatchPanel({ sosId }: { sosId: string }) {
   }, [sosId]);
 
   const doDispatch = async (ambulanceId: string) => {
-    if (!confirm("Dispatch this ambulance?")) return;
+    if (!await dialog.confirm({ message: "Dispatch this ambulance?", confirmLabel: "Dispatch" })) return;
     setDispatching(ambulanceId);
     try {
       await ambulanceDispatchApi.dispatch(sosId, ambulanceId);
       await load();
     } catch (e: any) {
-      alert(e.message || "Dispatch failed");
+      void dialog.alert(e.message || "Dispatch failed");
     } finally {
       setDispatching(null);
     }
@@ -79,9 +80,7 @@ export default function DispatchPanel({ sosId }: { sosId: string }) {
   // Manual override — free the current ambulance so ops can reassign.
   const doCancel = async () => {
     if (
-      !confirm(
-        "Cancel this dispatch? The ambulance will be freed and you can assign a different one.",
-      )
+      !await dialog.confirm({ message: "Cancel this dispatch? The ambulance will be freed and you can assign a different one.", confirmLabel: "Yes, cancel", cancelLabel: "Keep it", tone: "danger" },)
     )
       return;
     setCancelling(true);
@@ -89,7 +88,7 @@ export default function DispatchPanel({ sosId }: { sosId: string }) {
       await ambulanceDispatchApi.cancel(sosId);
       await load();
     } catch (e: any) {
-      alert(e.message || "Cancel failed");
+      void dialog.alert(e.message || "Cancel failed");
     } finally {
       setCancelling(false);
     }

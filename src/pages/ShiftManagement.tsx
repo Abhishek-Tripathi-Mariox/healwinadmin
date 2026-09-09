@@ -26,6 +26,7 @@ import {
   Textarea,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 type BadgeTone = "neutral" | "success" | "warning" | "danger" | "info" | "accent";
 
@@ -177,12 +178,12 @@ const ShiftManagement: React.FC = () => {
   }, [filters]);
 
   const cancelShift = async (id: string) => {
-    if (!window.confirm("Cancel this shift?")) return;
+    if (!await dialog.confirm({ message: "Cancel this shift?", confirmLabel: "Yes, cancel", cancelLabel: "Keep it", tone: "danger" })) return;
     try {
       await shiftApi.cancel(id);
       await fetchShifts();
     } catch (e: any) {
-      window.alert(e?.message || "Failed to cancel");
+      void dialog.alert(e?.message || "Failed to cancel");
     }
   };
 
@@ -206,12 +207,12 @@ const ShiftManagement: React.FC = () => {
     }
   };
   const unassignShift = async (s: ShiftRow) => {
-    if (!window.confirm("Unassign staff from this shift?")) return;
+    if (!await dialog.confirm({ message: "Unassign staff from this shift?", confirmLabel: "Unassign", tone: "danger" })) return;
     try {
       await shiftApi.unassignStaff(s._id);
       await fetchShifts();
     } catch (e: any) {
-      window.alert(e?.message || "Failed to unassign");
+      void dialog.alert(e?.message || "Failed to unassign");
     }
   };
 

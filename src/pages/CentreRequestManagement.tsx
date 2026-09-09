@@ -14,6 +14,7 @@ import {
   Field,
   Spinner,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface CentreRequestItem {
   _id: string;
@@ -144,9 +145,7 @@ const CentreRequestManagement: React.FC = () => {
       return;
     }
     if (
-      !window.confirm(
-        "Approve this centre request? It will be added to Centres.",
-      )
+      !await dialog.confirm({ message: "Approve this centre request? It will be added to Centres.", confirmLabel: "Approve" },)
     )
       return;
     setError(null);
@@ -167,7 +166,7 @@ const CentreRequestManagement: React.FC = () => {
   };
 
   const handleReject = async (id: string) => {
-    if (!window.confirm("Reject this centre request?")) return;
+    if (!await dialog.confirm({ message: "Reject this centre request?", confirmLabel: "Reject", tone: "danger" })) return;
     setError(null);
     try {
       await centreRequestApi.reject(id, { adminNote });
@@ -180,7 +179,7 @@ const CentreRequestManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this centre request permanently?")) return;
+    if (!await dialog.confirm({ message: "Delete this centre request permanently?", confirmLabel: "Delete", tone: "danger" })) return;
     setError(null);
     try {
       await centreRequestApi.remove(id);

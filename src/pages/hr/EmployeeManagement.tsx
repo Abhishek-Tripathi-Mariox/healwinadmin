@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { Pencil, Trash2, Eye } from "lucide-react";
 import {
@@ -14,6 +15,7 @@ import {
   PageHeader, Button, SearchInput, Select, Table, THead, TBody, TR, Th, Td,
   TableState, Badge, Modal, Field, Input, Alert,
 } from "../../components/ui";
+import { dialog } from "../../services/dialog";
 
 interface Ref { _id: string; name: string }
 interface Employee {
@@ -91,8 +93,24 @@ export default function EmployeeManagement() {
 
   const [items, setItems] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
+  /**
+   * Filters live in the URL so the HR dashboard can link straight to a subset
+   * ("Active", or one department's headcount) and land on exactly the records
+   * behind that number. It also makes the filtered view shareable and
+   * survivable across a refresh.
+   */
+  const [params, setParams] = useSearchParams();
+  const status = params.get("status") || "";
+  const departmentId = params.get("departmentId") || "";
+  const [search, setSearch] = useState(params.get("search") || "");
+
+  /** Update one filter, dropping it from the URL when cleared. */
+  const setFilter = (key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next, { replace: true });
+  };
 
   const [departments, setDepartments] = useState<Ref[]>([]);
   const [designations, setDesignations] = useState<Ref[]>([]);
@@ -110,20 +128,21 @@ export default function EmployeeManagement() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string> = {};
-      if (search.trim()) params.search = search.trim();
-      if (status) params.status = status;
-      const res = await hrEmployeeApi.list(params);
+      const query: Record<string, string> = {};
+      if (search.trim()) query.search = search.trim();
+      if (status) query.status = status;
+      if (departmentId) query.departmentId = departmentId;
+      const res = await hrEmployeeApi.list(query);
       setItems(res.data?.items || []);
     } finally {
       setLoading(false);
     }
-  }, [search, status]);
+  }, [search, status, departmentId]);
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [status, departmentId]);
 
   // Master data for dropdowns (load once).
   useEffect(() => {
@@ -240,7 +259,7 @@ export default function EmployeeManagement() {
   };
 
   const onDelete = async (e: Employee) => {
-    if (!window.confirm(`Remove ${e.fullName}? This marks them terminated.`)) return;
+    if (!await dialog.confirm({ message: `Remove ${e.fullName}? This marks them terminated.`, confirmLabel: "Remove", tone: "danger" })) return;
     await hrEmployeeApi.remove(e._id);
     load();
   };
@@ -265,11 +284,36 @@ export default function EmployeeManagement() {
           placeholder="Search name / code / email"
           className="w-full max-w-xs"
         />
-        <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-44 capitalize">
+        <Select
+          value={status}
+          onChange={(e) => setFilter("status", e.target.value)}
+          className="w-44 capitalize"
+        >
           <option value="">All statuses</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
         </Select>
+        <Select
+          value={departmentId}
+          onChange={(e) => setFilter("departmentId", e.target.value)}
+          className="w-52"
+        >
+          <option value="">All departments</option>
+          {/* Mirrors the dashboard's "Unassigned" group. */}
+          <option value="none">Unassigned</option>
+          {departments.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+        </Select>
         <Button variant="secondary" onClick={load}>Search</Button>
+        {(status || departmentId || search) && (
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setSearch("");
+              setParams(new URLSearchParams(), { replace: true });
+            }}
+          >
+            Clear filters
+          </Button>
+        )}
       </div>
 
       <Table>

@@ -30,6 +30,7 @@ import {
   Textarea,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 const emptyCareer = {
   title: "",
@@ -262,7 +263,7 @@ const CareersManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this career?")) return;
+    if (!await dialog.confirm({ message: "Delete this career?", confirmLabel: "Delete", tone: "danger" })) return;
     setError(null);
     try {
       await careersApi.remove(id);

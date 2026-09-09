@@ -20,6 +20,7 @@ import {
   Spinner,
   EmptyState,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 const ICON_OPTIONS = [
   "Ambulance",
@@ -288,7 +289,7 @@ const ServiceManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this service?")) return;
+    if (!await dialog.confirm({ message: "Delete this service?", confirmLabel: "Delete", tone: "danger" })) return;
     setError(null);
     try {
       await serviceApi.remove(id);

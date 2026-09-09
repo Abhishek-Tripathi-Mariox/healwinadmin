@@ -23,6 +23,7 @@ import {
   Input,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface Item {
   _id: string;
@@ -286,7 +287,7 @@ export default function InventoryManagement() {
       await loadApprovals();
       load();
     } catch (e: any) {
-      alert(e.message || `Failed to ${decision}`);
+      void dialog.alert(e.message || `Failed to ${decision}`);
     }
   };
 
@@ -351,10 +352,10 @@ export default function InventoryManagement() {
       });
       setAdjItem(null);
       setAdj({ type: "in", quantity: "", reason: "", batchNo: "", expiryDate: "", unitCost: "" });
-      alert("Submitted for approval — a different admin needs to approve this before stock updates.");
+      void dialog.alert("Submitted for approval — a different admin needs to approve this before stock updates.");
       loadApprovals();
     } catch (err: any) {
-      alert(err.message || "Failed to adjust stock");
+      void dialog.alert(err.message || "Failed to adjust stock");
     }
   };
 
@@ -415,7 +416,7 @@ export default function InventoryManagement() {
         notes: writeOffNotes.trim() || undefined,
       });
       setWriteOffBatchRow(null);
-      alert("Submitted for approval — a different admin needs to approve this before stock updates.");
+      void dialog.alert("Submitted for approval — a different admin needs to approve this before stock updates.");
       loadApprovals();
     } catch (e: any) {
       setWriteOffError(e.message || "Failed to write off stock");
@@ -476,7 +477,7 @@ export default function InventoryManagement() {
   };
 
   const onDelete = async (it: Item) => {
-    if (!window.confirm(`Delete ${it.name}?`)) return;
+    if (!await dialog.confirm({ message: `Delete ${it.name}?`, confirmLabel: "Delete", tone: "danger" })) return;
     await inventoryApi.remove(it._id);
     load();
   };

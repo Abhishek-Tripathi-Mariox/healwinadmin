@@ -26,6 +26,7 @@ import {
   Spinner,
   cn,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface CentreItem {
   _id: string;
@@ -285,7 +286,7 @@ const CentreManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this centre?")) return;
+    if (!await dialog.confirm({ message: "Delete this centre?", confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await centreApi.remove(id);
       loadCentres();

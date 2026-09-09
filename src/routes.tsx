@@ -31,6 +31,7 @@ import {
   MapPin,
   Phone,
   PhoneCall,
+  CreditCard,
   Pill,
   Receipt,
   Shield,
@@ -139,6 +140,7 @@ const PharmaciesManagement = lazy(() => import("./pages/PharmaciesManagement"));
 const PharmacyDispense = lazy(() => import("./pages/PharmacyDispense"));
 const LabsManagement = lazy(() => import("./pages/LabsManagement"));
 const CallLogs = lazy(() => import("./pages/CallLogs"));
+const PaymentConfig = lazy(() => import("./pages/PaymentConfig"));
 // Operations
 const BookingManagement = lazy(() => import("./pages/BookingManagement"));
 const AmbulancePricingManagement = lazy(
@@ -565,6 +567,12 @@ export const adminRoutes = [
     element: CallLogs,
     name: "Calls & Recordings",
     icon: PhoneCall,
+  },
+  {
+    path: "payment-config",
+    element: PaymentConfig,
+    name: "Payment Configuration",
+    icon: CreditCard,
   },
   {
     path: "bookings",

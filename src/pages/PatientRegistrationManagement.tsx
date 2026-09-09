@@ -29,6 +29,7 @@ import {
   Textarea,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface PatientRow {
   _id: string;
@@ -200,7 +201,7 @@ export default function PatientRegistrationManagement() {
   };
 
   const onDelete = async (row: PatientRow) => {
-    if (!window.confirm(`Delete patient ${row.fullName} (${row.patientId})?`))
+    if (!await dialog.confirm({ message: `Delete patient ${row.fullName} (${row.patientId})?`, confirmLabel: "Delete", tone: "danger" }))
       return;
     await hospitalPatientApi.remove(row._id);
     load();
@@ -235,9 +236,13 @@ export default function PatientRegistrationManagement() {
     const sources = group.patients.filter((p) => p._id !== targetId);
     if (!targetId || sources.length === 0) return;
     if (
-      !window.confirm(
-        `Merge ${sources.length} record(s) into the selected patient? Merged records will be soft-deleted and all their admissions, appointments, bills, diagnostics, insurance, ambulance and surgery history will be re-pointed to the kept record. This cannot be undone from the UI.`,
-      )
+      !(await dialog.confirm({
+        title: `Merge ${sources.length} record(s) into the selected patient?`,
+        message:
+          "Merged records will be soft-deleted and all their admissions, appointments, bills, diagnostics, insurance, ambulance and surgery history will be re-pointed to the kept record.\n\nThis cannot be undone from the UI.",
+        confirmLabel: "Merge records",
+        tone: "danger",
+      }))
     )
       return;
     setMergeError("");

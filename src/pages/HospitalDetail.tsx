@@ -37,6 +37,7 @@ import {
   Alert,
   Spinner,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface Hospital {
   _id: string;
@@ -183,12 +184,12 @@ const HospitalDetail: React.FC = () => {
 
   const removeStaff = async (staffId: string) => {
     if (!id) return;
-    if (!window.confirm("Remove this person from the hospital?")) return;
+    if (!await dialog.confirm({ message: "Remove this person from the hospital?", confirmLabel: "Remove", tone: "danger" })) return;
     try {
       await hospitalApi.removeStaff(id, staffId);
       await load();
     } catch (e: any) {
-      window.alert(e?.message || "Could not remove staff");
+      void dialog.alert(e?.message || "Could not remove staff");
     }
   };
 

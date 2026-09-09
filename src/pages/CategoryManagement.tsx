@@ -21,6 +21,7 @@ import {
   Textarea,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 const ICON_OPTIONS = [
   "Ambulance",
@@ -168,9 +169,7 @@ const CategoryManagement: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if (
-      !window.confirm(
-        "Delete this category? Services linked to it will be unlinked.",
-      )
+      !await dialog.confirm({ message: "Delete this category? Services linked to it will be unlinked.", confirmLabel: "Delete", tone: "danger" },)
     )
       return;
     setError(null);

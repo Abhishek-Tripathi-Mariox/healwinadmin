@@ -14,6 +14,7 @@ import {
   Modal,
   cn,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface Submission {
   _id: string;
@@ -105,7 +106,7 @@ const ArticleSubmissions: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this submission?")) return;
+    if (!await dialog.confirm({ message: "Delete this submission?", confirmLabel: "Delete", tone: "danger" })) return;
     setError(null);
     try {
       await articleSubmissionsApi.remove(id);

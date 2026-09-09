@@ -20,6 +20,7 @@ import {
   Input,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface StateItem {
   _id: string;
@@ -117,7 +118,7 @@ const StateManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this state?")) return;
+    if (!await dialog.confirm({ message: "Delete this state?", confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await stateApi.remove(id);
       loadStates();

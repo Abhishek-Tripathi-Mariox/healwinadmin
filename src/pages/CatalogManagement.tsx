@@ -8,6 +8,7 @@ import {
   PageHeader, Button, SearchInput, Table, THead, TBody, TR, Th, Td,
   TableState, Badge, Modal, Field, Input, Select, Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 type FieldType = "text" | "number" | "bool" | "inventoryLink" | "facilityLink";
 interface FieldDef {
@@ -196,7 +197,7 @@ export default function CatalogManagement() {
   };
 
   const onDelete = async (it: any) => {
-    if (!window.confirm(`Delete "${it.name}"?`)) return;
+    if (!await dialog.confirm({ message: `Delete "${it.name}"?`, confirmLabel: "Delete", tone: "danger" })) return;
     await tab.resource.remove(it._id);
     load();
   };

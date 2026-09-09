@@ -18,6 +18,7 @@ import {
   Input,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface DispenseLine {
   itemId?: string;
@@ -119,7 +120,7 @@ export default function PharmacyDispense() {
       setFulfilling(null);
       load();
       if (shortfalls.length) {
-        alert(
+        void dialog.alert(
           "Some lines could not be issued:\n\n" + shortfalls.join("\n"),
         );
       }
@@ -134,9 +135,12 @@ export default function PharmacyDispense() {
           .join("\n");
         setSaving(false);
         if (
-          window.confirm(
-            `⚠ Allergy warning:\n\n${list}\n\nDispense anyway? This is recorded as an overridden allergy warning.`,
-          )
+          await dialog.confirm({
+            title: "Allergy warning",
+            message: `${list}\n\nDispensing anyway is recorded as an overridden allergy warning.`,
+            confirmLabel: "Dispense anyway",
+            tone: "danger",
+          })
         ) {
           return submitFulfil(true);
         }
@@ -149,7 +153,7 @@ export default function PharmacyDispense() {
   };
 
   const cancel = async (d: Dispense) => {
-    if (!window.confirm("Cancel this prescription request?")) return;
+    if (!await dialog.confirm({ message: "Cancel this prescription request?", confirmLabel: "Yes, cancel", cancelLabel: "Keep it", tone: "danger" })) return;
     try {
       await pharmacyDispenseApi.cancel(d._id);
       load();

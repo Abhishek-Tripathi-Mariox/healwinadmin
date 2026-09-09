@@ -19,6 +19,7 @@ import {
   Input,
   Select,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 type Provider = {
   _id: string;
@@ -94,7 +95,7 @@ export default function ServiceProviderManagement() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!/^[6-9]\d{9}$/.test((form.phone || "").trim())) {
-      alert("Please enter a valid 10-digit mobile number (starting 6-9).");
+      void dialog.alert("Please enter a valid 10-digit mobile number (starting 6-9).");
       return;
     }
     if (editing) await providerApi.update(editing._id, form as any);
@@ -184,7 +185,7 @@ export default function ServiceProviderManagement() {
                     title="Delete"
                     aria-label="Delete"
                     onClick={async () => {
-                      if (!confirm("Deactivate provider?")) return;
+                      if (!await dialog.confirm({ message: "Deactivate provider?", confirmLabel: "Deactivate", tone: "danger" })) return;
                       await providerApi.remove(p._id);
                       load();
                     }}

@@ -3,6 +3,7 @@ import { Phone, Loader2 } from "lucide-react";
 import { callsApi } from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
+import { dialog } from "../services/dialog";
 
 /**
  * Click-to-call. MyOperator rings the signed-in admin's own phone first, then
@@ -39,9 +40,7 @@ export default function CallButton({
 
   const place = async () => {
     if (
-      !window.confirm(
-        `Call ${digits}?\n\nYour own phone rings first — answer it, and you will be connected.`,
-      )
+      !await dialog.confirm({ message: `Call ${digits}?\n\nYour own phone rings first — answer it, and you will be connected.`, confirmLabel: "Call" },)
     )
       return;
     setBusy(true);
@@ -53,14 +52,14 @@ export default function CallButton({
         subjectLabel,
       });
       const agent = res.data?.agentNumber;
-      alert(
+      void dialog.alert(
         agent
           ? `Ringing ${agent} now — answer to be connected to ${digits}.`
           : `Call placed to ${digits}.`,
       );
     } catch (err: unknown) {
       const e = err as { data?: { hint?: string }; message?: string };
-      alert(e.data?.hint || e.message || "The call could not be placed");
+      void dialog.alert(e.data?.hint || e.message || "The call could not be placed");
     } finally {
       setBusy(false);
     }

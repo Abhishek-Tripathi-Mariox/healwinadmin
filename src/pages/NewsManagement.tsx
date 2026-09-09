@@ -17,6 +17,7 @@ import {
   Textarea,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 // Extend Image blot to preserve width/height/style for resize
 const BaseImage = Quill.import("formats/image") as any;
@@ -180,7 +181,7 @@ const NewsManagement: React.FC = () => {
           }
         }
       } catch (err: any) {
-        alert("Image upload failed: " + (err.message || "Unknown error"));
+        void dialog.alert("Image upload failed: " + (err.message || "Unknown error"));
       }
     };
   };
@@ -280,7 +281,7 @@ const NewsManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this article?")) return;
+    if (!await dialog.confirm({ message: "Delete this article?", confirmLabel: "Delete", tone: "danger" })) return;
     setError(null);
     try {
       await newsApi.remove(id);

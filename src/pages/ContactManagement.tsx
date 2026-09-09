@@ -30,6 +30,7 @@ import {
   EmptyState,
   cn,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 // ==================== INTERFACES ====================
 
@@ -224,9 +225,9 @@ const ContactManagement: React.FC = () => {
     setSaving(true);
     try {
       await contactContentApi.update(content);
-      alert("Contact information saved successfully!");
+      void dialog.alert("Contact information saved successfully!");
     } catch (err: unknown) {
-      alert(
+      void dialog.alert(
         err instanceof Error ? err.message : "Failed to save contact content",
       );
     } finally {
@@ -277,18 +278,18 @@ const ContactManagement: React.FC = () => {
         });
       }
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to update message");
+      void dialog.alert(err instanceof Error ? err.message : "Failed to update message");
     }
   };
 
   const handleDeleteMessage = async (id: string) => {
-    if (!confirm("Delete this message permanently?")) return;
+    if (!await dialog.confirm({ message: "Delete this message permanently?", confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await contactMessagesApi.remove(id);
       loadMessages();
       if (selectedMessage?._id === id) setSelectedMessage(null);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to delete message");
+      void dialog.alert(err instanceof Error ? err.message : "Failed to delete message");
     }
   };
 

@@ -22,6 +22,7 @@ import {
   Select,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 // Extend Image blot to preserve width/height/style for resize
 const BaseImageCms = Quill.import("formats/image") as any;
@@ -106,7 +107,7 @@ const CMSPageManagement: React.FC = () => {
           }
         }
       } catch (err: any) {
-        alert("Image upload failed: " + (err.message || "Unknown error"));
+        void dialog.alert("Image upload failed: " + (err.message || "Unknown error"));
       }
     };
   };
@@ -219,7 +220,7 @@ const CMSPageManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this CMS page?")) return;
+    if (!await dialog.confirm({ message: "Delete this CMS page?", confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await cmsApi.remove(id);
       loadPages();

@@ -39,6 +39,7 @@ import {
   Spinner,
   cn,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 type UserStatus = "all" | "active" | "inactive" | "blocked" | "deleted";
 
@@ -278,7 +279,7 @@ const UserManagement: React.FC = () => {
 
   const handleUnblock = async (user: PatientUser) => {
     if (!canBlock) return;
-    if (!window.confirm(`Unblock ${user.fullName || user.mobileNumber}?`))
+    if (!await dialog.confirm({ message: `Unblock ${user.fullName || user.mobileNumber}?`, confirmLabel: "Unblock" }))
       return;
     setActionBusy(user._id);
     try {
@@ -295,9 +296,7 @@ const UserManagement: React.FC = () => {
   const handleDelete = async (user: PatientUser) => {
     if (!canDelete) return;
     if (
-      !window.confirm(
-        `Delete ${user.fullName || user.mobileNumber}? This is a soft delete and can be restored.`,
-      )
+      !await dialog.confirm({ message: `Delete ${user.fullName || user.mobileNumber}? This is a soft delete and can be restored.`, confirmLabel: "Delete", tone: "danger" },)
     )
       return;
     setActionBusy(user._id);
@@ -314,7 +313,7 @@ const UserManagement: React.FC = () => {
 
   const handleRestore = async (user: PatientUser) => {
     if (!canDelete) return;
-    if (!window.confirm(`Restore ${user.fullName || user.mobileNumber}?`))
+    if (!await dialog.confirm({ message: `Restore ${user.fullName || user.mobileNumber}?`, confirmLabel: "Restore" }))
       return;
     setActionBusy(user._id);
     try {

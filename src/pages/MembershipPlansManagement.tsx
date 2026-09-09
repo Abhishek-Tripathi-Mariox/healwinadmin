@@ -6,6 +6,7 @@ import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface PlanRow {
   _id: string;
@@ -110,7 +111,7 @@ export default function MembershipPlansManagement() {
 
   const toggle = async (p: PlanRow) => { await membershipPlanApi.toggle(p._id); load(); };
   const remove = async (p: PlanRow) => {
-    if (!window.confirm(`Delete "${p.name}"? Existing subscribers keep their membership.`)) return;
+    if (!await dialog.confirm({ message: `Delete "${p.name}"? Existing subscribers keep their membership.`, confirmLabel: "Delete", tone: "danger" })) return;
     await membershipPlanApi.remove(p._id);
     load();
   };

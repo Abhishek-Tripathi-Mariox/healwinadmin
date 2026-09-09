@@ -9,6 +9,7 @@ import {
   PageHeader, Button, Card, Table, THead, TBody, TR, Th, Td, TableState,
   Badge, Modal, Field, Input, Alert,
 } from "../../components/ui";
+import { dialog } from "../../services/dialog";
 
 interface Shift {
   _id: string;
@@ -96,13 +97,13 @@ export default function WorkShiftManagement() {
   };
 
   const remove = async (s: Shift) => {
-    if (!window.confirm(`Delete the ${s.name} shift?`)) return;
+    if (!await dialog.confirm({ message: `Delete the ${s.name} shift?`, confirmLabel: "Delete", tone: "danger" })) return;
     try {
       const res = await workShiftApi.remove(s._id);
       // Shifts that days were worked against are deactivated, not deleted —
       // deleting would orphan the timings those hours were computed from.
       if (res.data?.deactivated) {
-        alert(
+        void dialog.alert(
           `${s.name} is in use (${res.data.assigned} roster entries, ${res.data.defaulted} employees), so it was deactivated rather than deleted. Past hours stay intact.`,
         );
       }

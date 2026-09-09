@@ -20,6 +20,7 @@ import {
   Td,
   TableState,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface VehicleType {
   _id: string;
@@ -163,7 +164,7 @@ const AmbulancePricingManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this vehicle type?")) return;
+    if (!await dialog.confirm({ message: "Delete this vehicle type?", confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await configApi.deleteVehicleType(id);
       load();

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { patientCommerceApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
 import { useAuth } from "../auth/useAuth";
@@ -106,32 +106,43 @@ export default function PatientOrders() {
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
 
   const canSchedule = tab === "consultations" || tab === "lab-bookings";
 
+  /**
+   * One page at a time, from the server.
+   *
+   * This used to fetch the whole collection and slice it here. That means the
+   * browser downloads and parses every order ever placed to show twenty of
+   * them — fine at a few hundred rows, unusable at a hundred thousand. The
+   * server now does the paging and reports the total.
+   */
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const params = { page: String(page), limit: String(limit) };
       const res =
         tab === "consultations"
-          ? await patientCommerceApi.consultations()
+          ? await patientCommerceApi.consultations(params)
           : tab === "lab-bookings"
-            ? await patientCommerceApi.labBookings()
-            : await patientCommerceApi.pharmacyOrders();
+            ? await patientCommerceApi.labBookings(params)
+            : await patientCommerceApi.pharmacyOrders(params);
       setRows(res.data?.items || []);
+      setTotal(res.data?.pagination?.total ?? (res.data?.items || []).length);
     } finally {
       setLoading(false);
     }
-  }, [tab]);
+  }, [tab, page, limit]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   useEffect(() => { setPage(1); }, [tab]);
-  const totalPages = Math.max(1, Math.ceil(rows.length / limit));
-  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
-  const pageRows = useMemo(() => rows.slice((page - 1) * limit, page * limit), [rows, page, limit]);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  // The rows on screen ARE the page now — no client-side slicing.
+  const pageRows = rows;
 
   // Real-time: a new order (or a status change) lands → reload + flash a banner.
   useEffect(() => {
@@ -295,7 +306,7 @@ export default function PatientOrders() {
             ))}
           </select>
         </label>
-        <Pagination page={page} totalPages={totalPages} total={rows.length} label="orders" onPageChange={setPage} />
+        <Pagination page={page} totalPages={totalPages} total={total} label="orders" onPageChange={setPage} />
       </div>
 
       <Modal

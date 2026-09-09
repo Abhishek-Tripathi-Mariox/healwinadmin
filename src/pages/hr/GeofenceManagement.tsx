@@ -10,6 +10,7 @@ import {
   PageHeader, Button, Card, Table, THead, TBody, TR, Th, Td, TableState,
   Badge, Modal, Field, Input, Alert,
 } from "../../components/ui";
+import { dialog } from "../../services/dialog";
 
 interface Fence {
   _id: string;
@@ -99,7 +100,7 @@ export default function GeofenceManagement() {
   };
 
   const remove = async (f: Fence) => {
-    if (!window.confirm(`Delete the ${f.name} attendance location?`)) return;
+    if (!await dialog.confirm({ message: `Delete the ${f.name} attendance location?`, confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await geofenceApi.remove(f._id);
       load();

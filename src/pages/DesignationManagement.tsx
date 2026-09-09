@@ -20,6 +20,7 @@ import {
   Input,
   Alert,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface DesignationItem {
   _id: string;
@@ -109,7 +110,7 @@ const DesignationManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this designation?")) return;
+    if (!await dialog.confirm({ message: "Delete this designation?", confirmLabel: "Delete", tone: "danger" })) return;
     try {
       await designationApi.remove(id);
       loadDesignations();

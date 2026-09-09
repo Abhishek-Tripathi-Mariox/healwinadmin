@@ -24,6 +24,7 @@ import {
   Alert,
   cn,
 } from "../components/ui";
+import { dialog } from "../services/dialog";
 
 interface InvoiceRow {
   _id: string;
@@ -225,7 +226,7 @@ export default function BillingManagement() {
       // The server explains exactly why a claim was refused — unapproved
       // policy, wrong patient, no cover left. Show that, not a generic error.
       const e = err as { data?: { hint?: string }; message?: string };
-      alert(e.data?.hint || e.message || "Failed to record payment");
+      void dialog.alert(e.data?.hint || e.message || "Failed to record payment");
     }
   };
 
@@ -238,7 +239,7 @@ export default function BillingManagement() {
       setDetail(res.data?.invoice);
       load();
     } catch (err: any) {
-      alert(err.message || "Failed to refund");
+      void dialog.alert(err.message || "Failed to refund");
     }
   };
 
@@ -252,7 +253,7 @@ export default function BillingManagement() {
       setDetail(res.data?.invoice);
       load();
     } catch (err: any) {
-      alert(err.message || "Failed to record advance");
+      void dialog.alert(err.message || "Failed to record advance");
     }
   };
 
@@ -302,7 +303,7 @@ ${pays ? `<div style="margin-top:16px;font-size:12px;color:#444"><b>Payments</b>
 </body></html>`;
     const w = window.open("", "_blank", "width=820,height=900");
     if (!w) {
-      alert("Please allow pop-ups to print the invoice.");
+      void dialog.alert("Please allow pop-ups to print the invoice.");
       return;
     }
     w.document.write(html);
@@ -638,10 +639,10 @@ ${pays ? `<div style="margin-top:16px;font-size:12px;color:#444"><b>Payments</b>
                 Refund
               </Button>
             )}
-            <Button variant="secondary" onClick={() => billingApi.downloadPdf(detail._id, "pdf").catch((e: any) => alert(e.message))}>
+            <Button variant="secondary" onClick={() => billingApi.downloadPdf(detail._id, "pdf").catch((e: any) => void dialog.alert(e.message))}>
               Invoice PDF
             </Button>
-            <Button variant="secondary" onClick={() => billingApi.downloadPdf(detail._id, "receipt").catch((e: any) => alert(e.message))}>
+            <Button variant="secondary" onClick={() => billingApi.downloadPdf(detail._id, "receipt").catch((e: any) => void dialog.alert(e.message))}>
               Receipt
             </Button>
             <Button variant="secondary" onClick={submitAdvance}>

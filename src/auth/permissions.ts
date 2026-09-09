@@ -148,6 +148,8 @@ export const PERMISSIONS = {
   CALLS_VIEW: "calls:view",
   CALLS_PLACE: "calls:place",
   CALLS_MANAGE: "calls:manage",
+  PAYMENT_CONFIG_VIEW: "payment_config:view",
+  PAYMENT_CONFIG_MANAGE: "payment_config:manage",
   // HR & Payroll
   HR_DASHBOARD_VIEW: "hr_dashboard:view",
   EMPLOYEES_VIEW: "employees:view",
@@ -271,6 +273,7 @@ export const SIDEBAR_PERMISSION_MAP: Record<string, string[]> = {
   labs: [PERMISSIONS.LABS_VIEW],
   "pharmacy-dispense": [PERMISSIONS.INVENTORY_VIEW],
   calls: [PERMISSIONS.CALLS_VIEW],
+  "payment-config": [PERMISSIONS.PAYMENT_CONFIG_VIEW],
   "ambulance-requests": [PERMISSIONS.SOS_VIEW],
   // HR & Payroll
   hr: [PERMISSIONS.HR_DASHBOARD_VIEW],
