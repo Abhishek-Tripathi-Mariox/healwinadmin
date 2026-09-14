@@ -6,6 +6,7 @@ import { useAuth } from "../../auth/useAuth";
 import { PERMISSIONS } from "../../auth/permissions";
 import {
   PageHeader, Button, Select, Card, Table, THead, TBody, TR, Th, Td, TableState, Badge,
+  Modal, Field, Alert,
 } from "../../components/ui";
 import { dialog } from "../../services/dialog";
 
@@ -14,6 +15,8 @@ const inr = (n: number) => "₹" + (n || 0).toLocaleString("en-IN", { maximumFra
 
 interface Run {
   _id: string; month: number; year: number; status: string;
+  /** e.g. "16 Sep 2026 – 15 Oct 2026" — the days this run actually paid. */
+  periodLabel?: string;
   employeeCount: number; totalGross: number; totalDeductions: number; totalNet: number;
   totalOvertimeAmount?: number;
   verifiedAt?: string;
@@ -51,6 +54,41 @@ export default function PayrollManagement() {
     yearParam >= 2000 && yearParam <= 2200 ? yearParam : now.getFullYear(),
   );
   const [runs, setRuns] = useState<Run[]>([]);
+
+  // The payroll calendar. Shown next to the month picker so it is obvious
+  // which days a run will cover before it is generated.
+  const [cycle, setCycle] = useState<{ cycleStartDay: number } | null>(null);
+  const [cycleOpen, setCycleOpen] = useState(false);
+
+  const loadCycle = useCallback(() => {
+    payrollApi
+      .settings()
+      .then((r) => setCycle(r.data))
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => { loadCycle(); }, [loadCycle]);
+
+  /**
+   * The period the selected month/year would produce, computed here so the
+   * label updates as the pickers change without a round trip.
+   */
+  const periodPreview = (() => {
+    const day = cycle?.cycleStartDay ?? 1;
+    const fmt = (d: Date) =>
+      `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} ${d.getFullYear()}`;
+    if (day <= 1) {
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month, 0);
+      return `${fmt(start)} – ${fmt(end)}`;
+    }
+    const lastOf = (m: number, y: number) => new Date(y, m, 0).getDate();
+    const start = new Date(year, month - 1, Math.min(day, lastOf(month, year)));
+    const nm = month === 12 ? 1 : month + 1;
+    const ny = month === 12 ? year + 1 : year;
+    const nextStart = new Date(ny, nm - 1, Math.min(day, lastOf(nm, ny)));
+    const end = new Date(nextStart.getTime() - 86400000);
+    return `${fmt(start)} – ${fmt(end)}`;
+  })();
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
 
@@ -159,7 +197,13 @@ export default function PayrollManagement() {
         </button>
         <PageHeader
           title={`Payroll — ${MONTHS[openRun.month - 1]} ${openRun.year}`}
-          subtitle={`${openRun.employeeCount} employees`}
+          // With a 16th-to-15th cycle the month name alone does not say which
+          // days were paid, so the period is shown beside it.
+          subtitle={
+            openRun.periodLabel
+              ? `${openRun.periodLabel} · ${openRun.employeeCount} employees`
+              : `${openRun.employeeCount} employees`
+          }
           actions={
             <div className="flex items-center gap-2">
               <Badge
@@ -273,8 +317,39 @@ export default function PayrollManagement() {
           <Button onClick={() => generate()} disabled={generating} icon={<Play className="h-4 w-4" />}>
             {generating ? "Generating…" : "Generate Payroll"}
           </Button>
+
+          {/* Which days this run will actually cover. On a 16th-to-15th cycle
+              the month name alone is not enough to know that. */}
+          {cycle && (
+            <div className="ml-auto text-right">
+              <div className="text-xs font-medium text-gray-600">
+                This run covers
+              </div>
+              <div className="text-sm font-semibold text-gray-900">
+                {periodPreview || "—"}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCycleOpen(true)}
+                className="mt-0.5 text-xs text-healwin-600 hover:underline"
+              >
+                Cycle starts on day {cycle.cycleStartDay} — change
+              </button>
+            </div>
+          )}
         </Card>
       )}
+
+      <CycleModal
+        open={cycleOpen}
+        current={cycle?.cycleStartDay ?? 16}
+        onClose={() => setCycleOpen(false)}
+        onSaved={(day) => {
+          setCycle((c) => (c ? { ...c, cycleStartDay: day } : c));
+          setCycleOpen(false);
+          loadCycle();
+        }}
+      />
 
       <Table>
         <THead>
@@ -303,5 +378,95 @@ export default function PayrollManagement() {
         </TBody>
       </Table>
     </div>
+  );
+}
+
+/**
+ * The payroll calendar.
+ *
+ * Changing this moves every future run's period, so it states what the new
+ * cycle means in plain dates before saving, and the server keeps already
+ * finalized runs on the period they were actually run under.
+ */
+function CycleModal({
+  open,
+  current,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  current: number;
+  onClose: () => void;
+  onSaved: (day: number) => void;
+}) {
+  const [day, setDay] = useState(current);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setDay(current);
+      setError("");
+      setNote("");
+    }
+  }, [open, current]);
+
+  const save = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      const res = await payrollApi.updateSettings(day);
+      setNote(res.data?.note || "");
+      onSaved(res.data?.cycleStartDay ?? day);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the cycle.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const example =
+    day <= 1
+      ? "1st to the last day of the month (a calendar month)"
+      : `${day}${day === 2 ? "nd" : day === 3 ? "rd" : "th"} of the month to the ${
+          day - 1 === 1 ? "1st" : `${day - 1}th`
+        } of the next`;
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Payroll cycle"
+      subtitle="Which day of the month a pay period begins"
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} disabled={saving || day === current}>
+            {saving ? "Saving…" : "Save cycle"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {error && <Alert>{error}</Alert>}
+        {note && <Alert tone="info">{note}</Alert>}
+        <Field label="Cycle starts on day" hint="1 gives an ordinary calendar month">
+          <Select value={day} onChange={(e) => setDay(Number(e.target.value))}>
+            {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </Select>
+        </Field>
+        <p className="text-sm text-gray-600">
+          Each run will cover the <strong>{example}</strong>, and is named after
+          the month it starts in.
+        </p>
+        <p className="text-xs text-gray-400">
+          Runs that are already finalized keep the period they were run under.
+        </p>
+      </div>
+    </Modal>
   );
 }

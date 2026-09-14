@@ -18,6 +18,17 @@ import {
 import { dialog } from "../../services/dialog";
 
 interface Ref { _id: string; name: string }
+
+/** What the import endpoint reports, for both the preview and the commit. */
+interface ImportResult {
+  dryRun: boolean;
+  totalRows: number;
+  wouldCreate?: number;
+  created?: number;
+  failed: number;
+  errors: { row: number; fullName: string; errors: string[] }[];
+  createdRows?: { row: number; employeeCode: string; fullName: string }[];
+}
 interface Employee {
   _id: string;
   employeeCode: string;
@@ -124,6 +135,56 @@ export default function EmployeeManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [error, setError] = useState("");
+
+  // ── Bulk import ──────────────────────────────────────────────────────────
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<ImportResult | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState("");
+
+  const resetImport = () => {
+    setImportFile(null);
+    setPreview(null);
+    setImportResult(null);
+    setImportError("");
+  };
+
+  /** Validate the file without writing anything. */
+  const runPreview = async (file: File) => {
+    setImportBusy(true);
+    setImportError("");
+    setPreview(null);
+    setImportResult(null);
+    try {
+      const res = await hrEmployeeApi.importCsv(file, true);
+      setPreview(res.data as ImportResult);
+    } catch (e) {
+      setImportError(
+        e instanceof Error ? e.message : "Could not read that file.",
+      );
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  /** Commit the rows that passed validation. */
+  const runImport = async () => {
+    if (!importFile) return;
+    setImportBusy(true);
+    setImportError("");
+    try {
+      const res = await hrEmployeeApi.importCsv(importFile, false);
+      setImportResult(res.data as ImportResult);
+      setPreview(null);
+      await load();
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : "The import failed.");
+    } finally {
+      setImportBusy(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -273,7 +334,16 @@ export default function EmployeeManagement() {
       <PageHeader
         title="Employees"
         subtitle="Staff records, salary structure & statutory details"
-        actions={canCreate ? <Button onClick={openCreate}>+ Add Employee</Button> : undefined}
+        actions={
+          canCreate ? (
+            <>
+              <Button variant="secondary" onClick={() => setImportOpen(true)}>
+                Import CSV
+              </Button>
+              <Button onClick={openCreate}>+ Add Employee</Button>
+            </>
+          ) : undefined
+        }
       />
 
       <div className="flex flex-wrap gap-2 mb-4">
@@ -484,6 +554,149 @@ export default function EmployeeManagement() {
           </div>
         </form>
       </Modal>
+
+      {/* ── Bulk import ───────────────────────────────────────────────────── */}
+      <Modal
+        open={importOpen}
+        onClose={() => { setImportOpen(false); resetImport(); }}
+        title="Import employees from CSV"
+        subtitle="Build the list in Excel, save as CSV, and upload it here."
+        size="lg"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => { setImportOpen(false); resetImport(); }}
+            >
+              Close
+            </Button>
+            {preview && (preview.wouldCreate ?? 0) > 0 && (
+              <Button onClick={runImport} disabled={importBusy}>
+                {importBusy
+                  ? "Importing…"
+                  : `Import ${preview.wouldCreate} employee${preview.wouldCreate === 1 ? "" : "s"}`}
+              </Button>
+            )}
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {importError && <Alert>{importError}</Alert>}
+
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+            <p className="mb-2">
+              <strong>Full Name</strong> and <strong>Joining Date</strong> are
+              required. Department, Designation and Employment Type are matched
+              by name and must already exist. Dates can be{" "}
+              <code>YYYY-MM-DD</code> or <code>DD/MM/YYYY</code>.
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() =>
+                hrEmployeeApi.downloadImportTemplate().catch((e) =>
+                  setImportError(
+                    e instanceof Error ? e.message : "Download failed",
+                  ),
+                )
+              }
+            >
+              Download template
+            </Button>
+          </div>
+
+          <Field label="CSV file">
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-healwin-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-healwin-700 hover:file:bg-healwin-100"
+              onChange={(e) => {
+                const f = e.target.files?.[0] || null;
+                setImportFile(f);
+                setImportResult(null);
+                // Preview immediately — there is no reason to make someone
+                // press a second button before seeing what is wrong.
+                if (f) runPreview(f);
+              }}
+            />
+          </Field>
+
+          {importBusy && !importResult && (
+            <p className="text-sm text-gray-500">Checking the file…</p>
+          )}
+
+          {/* Preview — what WOULD happen. Nothing has been written yet. */}
+          {preview && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Badge tone="neutral">{preview.totalRows} rows read</Badge>
+                <Badge tone={preview.wouldCreate ? "success" : "neutral"}>
+                  {preview.wouldCreate} ready to import
+                </Badge>
+                {preview.failed > 0 && (
+                  <Badge tone="danger">{preview.failed} with problems</Badge>
+                )}
+              </div>
+              {preview.failed > 0 && (
+                <Alert tone="warning">
+                  Rows with problems are listed below and will be skipped. Fix
+                  them in the spreadsheet and upload again — the ones that are
+                  ready can still be imported now.
+                </Alert>
+              )}
+              {preview.errors.length > 0 && <RowErrors rows={preview.errors} />}
+            </div>
+          )}
+
+          {/* Result — what actually happened. */}
+          {importResult && (
+            <div className="space-y-3">
+              <Alert tone={importResult.created ? "success" : "warning"}>
+                {importResult.created
+                  ? `${importResult.created} employee${importResult.created === 1 ? "" : "s"} imported.`
+                  : "Nothing was imported."}
+                {importResult.failed > 0 &&
+                  ` ${importResult.failed} row${importResult.failed === 1 ? "" : "s"} were skipped.`}
+              </Alert>
+              {importResult.errors.length > 0 && (
+                <RowErrors rows={importResult.errors} />
+              )}
+            </div>
+          )}
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+/** Per-row problems, with the spreadsheet row number so they can be found. */
+function RowErrors({
+  rows,
+}: {
+  rows: { row: number; fullName: string; errors: string[] }[];
+}) {
+  return (
+    <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-200">
+      <Table>
+        <THead>
+          <Th className="w-16">Row</Th>
+          <Th>Name</Th>
+          <Th>Problem</Th>
+        </THead>
+        <TBody>
+          {rows.map((r) => (
+            <TR key={r.row}>
+              <Td className="font-mono text-xs text-gray-500">{r.row}</Td>
+              <Td className="text-gray-900">{r.fullName}</Td>
+              <Td className="text-xs text-red-600">
+                {r.errors.map((e, i) => (
+                  <div key={i}>{e}</div>
+                ))}
+              </Td>
+            </TR>
+          ))}
+        </TBody>
+      </Table>
     </div>
   );
 }

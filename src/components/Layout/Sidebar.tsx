@@ -697,6 +697,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           path: "/admin/leave",
         },
         {
+          id: "comp-off",
+          label: "Compensatory Off",
+          icon: CalendarDays,
+          path: "/admin/comp-off",
+        },
+        {
           id: "holidays",
           label: "Holidays",
           icon: CalendarDays,

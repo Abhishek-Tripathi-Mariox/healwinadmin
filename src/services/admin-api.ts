@@ -2109,8 +2109,22 @@ export const doctorRosterApi = {
 };
 
 export const employeeShiftApi = {
-  list: (date: string) => fetchWithAuth(`/admin/employee-shifts?date=${date}`),
-  employees: () => fetchWithAuth("/admin/employee-shifts/employees"),
+  /** Roster for a day (or a range), narrowed by department/designation. */
+  list: (params: {
+    date?: string;
+    dateTo?: string;
+    departmentId?: string;
+    designationId?: string;
+    shift?: string;
+    employeeId?: string;
+  }) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/employee-shifts${qs ? `?${qs}` : ""}`);
+  },
+  employees: (params: { departmentId?: string; designationId?: string } = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/employee-shifts/employees${qs ? `?${qs}` : ""}`);
+  },
   add: (data: { employeeId: string; date: string; shift: string; startTime?: string; endTime?: string; department?: string; section?: string; notes?: string }) =>
     fetchWithAuth("/admin/employee-shifts", { method: "POST", body: JSON.stringify(data) }),
   remove: (id: string) => fetchWithAuth(`/admin/employee-shifts/${id}`, { method: "DELETE" }),
@@ -2356,6 +2370,40 @@ export const paymentConfigApi = {
 
 // ==================== HR — EMPLOYEES API ====================
 export const hrEmployeeApi = {
+  /**
+   * Bulk import. `dryRun` validates and reports per-row problems without
+   * writing anything — the screen always previews before committing.
+   */
+  importCsv: async (file: File, dryRun: boolean) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("dryRun", String(dryRun));
+    return fetchWithAuth("/admin/hr/employees/import", {
+      method: "POST",
+      body: fd,
+    });
+  },
+  /**
+   * Download the CSV template. Fetched as a blob rather than linked directly:
+   * the endpoint requires the bearer token, and an <a href> cannot carry it —
+   * the link would just bounce off the auth middleware.
+   */
+  downloadImportTemplate: async () => {
+    const token = getAuthToken();
+    const res = await fetch(`${API_URL}/admin/hr/employees/import/template`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("Could not download the template");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "employee-import-template.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   meta: () => fetchWithAuth("/admin/hr/employees/meta/options"),
   // Employee documents (§2) — multipart, so it bypasses the JSON helper.
   addDocument: async (id: string, file: File, name: string, type?: string) => {
@@ -2468,6 +2516,33 @@ export const leaveApi = {
 };
 
 // ==================== HR — HOLIDAYS API ====================
+/**
+ * Compensatory off — days owed to staff who worked a public holiday, which a
+ * hospital cannot simply close for.
+ */
+export const compOffApi = {
+  /** Who worked a given day, and whether they were already credited. */
+  worked: (date: string) =>
+    fetchWithAuth(`/admin/hr/comp-off/worked?date=${encodeURIComponent(date)}`),
+  list: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/hr/comp-off${qs ? `?${qs}` : ""}`);
+  },
+  balance: (employeeId: string) =>
+    fetchWithAuth(`/admin/hr/comp-off/balance/${employeeId}`),
+  grant: (data: {
+    workedOn: string;
+    entries: { employeeId: string; days: number }[];
+    reason?: string;
+  }) =>
+    fetchWithAuth("/admin/hr/comp-off", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  cancel: (id: string) =>
+    fetchWithAuth(`/admin/hr/comp-off/${id}`, { method: "DELETE" }),
+};
+
 export const holidayApi = {
   list: (year: number) => fetchWithAuth(`/admin/hr/holidays?year=${year}`),
   save: (data: Record<string, any>, id?: string) =>
@@ -2545,6 +2620,13 @@ export const hrReportsApi = {
 
 export const payrollApi = {
   runs: () => fetchWithAuth("/admin/hr/payroll/runs"),
+  /** The payroll calendar — which day of the month a period starts on. */
+  settings: () => fetchWithAuth("/admin/hr/payroll/settings"),
+  updateSettings: (cycleStartDay: number) =>
+    fetchWithAuth("/admin/hr/payroll/settings", {
+      method: "PUT",
+      body: JSON.stringify({ cycleStartDay }),
+    }),
   // `acknowledgeUnmarked` confirms a run for a month with no attendance marked
   // at all — the server refuses that outright otherwise, because every
   // employee would be paid a full month on no evidence.
@@ -2588,7 +2670,10 @@ export const payrollApi = {
 
 // ==================== HR — DASHBOARD API ====================
 export const hrDashboardApi = {
-  summary: () => fetchWithAuth("/admin/hr/dashboard"),
+  summary: (params: { departmentId?: string } = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/hr/dashboard${qs ? `?${qs}` : ""}`);
+  },
 };
 
 // ==================== PATIENT CATALOG API ====================

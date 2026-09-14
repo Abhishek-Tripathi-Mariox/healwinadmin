@@ -1,15 +1,29 @@
 import { useCallback, useEffect, useState } from "react";
-import { employeeShiftApi } from "../services/admin-api";
+import {
+  employeeShiftApi,
+  departmentApi,
+  designationApi,
+} from "../services/admin-api";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
-  Modal, Field, Input, Alert,
+  Modal, Field, Input, Alert, Select,
 } from "../components/ui";
 
 const SHIFTS = ["morning", "evening", "night", "general"];
 const today = () => new Date().toISOString().slice(0, 10);
 
+type Ref = { _id: string; name: string };
+
 export default function EmployeeShiftManagement() {
   const [date, setDate] = useState(today());
+  // Blank = a single day. Set it to read the roster a week at a time, which is
+  // how a ward pattern is actually checked.
+  const [dateTo, setDateTo] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [designationId, setDesignationId] = useState("");
+  const [shift, setShift] = useState("");
+  const [departments, setDepartments] = useState<Ref[]>([]);
+  const [designations, setDesignations] = useState<Ref[]>([]);
   const [rows, setRows] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -21,12 +35,41 @@ export default function EmployeeShiftManagement() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setRows((await employeeShiftApi.list(date)).data?.items || []); }
-    finally { setLoading(false); }
-  }, [date]);
+    try {
+      const res = await employeeShiftApi.list({
+        date,
+        dateTo: dateTo || undefined,
+        departmentId: departmentId || undefined,
+        designationId: designationId || undefined,
+        shift: shift || undefined,
+      });
+      setRows(res.data?.items || []);
+    } finally { setLoading(false); }
+  }, [date, dateTo, departmentId, designationId, shift]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { employeeShiftApi.employees().then((r) => setEmployees(r.data?.items || [])).catch(() => {}); }, []);
+
+  // The picker in the assign dialog follows the same department/designation
+  // filter, so the list you are looking at and the people you can add to it
+  // stay consistent.
+  useEffect(() => {
+    employeeShiftApi
+      .employees({
+        departmentId: departmentId || undefined,
+        designationId: designationId || undefined,
+      })
+      .then((r) => setEmployees(r.data?.items || []))
+      .catch(() => {});
+  }, [departmentId, designationId]);
+
+  useEffect(() => {
+    departmentApi.getAll({ status: "active" })
+      .then((r) => setDepartments(r.data?.items || r.data || []))
+      .catch(() => {});
+    designationApi.getAll({ status: "active" })
+      .then((r) => setDesignations(r.data?.items || r.data || []))
+      .catch(() => {});
+  }, []);
 
   const add = async () => {
     if (!form.employeeId) { setError("Select an employee"); return; }
@@ -36,27 +79,84 @@ export default function EmployeeShiftManagement() {
   };
   const remove = async (id: string) => { await employeeShiftApi.remove(id); load(); };
 
+  const cols = dateTo ? 8 : 7;
+  const filtered = !!(departmentId || designationId || shift);
+  // "Nothing assigned" and "nothing matches your filter" are different
+  // problems, and telling them apart saves someone assuming the roster is
+  // empty when it is only hidden.
+  const emptyMessage = filtered
+    ? "No shifts match these filters. Clear them to see the full roster."
+    : dateTo
+      ? "No shifts assigned in this date range."
+      : "No shifts assigned for this day.";
+
   return (
     <div className="p-6">
       <PageHeader title="Employee Shifts" subtitle="Hospital/HR staff shift roster (nurses, ward, OPD/IPD support)"
         actions={<Button variant="secondary" onClick={load}>Refresh</Button>} />
 
-      <div className="mb-4 flex items-center gap-3">
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none" />
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <Field label="From" className="w-40">
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </Field>
+        <Field label="To" hint="leave blank for a single day" className="w-40">
+          <Input
+            type="date"
+            value={dateTo}
+            min={date}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
+        </Field>
+        <Field label="Department" className="w-52">
+          <Select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+            <option value="">All departments</option>
+            <option value="none">Unassigned</option>
+            {departments.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Designation" className="w-52">
+          <Select value={designationId} onChange={(e) => setDesignationId(e.target.value)}>
+            <option value="">All designations</option>
+            <option value="none">Unassigned</option>
+            {designations.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Shift" className="w-40">
+          <Select value={shift} onChange={(e) => setShift(e.target.value)} className="capitalize">
+            <option value="">All shifts</option>
+            {SHIFTS.map((s) => <option key={s} value={s}>{s}</option>)}
+          </Select>
+        </Field>
+        {(dateTo || departmentId || designationId || shift) && (
+          <Button
+            variant="secondary"
+            onClick={() => { setDateTo(""); setDepartmentId(""); setDesignationId(""); setShift(""); }}
+          >
+            Clear filters
+          </Button>
+        )}
         <div className="ml-auto">
           <Button size="sm" onClick={() => { setForm({ employeeId: "", shift: "general", startTime: "", endTime: "", department: "", section: "", notes: "" }); setError(""); setModal(true); }}>+ Assign shift</Button>
         </div>
       </div>
 
       <Table>
-        <THead><Th>Employee</Th><Th>Shift</Th><Th>Time</Th><Th>Section</Th><Th className="text-right">Actions</Th></THead>
+        <THead>
+          {/* Only worth a date column when the view spans more than one day. */}
+          {dateTo && <Th>Date</Th>}
+          <Th>Employee</Th><Th>Department</Th><Th>Designation</Th>
+          <Th>Shift</Th><Th>Time</Th><Th>Section</Th>
+          <Th className="text-right">Actions</Th>
+        </THead>
         <TBody>
-          {loading && rows.length === 0 ? <TableState colSpan={5}>Loading…</TableState>
-            : rows.length === 0 ? <TableState colSpan={5}>No shifts assigned for this day.</TableState>
+          {loading && rows.length === 0 ? <TableState colSpan={cols}>Loading…</TableState>
+            : rows.length === 0 ? <TableState colSpan={cols}>{emptyMessage}</TableState>
             : rows.map((r) => (
               <TR key={r._id}>
+                {dateTo && <Td className="text-gray-500 text-xs whitespace-nowrap">{r.date}</Td>}
                 <Td className="font-medium text-gray-900">{r.employeeId?.fullName || "—"}<div className="text-xs text-gray-400">{r.employeeId?.employeeCode}</div></Td>
+                <Td className="text-gray-500">{r.employeeId?.departmentId?.name || "—"}</Td>
+                <Td className="text-gray-500">{r.employeeId?.designationId?.name || "—"}</Td>
                 <Td><Badge tone="info">{r.shift}</Badge></Td>
                 <Td className="text-gray-500 text-xs">{r.startTime && r.endTime ? `${r.startTime}–${r.endTime}` : "—"}</Td>
                 <Td className="text-gray-500">{[r.department, r.section].filter(Boolean).join(" · ") || "—"}</Td>

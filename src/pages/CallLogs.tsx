@@ -1,6 +1,7 @@
 // Calls & recordings (MyOperator). Every call MyOperator handles — inbound,
 // IVR, missed and click-to-call — with its recording playable in place.
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneCall, Search, Download,
 } from "lucide-react";
@@ -39,6 +40,20 @@ interface Call {
   rawPayloads?: unknown[];
 }
 
+type CallKind = "all" | "ivr" | "click_to_call" | "inbound";
+
+/**
+ * The tabs. IVR is matched on the flow/input the provider reports, not on
+ * direction — an IVR call arrives as `inbound`, so direction alone cannot
+ * separate it from an ordinary incoming call.
+ */
+const KIND_TABS: { key: CallKind; label: string; hint: string }[] = [
+  { key: "all", label: "All calls", hint: "Every call MyOperator has handled" },
+  { key: "ivr", label: "IVR", hint: "Callers who went through the menu" },
+  { key: "click_to_call", label: "Click to Call", hint: "Calls placed from the panel by an agent" },
+  { key: "inbound", label: "Direct inbound", hint: "Incoming calls that did not go through the IVR" },
+];
+
 type Tone = "neutral" | "success" | "warning" | "danger" | "info" | "accent";
 const statusTone: Record<string, Tone> = {
   completed: "success",
@@ -71,13 +86,35 @@ export default function CallLogs() {
 
   const [items, setItems] = useState<Call[]>([]);
   const [stats, setStats] = useState<{
-    today: number; missedToday: number; recorded: number; total: number; configured: boolean;
+    today: number; missedToday: number; recorded: number; total: number;
+    byKind?: Record<CallKind, { calls: number; recordings: number }>;
+    configured: boolean;
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [limit] = useState(25);
   const [total, setTotal] = useState(0);
+  /**
+   * Which kind of call is on screen.
+   *
+   * IVR and click-to-call recordings are different things — one is a customer
+   * working through the menu, the other an agent's own conversation — and in a
+   * single list there is no way to tell them apart without opening each one.
+   * Kept in the URL so a tab can be linked to and survives a refresh.
+   */
+  const [params, setParams] = useSearchParams();
+  const kind = (params.get("kind") || "all") as CallKind;
+  const setKind = (next: CallKind) => {
+    const p = new URLSearchParams(params);
+    if (next === "all") p.delete("kind");
+    else p.set("kind", next);
+    setParams(p, { replace: true });
+    // The direction filter is hidden inside a kind tab; leaving a stale value
+    // set would silently filter the tab with a control nobody can see.
+    if (next !== "all") setDirection("");
+  };
+
   const [direction, setDirection] = useState("");
   const [status, setStatus] = useState("");
   const [hasRecording, setHasRecording] = useState(false);
@@ -91,6 +128,7 @@ export default function CallLogs() {
     setError("");
     try {
       const params: Record<string, string | number> = { page, limit };
+      if (kind !== "all") params.kind = kind;
       if (direction) params.direction = direction;
       if (status) params.status = status;
       if (hasRecording) params.hasRecording = "true";
@@ -103,13 +141,29 @@ export default function CallLogs() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, direction, status, hasRecording, search]);
+  }, [page, limit, kind, direction, status, hasRecording, search]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     callsApi.stats().then((r) => setStats(r.data)).catch(() => setStats(null));
   }, []);
-  useEffect(() => { setPage(1); }, [direction, status, hasRecording, search]);
+  useEffect(() => { setPage(1); }, [kind, direction, status, hasRecording, search]);
+
+  const filtered = !!(direction || status || hasRecording || search.trim());
+  /**
+   * An empty tab and an empty filter are different problems. Saying "no calls
+   * yet" when a filter is hiding them sends someone to check the webhook for
+   * a fault that is not there.
+   */
+  const emptyMessage = filtered
+    ? "No calls match these filters. Clear them to see everything in this tab."
+    : kind === "ivr"
+      ? "No IVR calls yet. They appear here once a caller goes through the menu."
+      : kind === "click_to_call"
+        ? "No click-to-call calls yet. Use the Call button on a patient, request or application to place one."
+        : kind === "inbound"
+          ? "No direct inbound calls yet."
+          : "No calls yet. Inbound and IVR calls appear here as soon as MyOperator posts to the webhook.";
 
   const openCall = async (c: Call) => {
     setNotes(c.notes || "");
@@ -171,6 +225,54 @@ export default function CallLogs() {
         </div>
       )}
 
+      {/* ── Tabs ────────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-1 border-b border-gray-200">
+        {KIND_TABS.map((t) => {
+          const active = kind === t.key;
+          const counts = stats?.byKind?.[t.key];
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setKind(t.key)}
+              title={t.hint}
+              aria-current={active ? "page" : undefined}
+              className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                active
+                  ? "border-healwin-600 text-healwin-700"
+                  : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-800"
+              }`}
+            >
+              {t.label}
+              {counts && (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs ${
+                    active ? "bg-healwin-50 text-healwin-700" : "bg-gray-100 text-gray-500"
+                  }`}
+                >
+                  {counts.calls}
+                </span>
+              )}
+              {/* Recordings are the reason these are split apart, so each tab
+                  says how many it holds rather than making you filter to find
+                  out. */}
+              {!!counts?.recordings && (
+                <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                  <Download className="h-3 w-3" />
+                  {counts.recordings}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {kind !== "all" && (
+        <p className="-mt-1 text-xs text-gray-500">
+          {KIND_TABS.find((t) => t.key === kind)?.hint}
+        </p>
+      )}
+
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -181,12 +283,17 @@ export default function CallLogs() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Select value={direction} onChange={(e) => setDirection(e.target.value)} className="w-44">
-          <option value="">All directions</option>
-          <option value="inbound">Inbound</option>
-          <option value="outbound">Outbound</option>
-          <option value="click_to_call">Click-to-call</option>
-        </Select>
+        {/* Only on the combined view. Inside a kind tab every row already has
+            the same direction, so the filter can only ever narrow to nothing —
+            an empty list with no visible reason for it. */}
+        {kind === "all" && (
+          <Select value={direction} onChange={(e) => setDirection(e.target.value)} className="w-44">
+            <option value="">All directions</option>
+            <option value="inbound">Inbound</option>
+            <option value="outbound">Outbound</option>
+            <option value="click_to_call">Click-to-call</option>
+          </Select>
+        )}
         <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-40">
           <option value="">All statuses</option>
           {["completed", "answered", "missed", "no_answer", "busy", "failed", "initiated"].map((s) => (
@@ -204,7 +311,12 @@ export default function CallLogs() {
         <div className="overflow-x-auto">
           <Table>
             <THead>
-              <Th>When</Th><Th>Direction</Th><Th>Customer</Th><Th>Agent</Th>
+              <Th>When</Th>
+              {/* In a kind tab the direction is the same on every row, so the
+                  column is dead weight — the IVR menu path and the agent who
+                  placed the call are what you are actually looking for. */}
+              <Th>{kind === "ivr" ? "IVR flow" : kind === "click_to_call" ? "Placed by" : "Direction"}</Th>
+              <Th>Customer</Th><Th>Agent</Th>
               <Th>About</Th><Th className="text-right">Ring</Th>
               <Th className="text-right">Duration</Th><Th>Status</Th><Th>Recording</Th>
             </THead>
@@ -212,10 +324,7 @@ export default function CallLogs() {
               {loading ? (
                 <TableState colSpan={9}>Loading…</TableState>
               ) : items.length === 0 ? (
-                <TableState colSpan={9}>
-                  No calls yet. Inbound and IVR calls appear here as soon as
-                  MyOperator posts to the webhook.
-                </TableState>
+                <TableState colSpan={9}>{emptyMessage}</TableState>
               ) : (
                 items.map((c) => {
                   const Icon = dirIcon(c.direction);
@@ -226,14 +335,31 @@ export default function CallLogs() {
                         {new Date(c.startedAt || c.createdAt).toLocaleString("en-IN")}
                       </Td>
                       <Td className="whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 text-sm">
-                          {missed ? (
-                            <PhoneMissed className="h-3.5 w-3.5 text-red-500" />
-                          ) : (
-                            <Icon className="h-3.5 w-3.5 text-gray-400" />
-                          )}
-                          {label(c.direction)}
-                        </span>
+                        {kind === "ivr" ? (
+                          <span className="text-sm text-gray-700">
+                            {c.ivrFlow || "—"}
+                            {c.ivrInput && (
+                              <span className="ml-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+                                key {c.ivrInput}
+                              </span>
+                            )}
+                          </span>
+                        ) : kind === "click_to_call" ? (
+                          <span className="text-sm text-gray-700">
+                            {c.placedByAdminId?.fullName ||
+                              c.placedByAdminId?.email ||
+                              "—"}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-sm">
+                            {missed ? (
+                              <PhoneMissed className="h-3.5 w-3.5 text-red-500" />
+                            ) : (
+                              <Icon className="h-3.5 w-3.5 text-gray-400" />
+                            )}
+                            {label(c.direction)}
+                          </span>
+                        )}
                       </Td>
                       <Td className="whitespace-nowrap font-medium text-gray-900">
                         {c.customerNumber}

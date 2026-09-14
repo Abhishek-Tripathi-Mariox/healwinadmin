@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { Users, UserCheck, CalendarOff, Clock, Wallet, ArrowRight } from "lucide-react";
-import { hrDashboardApi } from "../../services/admin-api";
-import { PageHeader, Card, Table, THead, TBody, TR, Th, Td, TableState } from "../../components/ui";
+import { hrDashboardApi, departmentApi } from "../../services/admin-api";
+import {
+  PageHeader, Card, Table, THead, TBody, TR, Th, Td, TableState, Select,
+} from "../../components/ui";
 
 interface Summary {
   headcount: number;
@@ -38,13 +40,51 @@ const today = () => {
 export default function HRDashboard() {
   const [data, setData] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [departments, setDepartments] = useState<{ _id: string; name: string }[]>([]);
 
-  useEffect(() => {
+  /**
+   * Department scope, kept in the URL so a department head can bookmark their
+   * own view and so the drill-through links below stay consistent with it.
+   */
+  const [params, setParams] = useSearchParams();
+  const departmentId = params.get("departmentId") || "";
+
+  const setDepartment = (value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set("departmentId", value);
+    else next.delete("departmentId");
+    setParams(next, { replace: true });
+  };
+
+  const load = useCallback(() => {
+    setLoading(true);
     hrDashboardApi
-      .summary()
+      .summary({ departmentId: departmentId || undefined })
       .then((res) => setData(res.data))
       .finally(() => setLoading(false));
+  }, [departmentId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    departmentApi
+      .getAll({ status: "active" })
+      .then((r) => setDepartments(r.data?.items || r.data || []))
+      .catch(() => undefined);
   }, []);
+
+  /**
+   * Carry the department into a drill-through link.
+   *
+   * Only used for the Employees list, which honours `departmentId`. The
+   * attendance and leave screens filter by date and status but not department,
+   * so appending it there would produce a link that silently ignores the scope
+   * the number was counted under — worse than not passing it at all.
+   */
+  const withDept = (path: string) =>
+    departmentId
+      ? `${path}${path.includes("?") ? "&" : "?"}departmentId=${departmentId}`
+      : path;
 
   /**
    * Every card drills into the list its number came from, carrying the same
@@ -57,14 +97,14 @@ export default function HRDashboard() {
       value: data?.headcount ?? "—",
       icon: Users,
       tone: "bg-blue-50 text-blue-700",
-      to: "/admin/employees",
+      to: withDept("/admin/employees"),
     },
     {
       label: "Active",
       value: data?.activeCount ?? "—",
       icon: UserCheck,
       tone: "bg-emerald-50 text-emerald-700",
-      to: "/admin/employees?status=active",
+      to: withDept("/admin/employees?status=active"),
     },
     {
       label: "Present Today",
@@ -94,7 +134,24 @@ export default function HRDashboard() {
 
   return (
     <div className="p-6">
-      <PageHeader title="HR Dashboard" subtitle="Workforce, attendance & payroll at a glance" />
+      <PageHeader
+        title="HR Dashboard"
+        subtitle="Workforce, attendance & payroll at a glance"
+        actions={
+          <Select
+            value={departmentId}
+            onChange={(e) => setDepartment(e.target.value)}
+            className="w-56"
+            aria-label="Filter by department"
+          >
+            <option value="">All departments</option>
+            <option value="none">Unassigned</option>
+            {departments.map((d) => (
+              <option key={d._id} value={d._id}>{d.name}</option>
+            ))}
+          </Select>
+        }
+      />
 
       <div className="grid grid-cols-2 gap-3 mb-5 sm:grid-cols-3 lg:grid-cols-5">
         {cards.map((c) => {

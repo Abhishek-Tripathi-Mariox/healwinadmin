@@ -157,6 +157,7 @@ const AttendanceManagement = lazy(
 );
 const LeaveManagement = lazy(() => import("./pages/hr/LeaveManagement"));
 const HolidayManagement = lazy(() => import("./pages/hr/HolidayManagement"));
+const CompOffManagement = lazy(() => import("./pages/hr/CompOffManagement"));
 const WorkShiftManagement = lazy(() => import("./pages/hr/WorkShiftManagement"));
 const AttendanceRegularizationPage = lazy(
   () => import("./pages/hr/AttendanceRegularization"),
@@ -659,6 +660,12 @@ export const adminRoutes = [
     path: "holidays",
     element: HolidayManagement,
     name: "Holidays",
+    icon: CalendarDays,
+  },
+  {
+    path: "comp-off",
+    element: CompOffManagement,
+    name: "Compensatory Off",
     icon: CalendarDays,
   },
   {

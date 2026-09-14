@@ -15,6 +15,8 @@ interface Holiday {
   date: string;
   year: number;
   type: "public" | "restricted" | "optional";
+  /** True when the hospital still runs and staff earn a comp-off instead. */
+  isWorkingDay?: boolean;
   isActive: boolean;
 }
 
@@ -31,7 +33,7 @@ export default function HolidayManagement() {
   const [loading, setLoading] = useState(false);
   const [show, setShow] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", date: "", type: "public" });
+  const [form, setForm] = useState({ name: "", date: "", type: "public", isWorkingDay: true });
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -50,13 +52,13 @@ export default function HolidayManagement() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: "", date: "", type: "public" });
+    setForm({ name: "", date: "", type: "public", isWorkingDay: true });
     setError("");
     setShow(true);
   };
   const openEdit = (h: Holiday) => {
     setEditingId(h._id);
-    setForm({ name: h.name, date: h.date.substring(0, 10), type: h.type });
+    setForm({ name: h.name, date: h.date.substring(0, 10), type: h.type, isWorkingDay: h.isWorkingDay !== false });
     setError("");
     setShow(true);
   };
@@ -103,19 +105,27 @@ export default function HolidayManagement() {
           <Th>Holiday</Th>
           <Th>Date</Th>
           <Th>Type</Th>
+          <Th>Hospital</Th>
           <Th className="text-right">Actions</Th>
         </THead>
         <TBody>
           {loading ? (
-            <TableState colSpan={4}>Loading…</TableState>
+            <TableState colSpan={5}>Loading…</TableState>
           ) : items.length === 0 ? (
-            <TableState colSpan={4}>No holidays for {year}.</TableState>
+            <TableState colSpan={5}>No holidays for {year}.</TableState>
           ) : (
             items.map((h) => (
               <TR key={h._id}>
                 <Td className="font-medium text-gray-900">{h.name}</Td>
                 <Td>{new Date(h.date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</Td>
                 <Td><Badge tone="info">{h.type}</Badge></Td>
+                <Td>
+                  {h.isWorkingDay !== false ? (
+                    <Badge tone="warning">Working — comp-off</Badge>
+                  ) : (
+                    <Badge tone="neutral">Office closed</Badge>
+                  )}
+                </Td>
                 <Td className="text-right whitespace-nowrap">
                   {canManage && (
                     <>
@@ -160,6 +170,26 @@ export default function HolidayManagement() {
               </Select>
             </Field>
           </div>
+
+          {/* A hospital cannot close for a public holiday — wards, ICU and
+              emergency run regardless. So a holiday here does not hand
+              everyone the day off; it marks who is owed one. */}
+          <Field
+            label="On this day the hospital…"
+            hint={
+              form.isWorkingDay
+                ? "Attendance is marked as normal. Staff who work it are owed a compensatory off, which HR grants from Comp-Off."
+                : "Everyone is marked on holiday and nobody is docked for it."
+            }
+          >
+            <Select
+              value={form.isWorkingDay ? "working" : "closed"}
+              onChange={(e) => setForm({ ...form, isWorkingDay: e.target.value === "working" })}
+            >
+              <option value="working">Runs as usual — grant compensatory off</option>
+              <option value="closed">Is closed — everyone off</option>
+            </Select>
+          </Field>
         </form>
       </Modal>
     </div>
