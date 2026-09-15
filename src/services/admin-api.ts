@@ -669,6 +669,16 @@ export const staffApi = {
 };
 
 // ==================== ROLES API ====================
+/** Your own account. */
+export const meApi = {
+  profile: () => fetchWithAuth("/admin/auth/me"),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    fetchWithAuth("/admin/auth/me/password", {
+      method: "PUT",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+};
+
 export const rolesApi = {
   // Get all roles
   getAll: () => fetchWithAuth("/admin/roles"),
@@ -2401,6 +2411,16 @@ export const hrEmployeeApi = {
    * the endpoint requires the bearer token, and an <a href> cannot carry it —
    * the link would just bounce off the auth middleware.
    */
+  /**
+   * Reset an employee's panel password. The new password comes back once —
+   * it is stored hashed and cannot be read again.
+   */
+  resetPassword: (id: string, password?: string) =>
+    fetchWithAuth(`/admin/hr/employees/${id}/reset-password`, {
+      method: "POST",
+      body: JSON.stringify(password ? { password } : {}),
+    }),
+
   downloadImportTemplate: async () => {
     const token = getAuthToken();
     const res = await fetch(`${API_URL}/admin/hr/employees/import/template`, {

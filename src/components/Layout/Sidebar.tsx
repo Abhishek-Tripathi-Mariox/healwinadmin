@@ -1006,7 +1006,13 @@ const Sidebar: React.FC<SidebarProps> = ({
           {/* User Info & Logout */}
           <div className="border-t border-gray-200 p-3">
             {user && (
-              <div className="mb-1 flex items-center gap-3 px-3 py-2">
+              // The name in the corner is where people look for their own
+              // account, so it opens it rather than being decoration.
+              <NavLink
+                to="/admin/my-profile"
+                title="Your profile and password"
+                className="mb-1 flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-gray-50"
+              >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-healwin-100 text-sm font-semibold text-healwin-700">
                   {initials}
                 </span>
@@ -1016,7 +1022,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   </p>
                   <p className="truncate text-xs text-gray-500">{user.email}</p>
                 </div>
-              </div>
+              </NavLink>
             )}
             <button
               onClick={handleLogout}

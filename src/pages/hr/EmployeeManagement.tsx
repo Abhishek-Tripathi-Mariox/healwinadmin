@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
-import { Pencil, Trash2, Eye, ExternalLink } from "lucide-react";
+import { Pencil, Trash2, Eye, ExternalLink, KeyRound } from "lucide-react";
 import {
   hrEmployeeApi,
   peopleApi,
@@ -157,6 +157,42 @@ export default function EmployeeManagement() {
   // alone, so they get their own form rather than being squeezed into the HR
   // one or sending someone off to another screen.
   const [crewEdit, setCrewEdit] = useState<PersonRow | null>(null);
+
+  // Password reset, straight from the roster — otherwise HR has to find the
+  // same person again under Team Management.
+  const [resetFor, setResetFor] = useState<PersonRow | null>(null);
+  const [resetResult, setResetResult] = useState<{
+    email?: string;
+    temporaryPassword?: string;
+    emailSent?: boolean;
+    warning?: string;
+  } | null>(null);
+  const [resetBusy, setResetBusy] = useState(false);
+
+  const doReset = async (p: PersonRow) => {
+    if (
+      !(await dialog.confirm({
+        title: `Reset the password for ${p.name}?`,
+        message:
+          "A new password is generated and emailed to them. They are signed out everywhere, and the old password stops working immediately.",
+        confirmLabel: "Reset password",
+        tone: "danger",
+      }))
+    )
+      return;
+    setResetBusy(true);
+    setResetFor(p);
+    setResetResult(null);
+    try {
+      const res = await hrEmployeeApi.resetPassword(p.sourceId);
+      setResetResult(res.data);
+    } catch (e) {
+      setResetFor(null);
+      setError(e instanceof Error ? e.message : "Could not reset the password.");
+    } finally {
+      setResetBusy(false);
+    }
+  };
   const [loading, setLoading] = useState(false);
   /**
    * Filters live in the URL so the HR dashboard can link straight to a subset
@@ -625,6 +661,19 @@ export default function EmployeeManagement() {
                   {/* Only an HR record is removed from here. Deactivating a
                       driver takes them out of dispatch, which is that
                       module's decision to make. */}
+                  {/* Only for people who actually have a login to reset. */}
+                  {canUpdate && p.editableAs === "hr" && p.hasPanelLogin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="px-2"
+                      title="Reset panel password"
+                      aria-label="Reset password"
+                      onClick={() => doReset(p)}
+                    >
+                      <KeyRound className="h-4 w-4" />
+                    </Button>
+                  )}
                   {canDelete && p.editableAs === "hr" && (
                     <Button size="sm" variant="ghost" className="px-2 text-red-600 hover:bg-red-50" title="Remove" aria-label="Remove" onClick={() => onDelete(p)}>
                       <Trash2 className="h-4 w-4" />
@@ -796,6 +845,52 @@ export default function EmployeeManagement() {
             </div>
           </div>
         </form>
+      </Modal>
+
+      {/* ── Password reset ───────────────────────────────────────────────── */}
+      <Modal
+        open={!!resetFor}
+        onClose={() => { setResetFor(null); setResetResult(null); }}
+        title="Password reset"
+        subtitle={resetFor?.name}
+        size="sm"
+        footer={
+          <Button onClick={() => { setResetFor(null); setResetResult(null); }}>Done</Button>
+        }
+      >
+        {resetBusy || !resetResult ? (
+          <p className="text-sm text-gray-500">Resetting…</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+              <div className="flex justify-between gap-4 py-1">
+                <span className="text-gray-500">Email</span>
+                <span className="font-medium text-gray-900">{resetResult.email}</span>
+              </div>
+              <div className="flex justify-between gap-4 py-1">
+                <span className="text-gray-500">New password</span>
+                <code className="rounded bg-white px-2 py-0.5 font-mono text-sm text-gray-900 ring-1 ring-gray-200">
+                  {resetResult.temporaryPassword}
+                </code>
+              </div>
+            </div>
+            {resetResult.emailSent ? (
+              <Alert tone="success">
+                Emailed to them along with the panel address. They have been
+                signed out everywhere and must use this password next time.
+              </Alert>
+            ) : (
+              <Alert tone="warning">
+                {resetResult.warning ||
+                  "The password was reset but the email could not be sent — pass it on another way."}
+              </Alert>
+            )}
+            <p className="text-xs text-gray-400">
+              This is the only time it can be shown. If it is lost, reset it
+              again.
+            </p>
+          </div>
+        )}
       </Modal>
 
       {/* ── New panel login ──────────────────────────────────────────────── */}

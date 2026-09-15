@@ -214,7 +214,7 @@ export const PERMISSIONS = {
  * whose it is from the token, so there is nothing here a permission could
  * usefully protect. Everything not listed here still follows least privilege.
  */
-export const SELF_SERVICE_MODULES: string[] = ["my-attendance"];
+export const SELF_SERVICE_MODULES: string[] = ["my-attendance", "my-profile"];
 
 export const SIDEBAR_PERMISSION_MAP: Record<string, string[]> = {
   sos: [PERMISSIONS.SOS_VIEW],
