@@ -15,7 +15,6 @@ import {
   Mail,
   MapPin,
   Wallet,
-  Coins,
   Calendar,
   Filter,
 } from "lucide-react";
@@ -75,7 +74,6 @@ interface PatientUser {
   bookingCount?: number;
   completedBookings?: number;
   totalSpent?: number;
-  coinBalance?: number;
   walletBalance?: number;
   addressCount?: number;
   primaryAddress?: AddressLite | null;
@@ -530,9 +528,6 @@ const UserManagement: React.FC = () => {
                     <p className="text-gray-800">
                       {formatINR(user.walletBalance)}
                     </p>
-                    <p className="text-[10px] text-gray-400">
-                      {user.coinBalance ?? 0} coins
-                    </p>
                   </Td>
                   <Td className="text-xs text-gray-500">
                     {formatDate(user.createdAt)}
@@ -711,11 +706,6 @@ const UserDetailDrawer: React.FC<{
             icon={Wallet}
             label="Wallet"
             value={formatINR(user.walletBalance)}
-          />
-          <SmallStat
-            icon={Coins}
-            label="Coins"
-            value={(user.coinBalance ?? 0).toString()}
           />
           <SmallStat
             icon={Calendar}
