@@ -149,7 +149,7 @@ const AmbulancePricingManagement = lazy(
 // HR & Payroll
 const HRDashboard = lazy(() => import("./pages/hr/HRDashboard"));
 const EmployeeManagement = lazy(() => import("./pages/hr/EmployeeManagement"));
-const StaffDirectory = lazy(() => import("./pages/StaffDirectory"));
+const CrewAttendance = lazy(() => import("./pages/CrewAttendance"));
 const EmployeeShiftManagement = lazy(() => import("./pages/EmployeeShiftManagement"));
 const EmployeeDetail = lazy(() => import("./pages/hr/EmployeeDetail"));
 const AttendanceManagement = lazy(
@@ -158,6 +158,7 @@ const AttendanceManagement = lazy(
 const LeaveManagement = lazy(() => import("./pages/hr/LeaveManagement"));
 const HolidayManagement = lazy(() => import("./pages/hr/HolidayManagement"));
 const CompOffManagement = lazy(() => import("./pages/hr/CompOffManagement"));
+const MyAttendance = lazy(() => import("./pages/hr/MyAttendance"));
 const WorkShiftManagement = lazy(() => import("./pages/hr/WorkShiftManagement"));
 const AttendanceRegularizationPage = lazy(
   () => import("./pages/hr/AttendanceRegularization"),
@@ -601,9 +602,12 @@ export const adminRoutes = [
     icon: UserCog,
   },
   {
+    // Was "Staff Directory". Its roster moved into Employees; what is left is
+    // the crew attendance view only this page provides. The path is kept so
+    // existing links and bookmarks still land somewhere real.
     path: "staff-directory",
-    element: StaffDirectory,
-    name: "Staff Directory",
+    element: CrewAttendance,
+    name: "Crew Attendance",
     icon: UserCog,
   },
   {
@@ -630,6 +634,15 @@ export const adminRoutes = [
     path: "attendance",
     element: AttendanceManagement,
     name: "Attendance",
+    icon: CalendarCheck,
+  },
+  {
+    // Everyone's own record. Deliberately not behind an attendance permission
+    // — gating it would mean only HR could punch, which is the problem it
+    // exists to solve.
+    path: "my-attendance",
+    element: MyAttendance,
+    name: "My Attendance",
     icon: CalendarCheck,
   },
   {

@@ -5,13 +5,30 @@ import { useAuth } from "../../auth/useAuth";
 import { PERMISSIONS } from "../../auth/permissions";
 import {
   PageHeader, Button, Input, Table, THead, TBody, TR, Th, Td, TableState, Badge,
+  Modal, Field, Select, Alert,
 } from "../../components/ui";
 import { dialog } from "../../services/dialog";
+import { Pencil } from "lucide-react";
 
 interface RosterRow {
   employee: { _id: string; fullName: string; employeeCode: string; departmentId?: { name: string } };
-  attendance: { status: string } | null;
+  attendance: {
+    status: string;
+    checkIn?: string;
+    checkOut?: string;
+    remarks?: string;
+    workedMinutes?: number;
+    isLate?: boolean;
+    checkInWithinGeofence?: boolean;
+  } | null;
 }
+
+/** Minutes → "7h 30m", for the worked column. */
+const dur = (m?: number) => {
+  const n = Math.max(0, Math.round(m || 0));
+  if (!n) return "—";
+  return n < 60 ? `${n}m` : `${Math.floor(n / 60)}h ${String(n % 60).padStart(2, "0")}m`;
+};
 
 const STATUSES = [
   { value: "present", label: "P", tone: "success" as const },
@@ -51,6 +68,10 @@ export default function AttendanceManagement() {
   };
 
   const [roster, setRoster] = useState<RosterRow[]>([]);
+  // The day being corrected by hand. A punch is a measurement, but people
+  // forget to punch, arrive through a side door, or work a shift the system
+  // never knew about — so HR has to be able to set the record straight.
+  const [correcting, setCorrecting] = useState<RosterRow | null>(null);
   const [marks, setMarks] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -158,13 +179,17 @@ export default function AttendanceManagement() {
           <Th>Code</Th>
           <Th>Employee</Th>
           <Th>Department</Th>
+          <Th>In</Th>
+          <Th>Out</Th>
+          <Th>Worked</Th>
           <Th>Status</Th>
+          <Th className="text-right">Correct</Th>
         </THead>
         <TBody>
           {loading ? (
-            <TableState colSpan={4}>Loading…</TableState>
+            <TableState colSpan={8}>Loading…</TableState>
           ) : visible.length === 0 ? (
-            <TableState colSpan={4}>
+            <TableState colSpan={8}>
               {roster.length === 0
                 ? "No employees."
                 : `Nobody is marked “${statusFilter.replace("_", " ")}” on this date.`}
@@ -175,6 +200,26 @@ export default function AttendanceManagement() {
                 <Td className="font-mono text-xs">{r.employee.employeeCode}</Td>
                 <Td className="font-medium text-gray-900">{r.employee.fullName}</Td>
                 <Td className="text-gray-500">{r.employee.departmentId?.name || "—"}</Td>
+                {/* Punches, so HR can see what the day actually looked like
+                    rather than only the verdict. */}
+                <Td className="text-gray-600">
+                  {r.attendance?.checkIn || "—"}
+                  {r.attendance?.isLate && (
+                    <span className="ml-1 text-[11px] font-medium text-amber-600">late</span>
+                  )}
+                </Td>
+                <Td className="text-gray-600">{r.attendance?.checkOut || "—"}</Td>
+                <Td className="text-gray-600">
+                  {dur(r.attendance?.workedMinutes)}
+                  {r.attendance?.checkInWithinGeofence === false && (
+                    <span
+                      className="ml-1 text-[11px] font-medium text-amber-600"
+                      title="Punched in away from a registered work location"
+                    >
+                      off-site
+                    </span>
+                  )}
+                </Td>
                 <Td>
                   {canManage ? (
                     <div className="flex flex-wrap gap-1">
@@ -205,11 +250,148 @@ export default function AttendanceManagement() {
                     <span className="text-gray-300">—</span>
                   )}
                 </Td>
+                <Td className="text-right">
+                  {canManage && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="px-2"
+                      title="Correct this day"
+                      aria-label="Correct"
+                      onClick={() => setCorrecting(r)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+                </Td>
               </TR>
             ))
           )}
         </TBody>
       </Table>
+
+      <CorrectionModal
+        row={correcting}
+        date={date}
+        onClose={() => setCorrecting(null)}
+        onSaved={() => { setCorrecting(null); load(); }}
+      />
     </div>
+  );
+}
+
+/**
+ * Correct one person's day.
+ *
+ * Saves through the same endpoint the bulk marker uses, so the hours and
+ * overtime are recomputed from the corrected punches against that day's shift
+ * — a correction that left stale hours behind would flow straight into the
+ * payslip.
+ */
+function CorrectionModal({
+  row,
+  date,
+  onClose,
+  onSaved,
+}: {
+  row: RosterRow | null;
+  date: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState({ status: "present", checkIn: "", checkOut: "", remarks: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!row) return;
+    setError("");
+    setForm({
+      status: row.attendance?.status || "present",
+      checkIn: row.attendance?.checkIn || "",
+      checkOut: row.attendance?.checkOut || "",
+      remarks: row.attendance?.remarks || "",
+    });
+  }, [row]);
+
+  const save = async () => {
+    if (!row) return;
+    // One punch without the other cannot produce hours; saying so up front
+    // beats a silently zeroed day that looks correct.
+    if ((form.checkIn && !form.checkOut) || (!form.checkIn && form.checkOut)) {
+      setError("Enter both a check-in and a check-out, or neither — hours cannot be computed from one.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await attendanceApi.mark({
+        date,
+        entries: [
+          {
+            employeeId: row.employee._id,
+            status: form.status,
+            checkIn: form.checkIn || undefined,
+            checkOut: form.checkOut || undefined,
+            remarks: form.remarks || undefined,
+          },
+        ],
+      });
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the correction.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={!!row}
+      onClose={onClose}
+      title="Correct attendance"
+      subtitle={row ? `${row.employee.fullName} · ${new Date(date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}` : undefined}
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} disabled={saving}>{saving ? "Saving…" : "Save correction"}</Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && <Alert>{error}</Alert>}
+        <Field label="Status">
+          <Select
+            value={form.status}
+            onChange={(e) => setForm({ ...form, status: e.target.value })}
+            className="capitalize"
+          >
+            {STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>{s.value.replace("_", " ")}</option>
+            ))}
+          </Select>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Check-in">
+            <Input type="time" value={form.checkIn} onChange={(e) => setForm({ ...form, checkIn: e.target.value })} />
+          </Field>
+          <Field label="Check-out">
+            <Input type="time" value={form.checkOut} onChange={(e) => setForm({ ...form, checkOut: e.target.value })} />
+          </Field>
+        </div>
+        <Field label="Reason for the correction" hint="Kept on the record so the change can be explained later">
+          <Input
+            value={form.remarks}
+            onChange={(e) => setForm({ ...form, remarks: e.target.value })}
+            placeholder="e.g. forgot to punch out"
+          />
+        </Field>
+        <p className="text-xs text-gray-400">
+          Hours and overtime are recalculated from these times against the
+          shift worked that day.
+        </p>
+      </div>
+    </Modal>
   );
 }

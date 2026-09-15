@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import type { ReactNode } from "react";
-import { SIDEBAR_PERMISSION_MAP } from "./permissions";
+import { SIDEBAR_PERMISSION_MAP, SELF_SERVICE_MODULES } from "./permissions";
 import { AuthContext } from "./authTypes";
 import type { AdminUser } from "./authTypes";
 import { adminSocket } from "../services/socket";
@@ -91,6 +91,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     // matching menu. Unmapped modules stay hidden (least privilege).
     // (Action buttons + backend keep a Super Admin safety net via
     // hasPermission / requirePermission, so you can never lock yourself out.)
+    // A person's own record is theirs regardless of role. Gating "My
+    // Attendance" on an attendance permission would mean only HR could punch
+    // in — which is the problem it exists to solve. Kept as a short, explicit
+    // list so least-privilege stays the default for everything else.
+    if (SELF_SERVICE_MODULES.includes(moduleId)) return true;
+
     const requiredPermissions = SIDEBAR_PERMISSION_MAP[moduleId];
     if (!requiredPermissions || requiredPermissions.length === 0) return false;
 

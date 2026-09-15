@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
-import { Pencil, Trash2, Eye } from "lucide-react";
+import { Pencil, Trash2, Eye, ExternalLink } from "lucide-react";
 import {
   hrEmployeeApi,
+  peopleApi,
+  ambulanceStaffApi,
+  rolesApi,
   departmentApi,
   designationApi,
   employmentTypeApi,
-  staffApi,
 } from "../../services/admin-api";
 import { useAuth } from "../../auth/useAuth";
 import { PERMISSIONS } from "../../auth/permissions";
@@ -16,6 +18,7 @@ import {
   TableState, Badge, Modal, Field, Input, Alert,
 } from "../../components/ui";
 import { dialog } from "../../services/dialog";
+import Pagination from "../../components/Pagination";
 
 interface Ref { _id: string; name: string }
 
@@ -29,21 +32,61 @@ interface ImportResult {
   errors: { row: number; fullName: string; errors: string[] }[];
   createdRows?: { row: number; employeeCode: string; fullName: string }[];
 }
-interface Employee {
-  _id: string;
-  employeeCode: string;
-  fullName: string;
+
+/**
+ * A row of the unified roster.
+ *
+ * Ambulance crew, panel admins and ride drivers are HealWin's employees too;
+ * they just live in their own collections because each carries things the
+ * others do not. `editableAs` says which form opens for this person, so one
+ * list can serve all of them without pretending they are the same record.
+ */
+type PersonType =
+  | "hr_employee"
+  | "ambulance_driver"
+  | "ambulance_attendant"
+  | "admin"
+  | "doctor"
+  | "ride_driver";
+
+interface PersonRow {
+  type: PersonType;
+  sourceId: string;
+  code: string;
+  name: string;
   email?: string;
   phone?: string;
-  status: string;
-  joiningDate: string;
+  /** System role from Roles & Permissions. Empty without a panel login. */
+  role: string;
+  /** A doctor's speciality — free text, not a role. */
+  speciality?: string;
+  department?: string;
+  designation?: string;
   category?: string;
-  departmentId?: Ref;
-  designationId?: Ref;
-  employmentTypeId?: Ref;
-  linkedAdminId?: Ref | string;
+  status: string;
+  /** True when this employee can also sign in to the panel. */
+  hasPanelLogin?: boolean;
+  editableAs: "hr" | "crew" | "admin" | "ride_driver";
 }
-interface AdminAccountRef { _id: string; fullName: string; roleName?: string; roleId?: Ref }
+
+const TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "All types" },
+  { value: "hr_employee", label: "HR Staff" },
+  { value: "ambulance_driver", label: "Ambulance Driver" },
+  { value: "ambulance_attendant", label: "Ambulance Attendant" },
+  { value: "doctor", label: "Doctor" },
+  { value: "admin", label: "Panel Admin" },
+  { value: "ride_driver", label: "Ride Driver" },
+];
+
+const typeTone: Record<PersonType, "info" | "accent" | "neutral" | "success"> = {
+  hr_employee: "info",
+  ambulance_driver: "accent",
+  ambulance_attendant: "accent",
+  doctor: "success",
+  admin: "neutral",
+  ride_driver: "neutral",
+};
 
 const STATUSES = ["active", "on_leave", "inactive", "terminated"];
 const statusTone: Record<string, "success" | "warning" | "neutral" | "danger"> = {
@@ -76,6 +119,8 @@ const emptyForm = {
   designationId: "",
   employmentTypeId: "",
   linkedAdminId: "",
+  roleId: "",
+  loginPassword: "",
   status: "active",
   bankName: "",
   accountNumber: "",
@@ -102,7 +147,16 @@ export default function EmployeeManagement() {
   const canUpdate = hasPermission(PERMISSIONS.EMPLOYEES_UPDATE);
   const canDelete = hasPermission(PERMISSIONS.EMPLOYEES_DELETE);
 
-  const [items, setItems] = useState<Employee[]>([]);
+  const [items, setItems] = useState<PersonRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const limit = 25;
+
+  // Crew edit, opened straight from this list — the extra details a driver
+  // carries (role, licence, whether they are still on the rolls) are theirs
+  // alone, so they get their own form rather than being squeezed into the HR
+  // one or sending someone off to another screen.
+  const [crewEdit, setCrewEdit] = useState<PersonRow | null>(null);
   const [loading, setLoading] = useState(false);
   /**
    * Filters live in the URL so the HR dashboard can link straight to a subset
@@ -113,6 +167,8 @@ export default function EmployeeManagement() {
   const [params, setParams] = useSearchParams();
   const status = params.get("status") || "";
   const departmentId = params.get("departmentId") || "";
+  const designationId = params.get("designationId") || "";
+  const type = params.get("type") || "";
   const [search, setSearch] = useState(params.get("search") || "");
 
   /** Update one filter, dropping it from the URL when cleared. */
@@ -121,7 +177,20 @@ export default function EmployeeManagement() {
     if (value) next.set(key, value);
     else next.delete(key);
     setParams(next, { replace: true });
+    setPage(1);
   };
+
+  const [roles, setRoles] = useState<Ref[]>([]);
+  /**
+   * The login created alongside the employee. Held so the password can be
+   * shown once after saving — it is stored hashed and cannot be read back, so
+   * if it is not passed on now it is gone.
+   */
+  const [newLogin, setNewLogin] = useState<{
+    email?: string;
+    role?: string;
+    temporaryPassword?: string;
+  } | null>(null);
 
   const [departments, setDepartments] = useState<Ref[]>([]);
   const [designations, setDesignations] = useState<Ref[]>([]);
@@ -129,7 +198,6 @@ export default function EmployeeManagement() {
   // Admin-panel logins available to link — mainly for doctors, so leave/
   // attendance here actually affects OPD slot availability (see
   // doctor-slots.service.ts#isDoctorOnApprovedLeave).
-  const [adminAccounts, setAdminAccounts] = useState<AdminAccountRef[]>([]);
 
   const [show, setShow] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -189,16 +257,19 @@ export default function EmployeeManagement() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const query: Record<string, string> = {};
-      if (search.trim()) query.search = search.trim();
+      const query: Record<string, string | number> = { page, limit };
+      if (search.trim()) query.q = search.trim();
       if (status) query.status = status;
       if (departmentId) query.departmentId = departmentId;
-      const res = await hrEmployeeApi.list(query);
+      if (designationId) query.designationId = designationId;
+      if (type) query.type = type;
+      const res = await peopleApi.list(query);
       setItems(res.data?.items || []);
+      setTotal(res.data?.pagination?.total ?? 0);
     } finally {
       setLoading(false);
     }
-  }, [search, status, departmentId]);
+  }, [search, status, departmentId, designationId, type, page]);
 
   useEffect(() => {
     load();
@@ -216,9 +287,10 @@ export default function EmployeeManagement() {
     employmentTypeApi.getAll({ status: "active" }).then((r) =>
       setEmploymentTypes(r.data?.items || r.data || []),
     );
-    staffApi.getAll({ status: "active", limit: 500 }).then((r) =>
-      setAdminAccounts(r.data?.staff || r.data?.items || r.data || []),
-    );
+    rolesApi
+      .getAll()
+      .then((r) => setRoles(r.data?.roles || r.data?.items || r.data || []))
+      .catch(() => undefined);
   }, []);
 
   const openCreate = () => {
@@ -228,10 +300,10 @@ export default function EmployeeManagement() {
     setShow(true);
   };
 
-  const openEdit = async (e: Employee) => {
+  const openEdit = async (id: string) => {
     setError("");
-    setEditingId(e._id);
-    const res = await hrEmployeeApi.detail(e._id);
+    setEditingId(id);
+    const res = await hrEmployeeApi.detail(id);
     const emp = res.data?.employee;
     const s = emp?.salaryStructure || {};
     setForm({
@@ -248,6 +320,13 @@ export default function EmployeeManagement() {
       designationId: emp.designationId?._id || emp.designationId || "",
       employmentTypeId: emp.employmentTypeId?._id || emp.employmentTypeId || "",
       linkedAdminId: emp.linkedAdminId?._id || emp.linkedAdminId || "",
+      // Their current system role, so the dropdown opens on it rather than
+      // blank (which would read as "no access" for someone who has it).
+      roleId:
+        emp.linkedAdminId?.roleId?._id ||
+        emp.linkedAdminId?.roleId ||
+        "",
+      loginPassword: "",
       status: emp.status || "active",
       bankName: emp.bankName || "",
       accountNumber: emp.accountNumber || "",
@@ -281,6 +360,15 @@ export default function EmployeeManagement() {
     designationId: form.designationId || undefined,
     employmentTypeId: form.employmentTypeId || undefined,
     linkedAdminId: form.linkedAdminId || undefined,
+    // Choosing a role sets it on their login, or creates one if they have
+    // none — so nobody has to be entered a second time under Team Management.
+    // A password is only offered when there is no login yet.
+    ...(form.roleId
+      ? {
+          roleId: form.roleId,
+          ...(hasLogin ? {} : { password: form.loginPassword || undefined }),
+        }
+      : {}),
     status: form.status,
     bankName: form.bankName || undefined,
     accountNumber: form.accountNumber || undefined,
@@ -308,10 +396,19 @@ export default function EmployeeManagement() {
       setError("Full name and joining date are required.");
       return;
     }
+    if (form.roleId && !hasLogin && !form.email.trim()) {
+      setError("An email address is required to create a panel login.");
+      return;
+    }
     try {
       const payload = buildPayload();
-      if (editingId) await hrEmployeeApi.update(editingId, payload);
-      else await hrEmployeeApi.create(payload);
+      // A login can now be created from either mode, so both check for one.
+      // Shown once — the password is hashed on the server and cannot be
+      // fetched again, so it has to be handed over now or reset later.
+      const res = editingId
+        ? await hrEmployeeApi.update(editingId, payload)
+        : await hrEmployeeApi.create(payload);
+      if (res?.data?.panelLogin) setNewLogin(res.data.panelLogin);
       setShow(false);
       load();
     } catch (err: any) {
@@ -319,11 +416,48 @@ export default function EmployeeManagement() {
     }
   };
 
-  const onDelete = async (e: Employee) => {
-    if (!await dialog.confirm({ message: `Remove ${e.fullName}? This marks them terminated.`, confirmLabel: "Remove", tone: "danger" })) return;
-    await hrEmployeeApi.remove(e._id);
+  const onDelete = async (p: PersonRow) => {
+    if (!await dialog.confirm({ message: `Remove ${p.name}? This marks them terminated.`, confirmLabel: "Remove", tone: "danger" })) return;
+    await hrEmployeeApi.remove(p.sourceId);
     load();
   };
+
+  /**
+   * Open the right editor for whoever was clicked.
+   *
+   * HR records and ambulance crew are both edited here. A panel admin's row
+   * and permissions, and a ride driver's onboarding, belong to their own
+   * modules — duplicating those forms would mean two places that could
+   * disagree about the same person.
+   */
+  const openPerson = (p: PersonRow) => {
+    if (p.editableAs === "hr") return openEdit(p.sourceId);
+    if (p.editableAs === "crew") return setCrewEdit(p);
+    if (p.editableAs === "admin") return navigate(`/admin/team?highlight=${p.sourceId}`);
+    return navigate(`/admin/drivers?highlight=${p.sourceId}`);
+  };
+
+  const filtered = !!(search.trim() || status || departmentId || designationId || type);
+  // "Nobody works here" and "nothing matches your filter" are different
+  // things, and saying the first when the second is true sends someone
+  // looking for a data problem that is not there.
+  const emptyMessage = filtered
+    ? "Nobody matches these filters. Clear them to see everyone."
+    : "No people yet. Add an employee, or import a list from CSV.";
+
+  /** Where a row can be looked at in full. */
+  const viewPath = (p: PersonRow) =>
+    p.editableAs === "hr"
+      ? `/admin/employees/${p.sourceId}`
+      : p.editableAs === "crew"
+        ? `/admin/ambulance-staff/${p.sourceId}`
+        : p.editableAs === "admin"
+          ? `/admin/team?highlight=${p.sourceId}`
+          : `/admin/drivers?highlight=${p.sourceId}`;
+
+  // Whether the person being edited already signs in. Drives whether the role
+  // dropdown offers "no access" and whether a password is asked for.
+  const hasLogin = !!editingId && !!form.linkedAdminId;
 
   const grossMonthly =
     Number(form.basic) + Number(form.hra) + Number(form.conveyance) +
@@ -333,7 +467,7 @@ export default function EmployeeManagement() {
     <div className="p-6">
       <PageHeader
         title="Employees"
-        subtitle="Staff records, salary structure & statutory details"
+        subtitle="Everyone who works for HealWin — HR staff, ambulance crew, doctors and panel users"
         actions={
           canCreate ? (
             <>
@@ -347,6 +481,16 @@ export default function EmployeeManagement() {
       />
 
       <div className="flex flex-wrap gap-2 mb-4">
+        <Select
+          value={type}
+          onChange={(e) => setFilter("type", e.target.value)}
+          className="w-52"
+          aria-label="Filter by type"
+        >
+          {TYPE_OPTIONS.map((t) => (
+            <option key={t.value || "all"} value={t.value}>{t.label}</option>
+          ))}
+        </Select>
         <SearchInput
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -373,12 +517,13 @@ export default function EmployeeManagement() {
           {departments.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
         </Select>
         <Button variant="secondary" onClick={load}>Search</Button>
-        {(status || departmentId || search) && (
+        {filtered && (
           <Button
             variant="secondary"
             onClick={() => {
               setSearch("");
               setParams(new URLSearchParams(), { replace: true });
+              setPage(1);
             }}
           >
             Clear filters
@@ -390,40 +535,98 @@ export default function EmployeeManagement() {
         <THead>
           <Th>Code</Th>
           <Th>Name</Th>
-          <Th>Category</Th>
-          <Th>Department</Th>
+          <Th>Type</Th>
+          <Th>Role</Th>
           <Th>Designation</Th>
+          <Th>Department</Th>
           <Th>Status</Th>
           <Th className="text-right">Actions</Th>
         </THead>
         <TBody>
           {loading ? (
-            <TableState colSpan={7}>Loading…</TableState>
+            <TableState colSpan={8}>Loading…</TableState>
           ) : items.length === 0 ? (
-            <TableState colSpan={7}>No employees.</TableState>
+            <TableState colSpan={8}>{emptyMessage}</TableState>
           ) : (
-            items.map((e) => (
-              <TR key={e._id}>
-                <Td className="font-mono text-xs">{e.employeeCode}</Td>
+            items.map((p) => (
+              <TR key={`${p.type}:${p.sourceId}`}>
+                <Td className="font-mono text-xs">{p.code || "—"}</Td>
                 <Td className="font-medium text-gray-900">
-                  {e.fullName}
-                  {e.email && <div className="text-xs text-gray-400">{e.email}</div>}
+                  {p.name}
+                  {(p.email || p.phone) && (
+                    <div className="text-xs text-gray-400">{p.email || p.phone}</div>
+                  )}
                 </Td>
-                <Td className="capitalize">{e.category || "—"}</Td>
-                <Td>{e.departmentId?.name || "—"}</Td>
-                <Td>{e.designationId?.name || "—"}</Td>
-                <Td><Badge tone={statusTone[e.status] || "neutral"}>{e.status.replace("_", " ")}</Badge></Td>
+                <Td>
+                  <Badge tone={typeTone[p.type] || "neutral"}>
+                    {TYPE_OPTIONS.find((t) => t.value === p.type)?.label || p.type}
+                  </Badge>
+                </Td>
+                {/* The system role only. Someone with no panel login has
+                    none — their job title is the Designation column. */}
+                <Td className="text-gray-600">
+                  {p.role ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      {p.role}
+                      {p.hasPanelLogin && (
+                        <span
+                          title="Can sign in to the panel"
+                          className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700"
+                        >
+                          login
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-gray-300">—</span>
+                  )}
+                </Td>
+                <Td className="text-gray-600">
+                  {p.designation || p.speciality || (
+                    <span className="text-gray-300">—</span>
+                  )}
+                  {/* A doctor's speciality sits under their designation rather
+                      than masquerading as a role, which is where it used to
+                      end up. */}
+                  {p.designation && p.speciality && (
+                    <div className="text-xs text-gray-400">{p.speciality}</div>
+                  )}
+                </Td>
+                <Td>{p.department || "—"}</Td>
+                <Td>
+                  <Badge tone={statusTone[p.status] || "neutral"}>
+                    {p.status.replace("_", " ")}
+                  </Badge>
+                </Td>
                 <Td className="text-right whitespace-nowrap">
-                  <Button size="sm" variant="ghost" className="px-2" title="View" aria-label="View" onClick={() => navigate(`/admin/employees/${e._id}`)}>
+                  <Button size="sm" variant="ghost" className="px-2" title="View" aria-label="View" onClick={() => navigate(viewPath(p))}>
                     <Eye className="h-4 w-4" />
                   </Button>
                   {canUpdate && (
-                    <Button size="sm" variant="ghost" className="px-2" title="Edit" aria-label="Edit" onClick={() => openEdit(e)}>
-                      <Pencil className="h-4 w-4" />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="px-2"
+                      title={
+                        p.editableAs === "hr" || p.editableAs === "crew"
+                          ? "Edit"
+                          : `Managed in ${p.editableAs === "admin" ? "Team Management" : "Drivers"} — opens there`
+                      }
+                      aria-label="Edit"
+                      onClick={() => openPerson(p)}
+                    >
+                      {p.editableAs === "hr" || p.editableAs === "crew" ? (
+                        <Pencil className="h-4 w-4" />
+                      ) : (
+                        <ExternalLink className="h-4 w-4 text-gray-400" />
+                      )}
                     </Button>
                   )}
-                  {canDelete && (
-                    <Button size="sm" variant="ghost" className="px-2 text-red-600 hover:bg-red-50" title="Remove" aria-label="Remove" onClick={() => onDelete(e)}>
+                  {/* Only an HR record is removed from here. Deactivating a
+                      driver takes them out of dispatch, which is that
+                      module's decision to make. */}
+                  {canDelete && p.editableAs === "hr" && (
+                    <Button size="sm" variant="ghost" className="px-2 text-red-600 hover:bg-red-50" title="Remove" aria-label="Remove" onClick={() => onDelete(p)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   )}
@@ -433,6 +636,14 @@ export default function EmployeeManagement() {
           )}
         </TBody>
       </Table>
+
+      <Pagination
+        page={page}
+        totalPages={Math.max(1, Math.ceil(total / limit))}
+        total={total}
+        label="people"
+        onPageChange={setPage}
+      />
 
       <Modal
         open={show}
@@ -500,14 +711,46 @@ export default function EmployeeManagement() {
                   {employmentTypes.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
                 </Select>
               </Field>
-              <Field label="Linked admin/doctor login" hint="Lets approved leave actually block their OPD slots">
-                <Select value={form.linkedAdminId} onChange={(e) => setForm({ ...form, linkedAdminId: e.target.value })}>
-                  <option value="">— Not linked —</option>
-                  {adminAccounts.map((a) => (
-                    <option key={a._id} value={a._id}>{a.fullName}{(a.roleName || a.roleId?.name) ? ` (${a.roleName || a.roleId?.name})` : ""}</option>
+              {/* A role, not a list of account names.
+                  Which login row someone is attached to is an implementation
+                  detail, and choosing the wrong name from that list silently
+                  handed one person another person's permissions. Picking a role
+                  sets it on their login, or creates one if they have none. */}
+              <Field
+                label="Panel role"
+                hint={
+                  hasLogin
+                    ? "Changes the role on their existing login. Remove access from Team Management."
+                    : form.roleId
+                      ? "A login will be created with this role. An email address is required."
+                      : "Leave blank if this person does not sign in to the panel."
+                }
+              >
+                <Select
+                  value={form.roleId}
+                  onChange={(e) => setForm({ ...form, roleId: e.target.value })}
+                >
+                  {/* Only offered while they have no login — clearing it would
+                      read as "revoke access", which this form does not do. */}
+                  {!hasLogin && <option value="">— No panel access —</option>}
+                  {roles.map((r) => (
+                    <option key={r._id} value={r._id}>{r.name}</option>
                   ))}
                 </Select>
               </Field>
+              {!hasLogin && form.roleId && (
+                <Field
+                  label="Password"
+                  hint="Leave blank and one is generated — you will see it once, right after saving."
+                >
+                  <Input
+                    type="text"
+                    value={form.loginPassword}
+                    onChange={(e) => setForm({ ...form, loginPassword: e.target.value })}
+                    placeholder="Generate automatically"
+                  />
+                </Field>
+              )}
               <Field label="Status">
                 <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="capitalize">
                   {STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
@@ -554,6 +797,54 @@ export default function EmployeeManagement() {
           </div>
         </form>
       </Modal>
+
+      {/* ── New panel login ──────────────────────────────────────────────── */}
+      <Modal
+        open={!!newLogin}
+        onClose={() => setNewLogin(null)}
+        title="Panel login created"
+        subtitle="Pass these on now — the password cannot be shown again"
+        size="sm"
+        footer={<Button onClick={() => setNewLogin(null)}>Done</Button>}
+      >
+        <div className="space-y-3">
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+            <div className="flex justify-between gap-4 py-1">
+              <span className="text-gray-500">Role</span>
+              <span className="font-medium text-gray-900">{newLogin?.role}</span>
+            </div>
+            <div className="flex justify-between gap-4 py-1">
+              <span className="text-gray-500">Email</span>
+              <span className="font-medium text-gray-900">{newLogin?.email}</span>
+            </div>
+            {newLogin?.temporaryPassword && (
+              <div className="flex justify-between gap-4 py-1">
+                <span className="text-gray-500">Password</span>
+                <code className="rounded bg-white px-2 py-0.5 font-mono text-sm text-gray-900 ring-1 ring-gray-200">
+                  {newLogin.temporaryPassword}
+                </code>
+              </div>
+            )}
+          </div>
+          {newLogin?.temporaryPassword ? (
+            <Alert tone="warning">
+              This password is stored hashed and cannot be retrieved. Give it to
+              them now; if it is lost, reset it from Team Management.
+            </Alert>
+          ) : (
+            <Alert tone="info">
+              They sign in with the password you set.
+            </Alert>
+          )}
+        </div>
+      </Modal>
+
+      {/* ── Ambulance crew ───────────────────────────────────────────────── */}
+      <CrewEditModal
+        person={crewEdit}
+        onClose={() => setCrewEdit(null)}
+        onSaved={() => { setCrewEdit(null); load(); }}
+      />
 
       {/* ── Bulk import ───────────────────────────────────────────────────── */}
       <Modal
@@ -698,5 +989,166 @@ function RowErrors({
         </TBody>
       </Table>
     </div>
+  );
+}
+
+/**
+ * Ambulance crew, edited from the Employees list.
+ *
+ * A driver carries details an HR record does not — the seat they crew, their
+ * licence, and whether they are still on the rolls — so they get their own
+ * small form here rather than being pushed into the HR one or sent off to
+ * another screen to be changed.
+ *
+ * Which provider or hospital operates them is deliberately absent: that
+ * decides who a dispatch can be assigned to and who is billed for the shift,
+ * and it belongs to Ambulance Operations. The server refuses it here too.
+ */
+function CrewEditModal({
+  person,
+  onClose,
+  onSaved,
+}: {
+  person: PersonRow | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState({
+    fullName: "",
+    mobileNumber: "",
+    role: "driver",
+    licenseNumber: "",
+    isActive: true,
+  });
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!person) return;
+    setError("");
+    setLoading(true);
+    ambulanceStaffApi
+      .detail(person.sourceId)
+      .then((res) => {
+        const s = res.data?.staff || res.data?.item || {};
+        setForm({
+          fullName: s.fullName || person.name,
+          mobileNumber: s.mobileNumber || person.phone || "",
+          role: s.role || (person.type === "ambulance_attendant" ? "attendant" : "driver"),
+          licenseNumber: s.licenseNumber || "",
+          isActive: s.isActive !== false,
+        });
+      })
+      .catch(() => {
+        // Fall back to what the list already knows, so the form still opens.
+        setForm({
+          fullName: person.name,
+          mobileNumber: person.phone || "",
+          role: person.type === "ambulance_attendant" ? "attendant" : "driver",
+          licenseNumber: "",
+          isActive: person.status === "active",
+        });
+      })
+      .finally(() => setLoading(false));
+  }, [person]);
+
+  const save = async () => {
+    if (!person) return;
+    if (!form.fullName.trim()) {
+      setError("Name is required.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await ambulanceStaffApi.update(person.sourceId, {
+        fullName: form.fullName.trim(),
+        mobileNumber: form.mobileNumber.trim(),
+        role: form.role,
+        licenseNumber: form.licenseNumber.trim(),
+        isActive: form.isActive,
+      });
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={!!person}
+      onClose={onClose}
+      title="Edit ambulance crew"
+      subtitle={person?.name}
+      size="md"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} disabled={saving || loading}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </>
+      }
+    >
+      {loading ? (
+        <p className="text-sm text-gray-500">Loading…</p>
+      ) : (
+        <div className="space-y-4">
+          {error && <Alert>{error}</Alert>}
+          <Field label="Name *">
+            <Input
+              value={form.fullName}
+              onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Mobile">
+              <Input
+                value={form.mobileNumber}
+                onChange={(e) => setForm({ ...form, mobileNumber: e.target.value })}
+              />
+            </Field>
+            <Field label="Crew role">
+              <Select
+                value={form.role}
+                onChange={(e) => setForm({ ...form, role: e.target.value })}
+              >
+                <option value="driver">Driver</option>
+                <option value="attendant">Attendant</option>
+              </Select>
+            </Field>
+          </div>
+          <Field label="Licence number" hint="Required for drivers before they can be dispatched">
+            <Input
+              value={form.licenseNumber}
+              onChange={(e) => setForm({ ...form, licenseNumber: e.target.value })}
+            />
+          </Field>
+          <Field
+            label="Status"
+            hint={
+              form.isActive
+                ? "On the rolls and available for dispatch."
+                : "Off the rolls — they cannot be assigned to a dispatch or sign in to the crew app."
+            }
+          >
+            <Select
+              value={form.isActive ? "active" : "inactive"}
+              onChange={(e) => setForm({ ...form, isActive: e.target.value === "active" })}
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </Select>
+          </Field>
+          <p className="text-xs text-gray-400">
+            Vehicle, provider and duty assignment are managed in Ambulance
+            Operations.
+          </p>
+        </div>
+      )}
+    </Modal>
   );
 }

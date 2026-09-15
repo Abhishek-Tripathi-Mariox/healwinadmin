@@ -114,6 +114,25 @@ export default function PayrollManagement() {
     try {
       const res = await payrollApi.generate({ month, year, acknowledgeUnmarked });
       await loadRuns();
+      // Left out for want of a salary — usually a panel user whose HR record
+      // was created automatically and never completed. Reported first, because
+      // it explains a payslip count lower than the headcount.
+      const skipped: { name: string; employeeCode: string }[] =
+        res.data?.skippedNoSalary || [];
+      if (skipped.length) {
+        const names = skipped
+          .slice(0, 10)
+          .map((s) => `• ${s.name}${s.employeeCode ? ` (${s.employeeCode})` : ""}`)
+          .join("\n");
+        void dialog.alert({
+          title: `${skipped.length} employee${skipped.length === 1 ? " was" : "s were"} left out`,
+          message:
+            `No salary is set for them, so no payslip was produced:\n\n${names}` +
+            (skipped.length > 10 ? `\n…and ${skipped.length - 10} more` : "") +
+            "\n\nAdd their salary under Employees and re-generate to include them.",
+        });
+      }
+
       const warn: UnmarkedWarning[] = res.data?.unmarkedWarnings || [];
       if (warn.length) {
         // Paid on assumption rather than on record — say so before HR finalises.

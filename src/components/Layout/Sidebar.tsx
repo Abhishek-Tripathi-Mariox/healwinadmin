@@ -656,7 +656,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         },
         {
           id: "staff-directory",
-          label: "Staff Directory",
+          label: "Crew Attendance",
           icon: Users,
           path: "/admin/staff-directory",
         },
@@ -671,6 +671,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           label: "Shift Roster",
           icon: CalendarCheck,
           path: "/admin/employee-shifts",
+        },
+        {
+          id: "my-attendance",
+          label: "My Attendance",
+          icon: CalendarCheck,
+          path: "/admin/my-attendance",
         },
         {
           id: "attendance",

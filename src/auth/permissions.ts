@@ -207,6 +207,15 @@ export const PERMISSIONS = {
 } as const;
 
 // Map sidebar items to required permissions
+/**
+ * Modules any signed-in user may open, whatever their role.
+ *
+ * These show a person their OWN record and nothing else — the server resolves
+ * whose it is from the token, so there is nothing here a permission could
+ * usefully protect. Everything not listed here still follows least privilege.
+ */
+export const SELF_SERVICE_MODULES: string[] = ["my-attendance"];
+
 export const SIDEBAR_PERMISSION_MAP: Record<string, string[]> = {
   sos: [PERMISSIONS.SOS_VIEW],
   "sos-alerts": [PERMISSIONS.SOS_VIEW],

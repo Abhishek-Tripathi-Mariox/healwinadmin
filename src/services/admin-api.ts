@@ -2369,6 +2369,19 @@ export const paymentConfigApi = {
 };
 
 // ==================== HR — EMPLOYEES API ====================
+/**
+ * Everyone who works for HealWin — HR records, ambulance crew, panel admins
+ * and ride drivers — as one roster. Each row reports which module owns it so
+ * the screen can open the right edit form.
+ */
+export const peopleApi = {
+  list: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/people${qs ? `?${qs}` : ""}`);
+  },
+  counts: () => fetchWithAuth("/admin/people/counts"),
+};
+
 export const hrEmployeeApi = {
   /**
    * Bulk import. `dryRun` validates and reports per-row problems without
@@ -2454,6 +2467,30 @@ export const hrEmployeeApi = {
 };
 
 // ==================== HR — ATTENDANCE API ====================
+/**
+ * An employee's own attendance — punching in and out, and their own record.
+ * Scoped to the signed-in user by the server; there is no employee id to pass.
+ */
+export const myAttendanceApi = {
+  mine: (params: { month?: number; year?: number } = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/hr/my-attendance${qs ? `?${qs}` : ""}`);
+  },
+  punch: (type: "in" | "out", coords?: { lat: number; lng: number }) => {
+    // Multipart so a selfie can be added later without changing the contract.
+    const fd = new FormData();
+    fd.append("type", type);
+    if (coords) {
+      fd.append("lat", String(coords.lat));
+      fd.append("lng", String(coords.lng));
+    }
+    return fetchWithAuth("/admin/hr/my-attendance/punch", {
+      method: "POST",
+      body: fd,
+    });
+  },
+};
+
 export const attendanceApi = {
   byDate: (date: string) =>
     fetchWithAuth(`/admin/hr/attendance?date=${encodeURIComponent(date)}`),
@@ -2465,7 +2502,16 @@ export const attendanceApi = {
     fetchWithAuth(`/admin/hr/attendance/summary?month=${month}&year=${year}`),
   mark: (data: {
     date: string;
-    entries: { employeeId: string; status: string; remarks?: string }[];
+    // Times are optional but accepted: the server recomputes worked hours and
+    // overtime from them against that day's shift, which is what makes a
+    // correction reach the payslip rather than only the status column.
+    entries: {
+      employeeId: string;
+      status: string;
+      checkIn?: string;
+      checkOut?: string;
+      remarks?: string;
+    }[];
   }) =>
     fetchWithAuth("/admin/hr/attendance/mark", {
       method: "POST",
@@ -2670,7 +2716,16 @@ export const payrollApi = {
 
 // ==================== HR — DASHBOARD API ====================
 export const hrDashboardApi = {
-  summary: (params: { departmentId?: string } = {}) => {
+  summary: (
+    params: {
+      departmentId?: string;
+      designationId?: string;
+      category?: string;
+      employmentTypeId?: string;
+      month?: number;
+      year?: number;
+    } = {},
+  ) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/hr/dashboard${qs ? `?${qs}` : ""}`);
   },

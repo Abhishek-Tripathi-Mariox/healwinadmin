@@ -306,7 +306,7 @@ const StaffManagement: React.FC = () => {
         });
         setSuccess("Staff member updated successfully");
       } else {
-        await staffApi.create({
+        const created = await staffApi.create({
           fullName: staffForm.name,
           email: staffForm.email,
           phone: staffForm.phone,
@@ -316,7 +316,14 @@ const StaffManagement: React.FC = () => {
           labId: staffForm.labId || "",
           pharmacyId: staffForm.pharmacyId || "",
         });
-        setSuccess("Staff member created successfully");
+        // Adding a panel user now also puts them on the employee roll, so the
+        // message says so — otherwise HR has no idea there is a half-filled
+        // record waiting for them.
+        setSuccess(
+          created?.data?.hrWarning ||
+            created?.data?.message ||
+            "Staff member created successfully",
+        );
       }
 
       setShowStaffModal(false);
