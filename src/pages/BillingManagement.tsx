@@ -232,7 +232,12 @@ export default function BillingManagement() {
 
   const submitRefund = async () => {
     if (!detail) return;
-    const amount = window.prompt("Refund amount? (refunds to original method)");
+    const amount = await dialog.prompt({
+      title: "Refund",
+      message: "Refund amount (₹) — refunds to the original payment method.",
+      inputType: "number",
+      confirmLabel: "Refund",
+    });
     if (!amount) return;
     try {
       const res = await billingApi.refund(detail._id, { amount: Number(amount) });
@@ -245,9 +250,20 @@ export default function BillingManagement() {
 
   const submitAdvance = async () => {
     if (!detail) return;
-    const amount = window.prompt("Advance deposit amount?");
+    const amount = await dialog.prompt({
+      title: "Advance deposit",
+      message: "Deposit amount (₹)",
+      inputType: "number",
+      confirmLabel: "Next",
+    });
     if (!amount) return;
-    const method = window.prompt("Method (cash/card/upi/insurance/wallet)?", "cash") || "cash";
+    const method = await dialog.prompt({
+      title: "Advance deposit",
+      message: "Payment method",
+      choices: ["cash", "card", "upi", "insurance", "wallet"],
+      confirmLabel: "Record deposit",
+    });
+    if (method === null) return;
     try {
       const res = await billingApi.advance(detail._id, { amount: Number(amount), method });
       setDetail(res.data?.invoice);

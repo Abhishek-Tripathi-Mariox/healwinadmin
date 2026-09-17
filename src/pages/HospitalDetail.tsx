@@ -21,6 +21,7 @@ import {
   ambulanceStaffApi,
   hospitalApi,
   shiftApi,
+  workShiftApi,
 } from "../services/admin-api";
 import SearchableSelect from "../components/SearchableSelect";
 import { useAuth } from "../auth/useAuth";
@@ -503,6 +504,10 @@ const AddStaffModal: React.FC<AddStaffModalProps> = ({
   onClose,
   onCreated,
 }) => {
+  // "existing" moves an attendant already in the system (e.g. created under
+  // Ambulance Staff / HR) to this hospital; "new" registers a fresh one.
+  const [mode, setMode] = useState<"existing" | "new">("existing");
+  const [existingId, setExistingId] = useState("");
   const [fullName, setFullName] = useState("");
   const [mobileNumber, setMobileNumber] = useState("");
   const [email, setEmail] = useState("");
@@ -516,16 +521,44 @@ const AddStaffModal: React.FC<AddStaffModalProps> = ({
   // operators.
   const canSubmit = useMemo(
     () =>
-      fullName.trim().length > 0 &&
-      /^[6-9]\d{9}$/.test(mobileNumber.trim()) &&
-      !busy,
-    [fullName, mobileNumber, busy],
+      !busy &&
+      (mode === "existing"
+        ? existingId.length > 0
+        : fullName.trim().length > 0 && /^[6-9]\d{9}$/.test(mobileNumber.trim())),
+    [mode, existingId, fullName, mobileNumber, busy],
   );
+
+  const fetchAttendants = async ({ q, page, limit }: { q: string; page: number; limit: number }) => {
+    const res: any = await ambulanceStaffApi.list({
+      role: "attendant",
+      isActive: true,
+      page,
+      limit,
+      ...(q ? { search: q } : {}),
+    });
+    const rows: any[] = res.data?.items || [];
+    return {
+      items: rows
+        .filter((r) => String(r.hospitalId || "") !== hospitalId)
+        .map((r) => ({
+          _id: r._id,
+          name: `${r.fullName} (+91 ${r.mobileNumber})${
+            r.hospitalId ? " · other hospital" : r.providerId ? ` · ${r.providerId.name || "provider"}` : ""
+          }`,
+        })),
+      hasMore: page * limit < (res.data?.total || 0),
+    };
+  };
 
   const submit = async () => {
     setErr(null);
     setBusy(true);
     try {
+      if (mode === "existing") {
+        await hospitalApi.assignStaff(hospitalId, existingId);
+        onCreated();
+        return;
+      }
       await hospitalApi.createStaff(hospitalId, {
         fullName: fullName.trim(),
         mobileNumber: mobileNumber.trim(),
@@ -563,12 +596,42 @@ const AddStaffModal: React.FC<AddStaffModalProps> = ({
             disabled={!canSubmit}
             icon={busy ? <Loader2 className="w-4 h-4 animate-spin" /> : undefined}
           >
-            Add staff
+            {mode === "existing" ? "Add to hospital" : "Add staff"}
           </Button>
         </>
       }
     >
       <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1 text-sm">
+          {(["existing", "new"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => {
+                setMode(m);
+                setErr(null);
+              }}
+              className={`rounded-md px-3 py-1.5 font-medium ${
+                mode === m ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {m === "existing" ? "Select existing" : "Register new"}
+            </button>
+          ))}
+        </div>
+        {mode === "existing" ? (
+          <Field label="Attendant" hint="Moving someone from another hospital or provider re-links them here.">
+            <SearchableSelect
+              value={existingId}
+              onChange={setExistingId}
+              placeholder="Search attendants by name or mobile…"
+              valueField="_id"
+              displayField="name"
+              fetchOptions={fetchAttendants}
+            />
+          </Field>
+        ) : (
+        <>
         <Field label="Full name">
           <Input
             value={fullName}
@@ -604,6 +667,8 @@ const AddStaffModal: React.FC<AddStaffModalProps> = ({
             placeholder="paramedic@example.com"
           />
         </Field>
+        </>
+        )}
         {err && (
           <Alert tone="danger">
             <span className="flex items-center gap-2">
@@ -650,6 +715,14 @@ const AddShiftModal: React.FC<AddShiftModalProps> = ({
   const [ambulances, setAmbulances] = useState<AmbulanceOption[]>([]);
   const [ambulanceId, setAmbulanceId] = useState("");
   const [staffId, setStaffId] = useState("");
+  // HR shift templates (Morning / Evening / Night …). Picking one + a date
+  // fills start/end; "custom" exposes the raw date-time inputs.
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [templateId, setTemplateId] = useState("custom");
+  const [shiftDate, setShiftDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
   const [notes, setNotes] = useState("");
@@ -676,6 +749,28 @@ const AddShiftModal: React.FC<AddShiftModalProps> = ({
     setStartAt(toLocal(next));
     setEndAt(toLocal(end));
   }, []);
+
+  useEffect(() => {
+    workShiftApi
+      .list({ active: "true" })
+      .then((res: any) => {
+        const rows = Array.isArray(res.data) ? res.data : res.data?.items || [];
+        setTemplates(rows);
+        if (rows.length > 0) setTemplateId(rows[0]._id);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const t = templates.find((x) => x._id === templateId);
+    if (!t || !shiftDate) return;
+    const end = new Date(`${shiftDate}T${t.endTime}`);
+    // End at/before start means the shift crosses midnight.
+    if (t.endTime <= t.startTime) end.setDate(end.getDate() + 1);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setStartAt(`${shiftDate}T${t.startTime}`);
+    setEndAt(`${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}T${pad(end.getHours())}:${pad(end.getMinutes())}`);
+  }, [templateId, shiftDate, templates]);
 
   useEffect(() => {
     (async () => {
@@ -791,21 +886,46 @@ const AddShiftModal: React.FC<AddShiftModalProps> = ({
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Start">
-            <Input
-              type="datetime-local"
-              value={startAt}
-              onChange={(e) => setStartAt(e.target.value)}
-            />
+          <Field label="Shift">
+            <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+              {templates.map((t) => (
+                <option key={t._id} value={t._id}>
+                  {t.name} ({t.startTime}–{t.endTime})
+                </option>
+              ))}
+              <option value="custom">Custom timing…</option>
+            </Select>
           </Field>
-          <Field label="End">
-            <Input
-              type="datetime-local"
-              value={endAt}
-              onChange={(e) => setEndAt(e.target.value)}
-            />
-          </Field>
+          {templateId !== "custom" && (
+            <Field label="Date">
+              <Input type="date" value={shiftDate} onChange={(e) => setShiftDate(e.target.value)} />
+            </Field>
+          )}
         </div>
+        {templateId === "custom" ? (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Start">
+              <Input
+                type="datetime-local"
+                value={startAt}
+                onChange={(e) => setStartAt(e.target.value)}
+              />
+            </Field>
+            <Field label="End">
+              <Input
+                type="datetime-local"
+                value={endAt}
+                onChange={(e) => setEndAt(e.target.value)}
+              />
+            </Field>
+          </div>
+        ) : (
+          startAt && endAt && (
+            <p className="text-xs text-gray-500">
+              {new Date(startAt).toLocaleString()} → {new Date(endAt).toLocaleString()}
+            </p>
+          )
+        )}
         <Field label="Notes (optional)">
           <Textarea
             value={notes}

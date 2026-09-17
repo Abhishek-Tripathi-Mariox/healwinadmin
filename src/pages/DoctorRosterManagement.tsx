@@ -1,12 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
-import { doctorRosterApi, doctorScheduleApi } from "../services/admin-api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { doctorRosterApi, doctorScheduleApi, departmentApi } from "../services/admin-api";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
-  Modal, Field, Input, Alert,
+  Modal, Field, Input, Alert, Select,
 } from "../components/ui";
 
 const SHIFTS = ["morning", "evening", "night", "full"];
-const today = () => new Date().toISOString().slice(0, 10);
+// Local calendar date. `toISOString()` converts to UTC first, which in IST
+// returns yesterday for anything before 05:30 — the roster opened on the wrong
+// day for the night shift.
+const today = () => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
 
 export default function DoctorRosterManagement() {
   const [date, setDate] = useState(today());
@@ -21,15 +28,53 @@ export default function DoctorRosterManagement() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const [departments, setDepartments] = useState<{ _id: string; name: string }[]>([]);
+  const [loadError, setLoadError] = useState("");
+
+  /**
+   * Guards against responses arriving out of order.
+   *
+   * Changing the date quickly fires several requests, and a slow earlier one
+   * could land after the newer one and overwrite it — so the table showed the
+   * previous day's roster, or nothing, for the date actually selected. Only the
+   * most recent request is allowed to write.
+   */
+  const requestSeq = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++requestSeq.current;
     setLoading(true);
+    setLoadError("");
     try {
-      setRows((await doctorRosterApi.list(date, toDate || undefined)).data?.items || []);
-    } finally { setLoading(false); }
+      const res = await doctorRosterApi.list(date, toDate || undefined);
+      if (seq !== requestSeq.current) return; // a newer request superseded this one
+      setRows(res.data?.items || []);
+    } catch (e) {
+      if (seq !== requestSeq.current) return;
+      setLoadError(e instanceof Error ? e.message : "Could not load the roster.");
+    } finally {
+      if (seq === requestSeq.current) setLoading(false);
+    }
   }, [date, toDate]);
+
+  /**
+   * Moving "From" past "To" leaves an inverted range — from a later day to an
+   * earlier one — which matches nothing. `min` on the To picker only limits
+   * what can be picked, not a value already set, so the range is cleared here.
+   */
+  const changeFrom = (value: string) => {
+    setDate(value);
+    if (toDate && value && toDate < value) setToDate("");
+  };
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { doctorScheduleApi.listDoctors().then((r) => setDoctors(r.data?.items || [])).catch(() => {}); }, []);
+  useEffect(() => {
+    departmentApi
+      .getAll({ status: "active" })
+      .then((r) => setDepartments(r.data?.items || r.data || []))
+      .catch(() => undefined);
+  }, []);
 
   const add = async () => {
     if (!form.doctorId) { setError("Select a doctor"); return; }
@@ -42,11 +87,18 @@ export default function DoctorRosterManagement() {
   return (
     <div className="p-6">
       <PageHeader title="Doctor Roster" subtitle="Daily duty & on-call schedule"
-        actions={<Button variant="secondary" onClick={load}>Refresh</Button>} />
+        actions={
+          // Disabled and relabelled while loading, so a refresh of a populated
+          // table visibly does something instead of looking ignored.
+          <Button variant="secondary" onClick={load} disabled={loading}>
+            {loading ? "Refreshing…" : "Refresh"}
+          </Button>
+        } />
+      {loadError && <Alert className="mb-4">{loadError}</Alert>}
 
       <div className="mb-4 flex items-center gap-3">
         <label className="text-sm text-gray-500">From</label>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+        <input type="date" value={date} onChange={(e) => changeFrom(e.target.value)}
           className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none" />
         <label className="text-sm text-gray-500">To</label>
         <input type="date" value={toDate} min={date} onChange={(e) => setToDate(e.target.value)}
@@ -100,7 +152,20 @@ export default function DoctorRosterManagement() {
               </select>
             </Field>
           </div>
-          <Field label="Department"><Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></Field>
+          {/* A list rather than free text: typed department names drift
+              ("Cardio", "cardiology ", "Cardiology") and then never match
+              anything that filters by department. */}
+          <Field label="Department">
+            <Select
+              value={form.department}
+              onChange={(e) => setForm({ ...form, department: e.target.value })}
+            >
+              <option value="">— Select department —</option>
+              {departments.map((d) => (
+                <option key={d._id} value={d.name}>{d.name}</option>
+              ))}
+            </Select>
+          </Field>
           <Field label="Notes"><Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
         </div>
       </Modal>

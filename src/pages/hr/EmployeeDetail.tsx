@@ -33,7 +33,11 @@ export default function EmployeeDetail() {
     if (!id) return;
     // The name is what HR will look for later, so ask rather than defaulting
     // to whatever the file happened to be called on someone's laptop.
-    const name = window.prompt("Document name", file.name.replace(/\.[^.]+$/, ""));
+    const name = await dialog.prompt({
+      message: "Document name",
+      defaultValue: file.name.replace(/\.[^.]+$/, ""),
+      confirmLabel: "Upload",
+    });
     if (!name) return;
     setUploading(true);
     setDocError("");

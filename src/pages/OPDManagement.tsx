@@ -2,10 +2,10 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   opdApi,
-  hospitalPatientApi,
   doctorScheduleApi,
   billingApi,
 } from "../services/admin-api";
+import PatientPicker from "../components/PatientPicker";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
 import {
@@ -140,8 +140,6 @@ export default function OPDManagement() {
   const [paying, setPaying] = useState(false);
 
   const [showBook, setShowBook] = useState(false);
-  const [patientSearch, setPatientSearch] = useState("");
-  const [patientResults, setPatientResults] = useState<any[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [doctorId, setDoctorId] = useState("");
   const [time, setTime] = useState("10:00");
@@ -198,13 +196,6 @@ export default function OPDManagement() {
       });
   }, []);
 
-  const searchPatients = async (q: string) => {
-    setPatientSearch(q);
-    if (q.trim().length < 2) return setPatientResults([]);
-    const res = await hospitalPatientApi.list({ search: q.trim(), limit: 8 });
-    setPatientResults(res.data?.items || []);
-  };
-
   const book = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr("");
@@ -225,7 +216,6 @@ export default function OPDManagement() {
       });
       setShowBook(false);
       setSelectedPatient(null);
-      setPatientSearch("");
       setReason("");
       load();
     } catch (e2: any) {
@@ -502,57 +492,9 @@ export default function OPDManagement() {
       >
         <form onSubmit={book} className="space-y-3">
           {err && <Alert tone="danger">{err}</Alert>}
-          {selectedPatient ? (
-            <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
-              <span>
-                {selectedPatient.fullName}{" "}
-                <span className="font-mono text-xs text-gray-500">
-                  {selectedPatient.patientId}
-                </span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelectedPatient(null)}
-                className="text-sm text-red-600"
-              >
-                Change
-              </button>
-            </div>
-          ) : (
-            <div className="relative">
-              <Input
-                value={patientSearch}
-                onChange={(e) => searchPatients(e.target.value)}
-                placeholder="Search patient"
-              />
-              {patientResults.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow">
-                  {patientResults.map((p) => (
-                    <button
-                      type="button"
-                      key={p._id}
-                      onClick={() => {
-                        setSelectedPatient(p);
-                        setPatientResults([]);
-                      }}
-                      className="block w-full px-3 py-2 text-left hover:bg-gray-50"
-                    >
-                      {p.fullName}{" "}
-                      <span className="font-mono text-xs text-gray-400">
-                        {p.patientId}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {patientSearch.trim().length >= 2 && patientResults.length === 0 && (
-                <p className="mt-1 text-xs text-amber-600">
-                  No registered patient matches “{patientSearch.trim()}”. Register them first under{" "}
-                  <span className="font-medium">Hospital (HMS) → Patients</span>, then search here.
-                </p>
-              )}
-            </div>
-          )}
+          <Field label="Patient">
+            <PatientPicker selected={selectedPatient} onSelect={setSelectedPatient} />
+          </Field>
 
           <Field
             label="Doctor"

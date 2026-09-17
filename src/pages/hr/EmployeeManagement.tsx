@@ -757,7 +757,7 @@ export default function EmployeeManagement() {
               <Field label="Employment type">
                 <Select value={form.employmentTypeId} onChange={(e) => setForm({ ...form, employmentTypeId: e.target.value })}>
                   <option value="">—</option>
-                  {employmentTypes.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+                  {employmentTypes.map((d: any) => <option key={d._id} value={d._id}>{d.name} · {d.engagement === "contract" ? "Contract basis" : "HealWin payroll"}</option>)}
                 </Select>
               </Field>
               {/* A role, not a list of account names.

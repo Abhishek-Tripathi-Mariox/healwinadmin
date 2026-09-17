@@ -147,7 +147,17 @@ export default function PharmaciesManagement() {
   };
 
   const approve = async (p: Pharmacy, ok: boolean) => {
-    const reason = ok ? undefined : window.prompt("Rejection reason?") || "";
+    let reason: string | undefined;
+    if (!ok) {
+      const input = await dialog.prompt({
+        title: "Reject pharmacy?",
+        message: "Reason for rejection (shared with the applicant).",
+        confirmLabel: "Reject",
+        tone: "danger",
+      });
+      if (input === null) return;
+      reason = input;
+    }
     await pharmacyApi.approve(p._id, ok, reason);
     load();
   };

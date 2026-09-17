@@ -153,7 +153,17 @@ export default function LabsManagement() {
   };
 
   const approve = async (p: Lab, ok: boolean) => {
-    const reason = ok ? undefined : window.prompt("Rejection reason?") || "";
+    let reason: string | undefined;
+    if (!ok) {
+      const input = await dialog.prompt({
+        title: "Reject lab?",
+        message: "Reason for rejection (shared with the applicant).",
+        confirmLabel: "Reject",
+        tone: "danger",
+      });
+      if (input === null) return;
+      reason = input;
+    }
     await labApi.approve(p._id, ok, reason);
     load();
   };

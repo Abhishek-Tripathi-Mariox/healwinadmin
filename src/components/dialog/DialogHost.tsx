@@ -6,8 +6,9 @@ import {
   splitHeading,
   type AlertOptions,
   type ConfirmOptions,
+  type PromptOptions,
 } from "../../services/dialog";
-import { Button, Modal } from "../ui";
+import { Button, Input, Modal, Select } from "../ui";
 
 /**
  * Renders whatever `dialog.confirm()` / `dialog.alert()` ask for.
@@ -20,6 +21,7 @@ import { Button, Modal } from "../ui";
 type Pending = { id: number } & (
   | { kind: "confirm"; options: ConfirmOptions; resolve: (v: boolean) => void }
   | { kind: "alert"; options: AlertOptions; resolve: () => void }
+  | { kind: "prompt"; options: PromptOptions; resolve: (v: string | null) => void }
 );
 
 let nextId = 0;
@@ -27,6 +29,15 @@ let nextId = 0;
 export default function DialogHost() {
   const [current, setCurrent] = useState<Pending | null>(null);
   const queue = useRef<Pending[]>([]);
+  // What's typed into the open prompt, tagged with the dialog id so a stale
+  // value can never leak into the next prompt in the queue.
+  const [typed, setTyped] = useState<{ id: number; v: string } | null>(null);
+  const typedRef = useRef<{ id: number; v: string } | null>(null);
+  const initialOf = (o: PromptOptions) => o.defaultValue ?? (o.choices?.[0] || "");
+  const updateValue = (id: number, v: string) => {
+    typedRef.current = { id, v };
+    setTyped({ id, v });
+  };
 
   const push = useCallback((item: Pending) => {
     setCurrent((open) => {
@@ -42,6 +53,10 @@ export default function DialogHost() {
     setCurrent((open) => {
       if (open) {
         if (open.kind === "confirm") open.resolve(confirmed);
+        else if (open.kind === "prompt") {
+          const t = typedRef.current;
+          open.resolve(confirmed ? (t?.id === open.id ? t.v : initialOf(open.options)) : null);
+        }
         else open.resolve();
       }
       return queue.current.shift() ?? null;
@@ -58,6 +73,10 @@ export default function DialogHost() {
         alert: (options) =>
           new Promise<void>((resolve) =>
             push({ id: nextId++, kind: "alert", options, resolve }),
+          ),
+        prompt: (options) =>
+          new Promise<string | null>((resolve) =>
+            push({ id: nextId++, kind: "prompt", options, resolve }),
           ),
       }),
     [push],
@@ -82,7 +101,9 @@ export default function DialogHost() {
   const { options, kind } = current;
   const { title, body } = splitHeading(options);
   const danger = options.tone === "danger";
-  const Icon = danger ? AlertTriangle : kind === "confirm" ? HelpCircle : Info;
+  const Icon = danger ? AlertTriangle : kind === "alert" ? Info : HelpCircle;
+  const prompt = kind === "prompt" ? (options as PromptOptions) : null;
+  const value = prompt ? (typed?.id === current.id ? typed.v : initialOf(prompt)) : "";
 
   return (
     <Modal
@@ -96,17 +117,17 @@ export default function DialogHost() {
       size="sm"
       footer={
         <>
-          {kind === "confirm" && (
+          {kind !== "alert" && (
             <Button variant="secondary" onClick={() => close(false)}>
-              {(options as ConfirmOptions).cancelLabel || "Cancel"}
+              {(options as ConfirmOptions | PromptOptions).cancelLabel || "Cancel"}
             </Button>
           )}
           <Button
-            autoFocus
+            autoFocus={!prompt}
             variant={danger ? "danger" : "primary"}
             onClick={() => close(true)}
           >
-            {options.confirmLabel || (kind === "confirm" ? "Confirm" : "OK")}
+            {options.confirmLabel || (kind === "alert" ? "OK" : "Confirm")}
           </Button>
         </>
       }
@@ -119,7 +140,7 @@ export default function DialogHost() {
         >
           <Icon className="h-5 w-5" />
         </div>
-        <div className="min-w-0 pt-0.5">
+        <div className="min-w-0 flex-1 pt-0.5">
           {title && (
             <h2 className="mb-1 text-base font-semibold text-gray-900">{title}</h2>
           )}
@@ -130,6 +151,27 @@ export default function DialogHost() {
               {line}
             </p>
           ))}
+          {prompt && (
+            <div className="mt-3">
+              {prompt.choices ? (
+                <Select value={value} onChange={(e) => updateValue(current.id, e.target.value)}>
+                  {prompt.choices.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <Input
+                  autoFocus
+                  type={prompt.inputType || "text"}
+                  value={value}
+                  placeholder={prompt.placeholder}
+                  onChange={(e) => updateValue(current.id, e.target.value)}
+                />
+              )}
+            </div>
+          )}
         </div>
       </div>
     </Modal>

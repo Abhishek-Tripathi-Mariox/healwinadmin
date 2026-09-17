@@ -22,6 +22,10 @@ export default function InsuranceManagement() {
   const [policies, setPolicies] = useState<any[]>([]);
   const [claims, setClaims] = useState<any[]>([]);
   const [error, setError] = useState("");
+  // Outcome of actions taken from the list itself (approve / reject). Kept
+  // apart from `error`, which is only rendered inside the modals.
+  const [pageError, setPageError] = useState("");
+  const [pageNotice, setPageNotice] = useState("");
 
   // modals
   const [payerModal, setPayerModal] = useState<any | null>(null);
@@ -132,19 +136,32 @@ export default function InsuranceManagement() {
   const decidePolicy = async (p: any, approvalStatus: "approved" | "rejected") => {
     let reviewNote = "";
     if (approvalStatus === "rejected") {
-      reviewNote = window.prompt("Why is this policy being rejected? (the patient sees this)") || "";
+      reviewNote = (await dialog.prompt({
+        title: `Reject ${p.policyNumber}?`,
+        message: "Why is this policy being rejected? The patient sees this.",
+        confirmLabel: "Reject",
+        tone: "danger",
+      })) || "";
       if (!reviewNote.trim()) return;
     } else if (
       !await dialog.confirm({ message: `Approve ${p.policyNumber}?\n\nOnce approved, bills for ${p.patientId?.fullName || "this patient"} can be settled from this policy's cover.`, confirmLabel: "Approve" },)
     ) {
       return;
     }
+    setPageError("");
     try {
       await insuranceApi.setPolicyApproval(p._id, { approvalStatus, reviewNote });
+      setPageNotice(
+        approvalStatus === "approved"
+          ? `${p.policyNumber} approved.`
+          : `${p.policyNumber} rejected.`,
+      );
       load();
     } catch (err: unknown) {
       const e = err as { data?: { hint?: string }; message?: string };
-      setError(e.data?.hint || e.message || "Could not update the policy");
+      // Page-level, not `error`: that one only renders inside the modals, so a
+      // refused approval used to vanish and Confirm looked like it did nothing.
+      setPageError(e.data?.hint || e.message || "Could not update the policy");
     }
   };
 
@@ -157,6 +174,8 @@ export default function InsuranceManagement() {
         subtitle="Manage insurers/TPAs, patient policies and claims"
         actions={<Button variant="secondary" onClick={load}>Refresh</Button>}
       />
+      {pageError && <Alert tone="danger" className="mb-4">{pageError}</Alert>}
+      {pageNotice && <Alert tone="success" className="mb-4">{pageNotice}</Alert>}
 
       <div className="mb-4 flex gap-2">
         {(["claims", "policies", "payers"] as Tab[]).map((t) => (

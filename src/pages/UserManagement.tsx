@@ -258,10 +258,12 @@ const UserManagement: React.FC = () => {
 
   const handleBlock = async (user: PatientUser) => {
     if (!canBlock) return;
-    const reason = window.prompt(
-      `Block ${user.fullName || user.mobileNumber}?\nOptional reason:`,
-      "",
-    );
+    const reason = await dialog.prompt({
+      title: `Block ${user.fullName || user.mobileNumber}?`,
+      message: "Optional reason:",
+      confirmLabel: "Block",
+      tone: "danger",
+    });
     if (reason === null) return;
     setActionBusy(user._id);
     try {

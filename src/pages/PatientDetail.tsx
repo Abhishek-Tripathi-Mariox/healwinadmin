@@ -110,7 +110,12 @@ export default function PatientDetail() {
   const billEncounter = async (encounterId: string, hasDiagnostics: boolean) => {
     let rate = 0;
     if (hasDiagnostics) {
-      const input = window.prompt("Rate per diagnostic test (₹)?", "500");
+      const input = await dialog.prompt({
+        message: "Rate per diagnostic test (₹)",
+        defaultValue: "500",
+        inputType: "number",
+        confirmLabel: "Generate bill",
+      });
       if (input === null) return;
       rate = Number(input) || 0;
     }

@@ -93,13 +93,22 @@ export default function EmployeeShiftManagement() {
   return (
     <div className="p-6">
       <PageHeader title="Employee Shifts" subtitle="Hospital/HR staff shift roster (nurses, ward, OPD/IPD support)"
-        actions={<Button variant="secondary" onClick={load}>Refresh</Button>} />
+        actions={
+          <>
+            <Button variant="secondary" onClick={load}>Refresh</Button>
+            {/* In the header rather than at the end of the filter row, where
+                it was pushed off-screen whenever the filters wrapped. */}
+            <Button onClick={() => { setForm({ employeeId: "", shift: "general", startTime: "", endTime: "", department: "", section: "", notes: "" }); setError(""); setModal(true); }}>
+              + Assign shift
+            </Button>
+          </>
+        } />
 
-      <div className="mb-4 flex flex-wrap items-end gap-3">
+      <div className="mb-4 flex flex-wrap items-start gap-3">
         <Field label="From" className="w-40">
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
-        <Field label="To" hint="leave blank for a single day" className="w-40">
+        <Field label="To (optional)" className="w-40">
           <Input
             type="date"
             value={dateTo}
@@ -128,16 +137,16 @@ export default function EmployeeShiftManagement() {
           </Select>
         </Field>
         {(dateTo || departmentId || designationId || shift) && (
-          <Button
-            variant="secondary"
-            onClick={() => { setDateTo(""); setDepartmentId(""); setDesignationId(""); setShift(""); }}
-          >
-            Clear filters
-          </Button>
+          // Offset by a label's height so it lines up with the inputs.
+          <div className="pt-5">
+            <Button
+              variant="secondary"
+              onClick={() => { setDateTo(""); setDepartmentId(""); setDesignationId(""); setShift(""); }}
+            >
+              Clear filters
+            </Button>
+          </div>
         )}
-        <div className="ml-auto">
-          <Button size="sm" onClick={() => { setForm({ employeeId: "", shift: "general", startTime: "", endTime: "", department: "", section: "", notes: "" }); setError(""); setModal(true); }}>+ Assign shift</Button>
-        </div>
       </div>
 
       <Table>

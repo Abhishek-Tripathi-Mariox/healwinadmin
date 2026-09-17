@@ -309,9 +309,12 @@ const ApplicationsManagement: React.FC = () => {
   // offer nobody accepted is not a real document.
   const recordResponse = async (accepted: boolean) => {
     if (!selected) return;
-    const declineReason = accepted
-      ? undefined
-      : window.prompt("Reason for declining (optional)") || undefined;
+    let declineReason: string | undefined;
+    if (!accepted) {
+      const input = await dialog.prompt("Reason for declining (optional)");
+      if (input === null) return;
+      declineReason = input || undefined;
+    }
     if (
       !await dialog.confirm(
         accepted

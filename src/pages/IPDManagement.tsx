@@ -3,10 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { adminSocket } from "../services/socket";
 import {
   ipdApi,
-  hospitalPatientApi,
   staffApi,
   billingApi,
 } from "../services/admin-api";
+import PatientPicker from "../components/PatientPicker";
 import { Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
@@ -522,72 +522,6 @@ export default function IPDManagement() {
   );
 }
 
-function PatientPicker({
-  selected,
-  onSelect,
-}: {
-  selected: any;
-  onSelect: (p: any) => void;
-}) {
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState<any[]>([]);
-  const search = async (v: string) => {
-    setQ(v);
-    if (v.trim().length < 2) return setResults([]);
-    const res = await hospitalPatientApi.list({ search: v.trim(), limit: 8 });
-    setResults(res.data?.items || []);
-  };
-  if (selected)
-    return (
-      <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
-        <span>
-          {selected.fullName}{" "}
-          <span className="font-mono text-xs text-gray-500">
-            {selected.patientId}
-          </span>
-        </span>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="text-red-600 hover:bg-red-50 hover:text-red-700"
-          onClick={() => onSelect(null)}
-        >
-          Change
-        </Button>
-      </div>
-    );
-  return (
-    <div className="relative">
-      <Input
-        value={q}
-        onChange={(e) => search(e.target.value)}
-        placeholder="Search patient"
-      />
-      {results.length > 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow">
-          {results.map((p) => (
-            <button
-              type="button"
-              key={p._id}
-              onClick={() => {
-                onSelect(p);
-                setResults([]);
-              }}
-              className="block w-full px-3 py-2 text-left hover:bg-gray-50"
-            >
-              {p.fullName}{" "}
-              <span className="font-mono text-xs text-gray-400">
-                {p.patientId}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function AdmitModal({
   doctors,
   availableBeds,
@@ -901,6 +835,10 @@ function AdmissionDrawer({
   };
 
   const [logErr, setLogErr] = useState("");
+  const [targetBed, setTargetBed] = useState("");
+  const [transferring, setTransferring] = useState(false);
+  const [transferErr, setTransferErr] = useState("");
+  const [dischargeSummary, setDischargeSummary] = useState("");
 
   const addVital = async () => {
     // Send only the fields actually filled in — an empty string used to reach
@@ -947,16 +885,63 @@ function AdmissionDrawer({
     setNote("");
     onChanged();
   };
-  const transfer = async (bedId: string) => {
-    if (!bedId) return;
-    await ipdApi.transfer(admission._id, bedId);
-    onChanged();
+  /**
+   * Bed transfer.
+   *
+   * This was a dropdown pinned to value="" that fired the transfer the instant
+   * a bed was picked. Pinning the value snapped the choice straight back to the
+   * placeholder, so nobody could see what they had selected; firing on change
+   * meant a stray click moved a patient with no confirmation; and with no
+   * try/catch, a refusal ("that bed was just taken") vanished silently, so it
+   * looked as if nothing had happened at all. Now: choose, see the choice,
+   * confirm, and see the outcome.
+   */
+  const transfer = async () => {
+    if (!targetBed) return;
+    const bed = availableBeds.find((b: any) => b._id === targetBed);
+    if (
+      !(await dialog.confirm({
+        title: "Transfer patient?",
+        message: `Move to ${bed ? `${bed.ward} · ${bed.bedNumber}` : "the selected bed"}. The current bed is released.`,
+        confirmLabel: "Transfer",
+      }))
+    )
+      return;
+    setTransferring(true);
+    setTransferErr("");
+    try {
+      await ipdApi.transfer(admission._id, targetBed);
+      setTargetBed("");
+      onChanged();
+    } catch (e: any) {
+      setTransferErr(
+        e?.data?.hint || e?.message || "The transfer could not be completed.",
+      );
+    } finally {
+      setTransferring(false);
+    }
   };
+
+  // Was `window.prompt`, the browser's native dialog — collected in the panel
+  // now, like every other input.
   const discharge = async () => {
-    const summary = window.prompt("Discharge summary (optional):") || undefined;
-    if (!await dialog.confirm("Confirm discharge?")) return;
-    await ipdApi.discharge(admission._id, summary);
-    onDischarged();
+    if (
+      !(await dialog.confirm({
+        title: "Discharge this patient?",
+        message: dischargeSummary.trim()
+          ? "The summary you entered will be saved with the discharge."
+          : "No discharge summary has been entered. You can add one later.",
+        confirmLabel: "Discharge",
+        tone: "danger",
+      }))
+    )
+      return;
+    try {
+      await ipdApi.discharge(admission._id, dischargeSummary.trim() || undefined);
+      onDischarged();
+    } catch (e: any) {
+      setTransferErr(e?.data?.hint || e?.message || "The discharge could not be completed.");
+    }
   };
   const generateBill = async () => {
     const patientId =
@@ -1010,22 +995,58 @@ function AdmissionDrawer({
 
         <div className="px-6 py-4 space-y-5 text-sm">
           {canManage && (
-            <div className="flex gap-2">
-              <Select
-                onChange={(e) => transfer(e.target.value)}
-                value=""
-                className="flex-1"
-              >
-                <option value="">Transfer to bed…</option>
-                {availableBeds.map((b) => (
-                  <option key={b._id} value={b._id}>
-                    {b.ward} · {b.bedNumber}
-                  </option>
-                ))}
-              </Select>
-              <Button variant="danger" onClick={discharge}>
-                Discharge
-              </Button>
+            <div className="space-y-3">
+              {transferErr && <Alert>{transferErr}</Alert>}
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  Transfer to bed
+                </label>
+                {availableBeds.length === 0 ? (
+                  // An empty dropdown looks broken; say why there is nothing.
+                  <p className="rounded-lg border border-dashed border-gray-200 px-3 py-2 text-xs text-gray-500">
+                    No free beds right now. Discharge or free a bed first.
+                  </p>
+                ) : (
+                  <div className="flex gap-2">
+                    <Select
+                      value={targetBed}
+                      onChange={(e) => setTargetBed(e.target.value)}
+                      className="flex-1"
+                    >
+                      <option value="">— Select a free bed —</option>
+                      {availableBeds.map((b) => (
+                        <option key={b._id} value={b._id}>
+                          {b.ward} · {b.bedNumber}
+                        </option>
+                      ))}
+                    </Select>
+                    <Button
+                      onClick={transfer}
+                      disabled={!targetBed || transferring}
+                    >
+                      {transferring ? "Transferring…" : "Transfer"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  Discharge summary (optional)
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    value={dischargeSummary}
+                    onChange={(e) => setDischargeSummary(e.target.value)}
+                    placeholder="Condition at discharge, follow-up advice…"
+                    className="flex-1"
+                  />
+                  <Button variant="danger" onClick={discharge}>
+                    Discharge
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
           {/* Ward round -> a real IPD encounter on the patient's record, the

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Paperclip, Pencil, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { hospitalPatientApi } from "../services/admin-api";
 import type {
@@ -95,6 +95,9 @@ export default function PatientRegistrationManagement() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<PatientPayload>(emptyForm);
+  // Previous medical records picked in the form; uploaded right after the
+  // patient is saved (the upload endpoint needs the patient id).
+  const [recordFiles, setRecordFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
@@ -124,6 +127,7 @@ export default function PatientRegistrationManagement() {
   const openCreate = () => {
     setEditingId(null);
     setForm(emptyForm);
+    setRecordFiles([]);
     setError("");
     setShowForm(true);
   };
@@ -133,6 +137,7 @@ export default function PatientRegistrationManagement() {
     const res = await hospitalPatientApi.detail(row._id);
     const p = res.data?.patient;
     setEditingId(row._id);
+    setRecordFiles([]);
     setForm({
       fullName: p.fullName || "",
       gender: p.gender || "male",
@@ -188,9 +193,43 @@ export default function PatientRegistrationManagement() {
       return;
     }
     setSaving(true);
+    let patientId = editingId;
     try {
       if (editingId) await hospitalPatientApi.update(editingId, form);
-      else await hospitalPatientApi.create(form);
+      else {
+        const res = await hospitalPatientApi.create(form);
+        patientId = res.data?.patient?._id || null;
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to save patient");
+      setSaving(false);
+      return;
+    }
+    try {
+      const failed: File[] = [];
+      if (patientId) {
+        for (const file of recordFiles) {
+          const fd = new FormData();
+          fd.append("file", file);
+          fd.append("type", "previous_record");
+          fd.append("label", file.name);
+          try {
+            await hospitalPatientApi.uploadDocument(patientId, fd);
+          } catch {
+            failed.push(file);
+          }
+        }
+      }
+      if (failed.length > 0) {
+        // Patient is saved — switch the modal to edit mode so retrying only
+        // re-uploads the files that failed instead of registering twice.
+        setEditingId(patientId);
+        setRecordFiles(failed);
+        setError(`Patient saved, but ${failed.length} record file(s) failed to upload. Click Update to retry.`);
+        load();
+        return;
+      }
+      setRecordFiles([]);
       setShowForm(false);
       load();
     } catch (err: any) {
@@ -623,6 +662,57 @@ export default function PatientRegistrationManagement() {
                 </Field>
               ))}
             </div>
+          </section>
+
+          <section>
+            <h3 className="mb-2 text-sm font-semibold text-gray-700">
+              Previous Medical Records
+            </h3>
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 px-4 py-4 text-sm text-gray-600 hover:border-blue-400 hover:bg-blue-50/40">
+              <Paperclip className="h-4 w-4" />
+              Upload reports, prescriptions, scans (PDF / images)
+              <input
+                type="file"
+                multiple
+                accept="application/pdf,image/*,.doc,.docx"
+                className="hidden"
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files || []);
+                  setRecordFiles((prev) => [...prev, ...picked]);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            {recordFiles.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {recordFiles.map((f, i) => (
+                  <li
+                    key={`${f.name}-${i}`}
+                    className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-1.5 text-sm"
+                  >
+                    <span className="min-w-0 truncate">
+                      {f.name}{" "}
+                      <span className="text-xs text-gray-400">
+                        {(f.size / 1024 / 1024).toFixed(2)} MB
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setRecordFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="ml-2 shrink-0 text-gray-400 hover:text-red-600"
+                      title="Remove"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {editingId && (
+              <p className="mt-1 text-xs text-gray-400">
+                Already-uploaded documents are listed on the patient's detail page.
+              </p>
+            )}
           </section>
         </form>
       </Modal>

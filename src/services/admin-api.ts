@@ -50,10 +50,21 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
   console.log(`[API] Token (first 50 chars): ${token.substring(0, 50)}...`);
 
   try {
+    /**
+     * Only declare JSON when the body actually is JSON.
+     *
+     * This header used to be set on every request. For a FormData body — a
+     * punch-in with its selfie, a CSV import — that labelled multipart bytes as
+     * JSON and dropped the multipart boundary the browser would otherwise add,
+     * so the server could not parse the upload at all. Leaving Content-Type
+     * unset for FormData lets the browser write the correct one.
+     */
+    const isFormData =
+      typeof FormData !== "undefined" && options.body instanceof FormData;
     const response = await fetch(`${API_URL}${endpoint}`, {
       ...options,
       headers: {
-        "Content-Type": "application/json",
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
         Authorization: `Bearer ${token}`,
         ...options.headers,
       },

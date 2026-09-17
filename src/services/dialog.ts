@@ -32,19 +32,36 @@ export interface AlertOptions {
   tone?: DialogTone;
 }
 
+export interface PromptOptions {
+  title?: string;
+  message: string;
+  defaultValue?: string;
+  placeholder?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  inputType?: "text" | "number";
+  /** Render a select with these values instead of a free-text input. */
+  choices?: string[];
+  tone?: DialogTone;
+}
+
 type ConfirmFn = (o: ConfirmOptions) => Promise<boolean>;
 type AlertFn = (o: AlertOptions) => Promise<void>;
+type PromptFn = (o: PromptOptions) => Promise<string | null>;
 
 let confirmImpl: ConfirmFn | null = null;
 let alertImpl: AlertFn | null = null;
+let promptImpl: PromptFn | null = null;
 
 /** Called by DialogHost. Not for use anywhere else. */
-export const registerDialogHost = (fns: { confirm: ConfirmFn; alert: AlertFn }) => {
+export const registerDialogHost = (fns: { confirm: ConfirmFn; alert: AlertFn; prompt: PromptFn }) => {
   confirmImpl = fns.confirm;
   alertImpl = fns.alert;
+  promptImpl = fns.prompt;
   return () => {
     confirmImpl = null;
     alertImpl = null;
+    promptImpl = null;
   };
 };
 
@@ -67,6 +84,13 @@ export const dialog = {
       return Promise.resolve();
     }
     return alertImpl(o);
+  },
+
+  /** Same contract as `window.prompt`: the entered text, or null if cancelled. */
+  prompt: (options: PromptOptions | string): Promise<string | null> => {
+    const o = typeof options === "string" ? { message: options } : options;
+    if (!promptImpl) return Promise.resolve(window.prompt(asText(o), o.defaultValue));
+    return promptImpl(o);
   },
 };
 

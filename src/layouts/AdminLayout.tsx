@@ -21,7 +21,12 @@ const AdminLayout: React.FC = () => {
         setIsMobileMenuOpen={setIsMobileMenuOpen}
       />
 
-      <div className="flex flex-col flex-1 overflow-hidden">
+      {/* min-w-0 is what lets this column shrink to the screen. A flex child
+          defaults to min-width: auto — its content's width — so a page with a
+          wide table grew past the viewport and overflow-hidden clipped its
+          right edge, taking header buttons and Actions columns with it. With
+          it, wide content scrolls inside its own container instead. */}
+      <div className="flex min-w-0 flex-col flex-1 overflow-hidden">
         <Header setIsMobileMenuOpen={setIsMobileMenuOpen} />
         <main className="flex-1 overflow-y-auto">
           {/* Keyed by route so each navigation replays a smooth entrance. */}

@@ -173,6 +173,19 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
 
   const visibleAlerts = items.filter((i) => dismissed[i.id] !== i.fingerprint);
 
+  const dismissActivity = (id: string) => setActivity((prev) => prev.filter((a) => a.id !== id));
+
+  const clearAll = () => {
+    setActivity([]);
+    setUnseen(0);
+    setDismissed((prev) => {
+      const next = { ...prev };
+      for (const a of visibleAlerts) next[a.id] = a.fingerprint;
+      localStorage.setItem(DISMISS_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
   const toggle = () => {
     setShowNotifications((s) => {
       if (!s) {
@@ -215,9 +228,16 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
               <div className="animate-modal-in absolute right-0 z-50 mt-2 w-80 rounded-xl border border-gray-100 bg-white py-2 shadow-lg">
                 <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
                   <h3 className="font-semibold text-gray-800">Notifications</h3>
-                  <button onClick={() => setShowNotifications(false)} className="text-gray-400 hover:text-gray-600">
-                    <X className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {(activity.length > 0 || visibleAlerts.length > 0) && (
+                      <button onClick={clearAll} className="text-xs font-medium text-blue-600 hover:text-blue-800">
+                        Clear all
+                      </button>
+                    )}
+                    <button onClick={() => setShowNotifications(false)} className="text-gray-400 hover:text-gray-600">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 <div className="overflow-y-auto max-h-96">
                   {activity.length === 0 && visibleAlerts.length === 0 && (
@@ -234,14 +254,19 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
                     </div>
                   )}
                   {activity.map((a) => (
-                    <button
-                      key={a.id}
-                      onClick={() => openItem(a.route)}
-                      className="block w-full px-4 py-3 text-left border-b border-gray-50 last:border-0 hover:bg-gray-50"
-                    >
-                      <p className={`text-sm font-medium ${toneText[a.tone]}`}>{a.title}</p>
-                      <p className="text-xs text-gray-500">{a.message}</p>
-                    </button>
+                    <div key={a.id} className="flex items-start gap-2 px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50">
+                      <button onClick={() => openItem(a.route)} className="flex-1 min-w-0 text-left">
+                        <p className={`text-sm font-medium ${toneText[a.tone]}`}>{a.title}</p>
+                        <p className="text-xs text-gray-500">{a.message}</p>
+                      </button>
+                      <button
+                        onClick={() => dismissActivity(a.id)}
+                        title="Remove"
+                        className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   ))}
 
                   {visibleAlerts.length > 0 && (
@@ -250,15 +275,15 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
                     </div>
                   )}
                   {visibleAlerts.map((a) => (
-                    <div key={a.id} className="group flex items-start gap-2 px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50">
+                    <div key={a.id} className="flex items-start gap-2 px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50">
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm font-medium ${toneText[a.tone]}`}>{a.title}</p>
                         <p className="text-xs text-gray-500">{a.message}</p>
                       </div>
                       <button
                         onClick={() => dismissAlert(a.id, a.fingerprint)}
-                        title="Dismiss"
-                        className="shrink-0 rounded p-0.5 text-gray-300 opacity-0 hover:bg-gray-200 hover:text-gray-600 group-hover:opacity-100"
+                        title="Remove"
+                        className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>

@@ -26,11 +26,23 @@ interface EmploymentTypeItem {
   _id: string;
   name: string;
   description: string;
+  engagement?: "payroll" | "contract";
   isActive: boolean;
   sortOrder: number;
 }
 
-const emptyType = { name: "", description: "", isActive: true, sortOrder: 0 };
+const emptyType = {
+  name: "",
+  description: "",
+  engagement: "payroll" as "payroll" | "contract",
+  isActive: true,
+  sortOrder: 0,
+};
+
+const ENGAGEMENT_LABEL: Record<string, string> = {
+  payroll: "On HealWin payroll",
+  contract: "Contract basis",
+};
 
 const EmploymentTypeManagement: React.FC = () => {
   const [types, setTypes] = useState<EmploymentTypeItem[]>([]);
@@ -38,6 +50,7 @@ const EmploymentTypeManagement: React.FC = () => {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [engagementFilter, setEngagementFilter] = useState("");
   const [form, setForm] = useState(emptyType);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -51,6 +64,7 @@ const EmploymentTypeManagement: React.FC = () => {
       const params: Record<string, string> = {};
       if (search) params.q = search;
       if (statusFilter) params.status = statusFilter;
+      if (engagementFilter) params.engagement = engagementFilter;
       params.page = String(page);
       params.limit = "20";
       const res = await employmentTypeApi.getAll(params);
@@ -71,11 +85,11 @@ const EmploymentTypeManagement: React.FC = () => {
 
   useEffect(() => {
     loadTypes();
-  }, [search, statusFilter, page]);
+  }, [search, statusFilter, engagementFilter, page]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter]);
+  }, [search, statusFilter, engagementFilter]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,6 +116,7 @@ const EmploymentTypeManagement: React.FC = () => {
     setForm({
       name: item.name,
       description: item.description,
+      engagement: item.engagement || "payroll",
       isActive: item.isActive,
       sortOrder: item.sortOrder,
     });
@@ -129,7 +144,7 @@ const EmploymentTypeManagement: React.FC = () => {
     <div className="p-6">
       <PageHeader
         title="Employment Type Management"
-        subtitle={`${total || types.length} type(s) · Used in Careers section (Full-time, Part-time, etc.)`}
+        subtitle={`${total || types.length} type(s) · Full-time / Part-time etc., each marked as HealWin payroll or contract basis`}
         actions={
           <Button onClick={() => setShowForm(true)}>+ Add Type</Button>
         }
@@ -162,24 +177,39 @@ const EmploymentTypeManagement: React.FC = () => {
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </Select>
+        <Select
+          value={engagementFilter}
+          onChange={(e) => setEngagementFilter(e.target.value)}
+          className="w-auto"
+        >
+          <option value="">All engagements</option>
+          <option value="payroll">On HealWin payroll</option>
+          <option value="contract">Contract basis</option>
+        </Select>
       </div>
 
       <Table>
         <THead>
           <Th>Name</Th>
+          <Th>Engagement</Th>
           <Th>Description</Th>
           <Th>Status</Th>
           <Th className="text-right">Actions</Th>
         </THead>
         <TBody>
           {loading ? (
-            <TableState colSpan={4}>Loading…</TableState>
+            <TableState colSpan={5}>Loading…</TableState>
           ) : types.length === 0 ? (
-            <TableState colSpan={4}>No employment types found.</TableState>
+            <TableState colSpan={5}>No employment types found.</TableState>
           ) : (
             types.map((t) => (
               <TR key={t._id}>
                 <Td className="font-medium text-gray-900">{t.name}</Td>
+                <Td>
+                  <Badge tone={t.engagement === "contract" ? "warning" : "info"}>
+                    {ENGAGEMENT_LABEL[t.engagement || "payroll"]}
+                  </Badge>
+                </Td>
                 <Td className="text-gray-500">{t.description || "—"}</Td>
                 <Td>
                   <Badge tone={t.isActive ? "success" : "danger"} dot>
@@ -261,6 +291,20 @@ const EmploymentTypeManagement: React.FC = () => {
               />
             </Field>
           </div>
+          <Field
+            label="Engagement *"
+            hint="Whether people of this type are on HealWin's own payroll or engaged on a contract basis."
+          >
+            <Select
+              value={form.engagement}
+              onChange={(e) =>
+                setForm({ ...form, engagement: e.target.value as "payroll" | "contract" })
+              }
+            >
+              <option value="payroll">On HealWin payroll</option>
+              <option value="contract">Contract basis</option>
+            </Select>
+          </Field>
           <label className="flex items-center gap-2 text-sm text-gray-700">
             <input
               type="checkbox"
