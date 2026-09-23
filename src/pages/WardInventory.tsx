@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { wardStockApi } from "../services/admin-api";
+import Pagination from "../components/Pagination";
 import {
   PageHeader,
   Button,
+  Select,
   Table,
   THead,
   TBody,
@@ -52,13 +54,28 @@ type CatalogItem = {
 };
 type IssueLine = { itemId: string; name: string; qty: string };
 
+/** Ward stock lines per page inside the detail modal — it has no filter row. */
+const DETAIL_LIMIT = 20;
+
 export default function WardInventory() {
   const [wards, setWards] = useState<WardRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  // What's actually queried: typing shouldn't fire a request per keystroke.
+  const [searchQuery, setSearchQuery] = useState("");
+  // Destination wards for the transfer picker. Fetched apart from the table
+  // because the table is paged, and you must be able to transfer to any ward,
+  // not just the ones on screen.
+  const [wardOptions, setWardOptions] = useState<WardRow[]>([]);
 
   const [detailWard, setDetailWard] = useState<{ wardId: string; name: string } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [items, setItems] = useState<StockItem[]>([]);
+  const [itemPage, setItemPage] = useState(1);
+  const [itemTotal, setItemTotal] = useState(0);
   const [recent, setRecent] = useState<Txn[]>([]);
 
   // Issue-stock modal.
@@ -85,40 +102,74 @@ export default function WardInventory() {
   const [transferError, setTransferError] = useState("");
   const [transferring, setTransferring] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res: any = await wardStockApi.reports();
+      const params: Record<string, string | number> = { page, limit };
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+      const res: any = await wardStockApi.reports(params);
       const d = res.data ?? res.rData ?? res;
       setWards(d.byWard || []);
+      setTotal(d.pagination?.total || 0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit, searchQuery]);
+
+  // Explicit limit — the picker fetch must not inherit the backend's default
+  // page size or most wards become untransferable-to.
+  const loadWardOptions = useCallback(async () => {
+    try {
+      const res: any = await wardStockApi.reports({ limit: 100 });
+      const d = res.data ?? res.rData ?? res;
+      setWardOptions(d.byWard || []);
+    } catch {
+      setWardOptions([]);
+    }
+  }, []);
+
+  const loadDetail = useCallback(async (wardId: string, p: number) => {
+    const res: any = await wardStockApi.ward(wardId, { page: p, limit: DETAIL_LIMIT });
+    const d = res.data ?? res.rData ?? res;
+    setItems(d.items || []);
+    setItemTotal(d.pagination?.total || 0);
+    setRecent(d.recent || []);
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
+  useEffect(() => {
+    loadWardOptions();
+  }, [loadWardOptions]);
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, limit]);
 
   const openWard = async (row: WardRow) => {
     setDetailWard({ wardId: row.wardId, name: row.name });
+    setItemPage(1);
     setDetailLoading(true);
     try {
-      const res: any = await wardStockApi.ward(row.wardId);
-      const d = res.data ?? res.rData ?? res;
-      setItems(d.items || []);
-      setRecent(d.recent || []);
+      await loadDetail(row.wardId, 1);
     } finally {
       setDetailLoading(false);
     }
   };
 
+  const goItemPage = async (p: number) => {
+    if (!detailWard) return;
+    setItemPage(p);
+    await loadDetail(detailWard.wardId, p);
+  };
+
   const refreshDetail = async () => {
     if (!detailWard) return;
-    const res: any = await wardStockApi.ward(detailWard.wardId);
-    const d = res.data ?? res.rData ?? res;
-    setItems(d.items || []);
-    setRecent(d.recent || []);
+    await loadDetail(detailWard.wardId, itemPage);
     load();
   };
 
@@ -247,6 +298,25 @@ export default function WardInventory() {
         actions={<Button variant="secondary" size="sm" onClick={load}>Refresh</Button>}
       />
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Input
+          className="w-64"
+          placeholder="Search ward…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
+      </div>
+
       <Table>
         <THead>
           <Th>Ward</Th>
@@ -260,7 +330,9 @@ export default function WardInventory() {
             <TableState colSpan={5}>Loading…</TableState>
           ) : wards.length === 0 ? (
             <TableState colSpan={5}>
-              No wards found — add wards first in IPD Management, then issue stock to them here.
+              {searchQuery.trim()
+                ? "No wards match that search."
+                : "No wards found — add wards first in IPD Management, then issue stock to them here."}
             </TableState>
           ) : (
             wards.map((w) => (
@@ -277,6 +349,16 @@ export default function WardInventory() {
           )}
         </TBody>
       </Table>
+
+      <div className="mt-4">
+        <Pagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / limit))}
+          total={total}
+          label="wards"
+          onPageChange={setPage}
+        />
+      </div>
 
       {/* Ward stock detail */}
       <Modal
@@ -310,6 +392,15 @@ export default function WardInventory() {
                   ))}
                 </div>
               )}
+              <div className="mt-3">
+                <Pagination
+                  page={itemPage}
+                  totalPages={Math.max(1, Math.ceil(itemTotal / DETAIL_LIMIT))}
+                  total={itemTotal}
+                  label="items"
+                  onPageChange={goItemPage}
+                />
+              </div>
             </div>
             <div>
               <h4 className="mb-2 text-sm font-semibold text-gray-700">Recent movements</h4>
@@ -462,7 +553,9 @@ export default function WardInventory() {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none"
             >
               <option value="">— Select ward —</option>
-              {wards
+              {/* The only filtering left on the client: a ward cannot be its
+                  own transfer destination, which the backend has no filter for. */}
+              {wardOptions
                 .filter((w) => w.wardId !== detailWard?.wardId)
                 .map((w) => (
                   <option key={w.wardId} value={w.wardId}>{w.name}</option>

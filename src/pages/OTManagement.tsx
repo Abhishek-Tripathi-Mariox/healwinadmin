@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { otApi, hospitalPatientApi } from "../services/admin-api";
+import Pagination from "../components/Pagination";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
-  Modal, Field, Input, Alert,
+  Modal, Field, Input, Alert, Select,
 } from "../components/ui";
 
 type Tab = "surgeries" | "theatres";
@@ -15,6 +16,16 @@ export default function OTManagement() {
   const [loading, setLoading] = useState(false);
   const [theatres, setTheatres] = useState<any[]>([]);
   const [surgeries, setSurgeries] = useState<any[]>([]);
+  // Each tab pages independently — switching tabs shouldn't drop you onto
+  // page 7 of a list that only has two.
+  const [theatrePage, setTheatrePage] = useState(1);
+  const [theatreTotal, setTheatreTotal] = useState(0);
+  const [surgeryPage, setSurgeryPage] = useState(1);
+  const [surgeryTotal, setSurgeryTotal] = useState(0);
+  const [limit, setLimit] = useState(25);
+  // The surgery form's theatre picker, fetched apart from the theatres table:
+  // the table is paged, and booking must be able to reach every theatre.
+  const [theatreOptions, setTheatreOptions] = useState<any[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -28,13 +39,27 @@ export default function OTManagement() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      if (tab === "theatres") setTheatres((await otApi.listTheatres()).data?.items || []);
-      else setSurgeries((await otApi.listSurgeries()).data?.items || []);
+      if (tab === "theatres") {
+        const res = await otApi.listTheatres({ page: theatrePage, limit });
+        setTheatres(res.data?.items || []);
+        setTheatreTotal(res.data?.pagination?.total || 0);
+      } else {
+        const res = await otApi.listSurgeries({ page: surgeryPage, limit });
+        setSurgeries(res.data?.items || []);
+        setSurgeryTotal(res.data?.pagination?.total || 0);
+      }
     } finally { setLoading(false); }
-  }, [tab]);
+  }, [tab, theatrePage, surgeryPage, limit]);
+
+  // An explicit limit: without it the picker stops at the backend's default
+  // page size and the theatres past it can never be booked.
+  const loadTheatreOptions = useCallback(() => {
+    otApi.listTheatres({ limit: 100 }).then((r) => setTheatreOptions(r.data?.items || [])).catch(() => {});
+  }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { otApi.listTheatres().then((r) => setTheatres(r.data?.items || [])).catch(() => {}); }, []);
+  useEffect(() => { loadTheatreOptions(); }, [loadTheatreOptions]);
+  useEffect(() => { setTheatrePage(1); setSurgeryPage(1); }, [limit]);
 
   const searchPatients = async (q: string) => {
     setPatientQuery(q);
@@ -49,7 +74,7 @@ export default function OTManagement() {
     try {
       if (theatreModal?._id) await otApi.updateTheatre(theatreModal._id, theatreForm);
       else await otApi.createTheatre(theatreForm);
-      setTheatreModal(null); load();
+      setTheatreModal(null); load(); loadTheatreOptions();
     } catch (e: any) { setError(e.message || "Failed"); } finally { setSaving(false); }
   };
   const saveSurgery = async () => {
@@ -67,12 +92,22 @@ export default function OTManagement() {
       <PageHeader title="Operation Theatre" subtitle="Theatres and surgery scheduling (overlap-protected)"
         actions={<Button variant="secondary" onClick={load}>Refresh</Button>} />
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex items-center gap-2">
         {(["surgeries", "theatres"] as Tab[]).map((t) => (
           <Button key={t} size="sm" variant={tab === t ? "primary" : "secondary"} onClick={() => setTab(t)}>
             {t[0].toUpperCase() + t.slice(1)}
           </Button>
         ))}
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
         <div className="ml-auto">
           {tab === "theatres" && <Button size="sm" onClick={() => { setTheatreForm({ name: "", location: "" }); setError(""); setTheatreModal({}); }}>+ Theatre</Button>}
           {tab === "surgeries" && <Button size="sm" onClick={() => { setSurgeryForm({ otId: "", patientId: "", procedureName: "", scheduledAt: "", durationMinutes: "60", notes: "" }); setPatientQuery(""); setPatientResults([]); setError(""); setSurgeryModal(true); }}>+ Schedule Surgery</Button>}
@@ -95,6 +130,17 @@ export default function OTManagement() {
               ))}
           </TBody>
         </Table>
+      )}
+      {tab === "theatres" && (
+        <div className="mt-4">
+          <Pagination
+            page={theatrePage}
+            totalPages={Math.max(1, Math.ceil(theatreTotal / limit))}
+            total={theatreTotal}
+            label="theatres"
+            onPageChange={setTheatrePage}
+          />
+        </div>
       )}
 
       {tab === "surgeries" && (
@@ -120,6 +166,17 @@ export default function OTManagement() {
           </TBody>
         </Table>
       )}
+      {tab === "surgeries" && (
+        <div className="mt-4">
+          <Pagination
+            page={surgeryPage}
+            totalPages={Math.max(1, Math.ceil(surgeryTotal / limit))}
+            total={surgeryTotal}
+            label="surgeries"
+            onPageChange={setSurgeryPage}
+          />
+        </div>
+      )}
 
       <Modal open={!!theatreModal} onClose={() => setTheatreModal(null)} title={theatreModal?._id ? "Edit Theatre" : "Add Theatre"}
         footer={<><Button variant="secondary" onClick={() => setTheatreModal(null)}>Cancel</Button><Button onClick={saveTheatre} disabled={saving}>{saving ? "Saving…" : "Save"}</Button></>}>
@@ -137,7 +194,7 @@ export default function OTManagement() {
           <Field label="Theatre *">
             <select value={surgeryForm.otId} onChange={(e) => setSurgeryForm({ ...surgeryForm, otId: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
               <option value="">— Select OT —</option>
-              {theatres.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
+              {theatreOptions.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
             </select>
           </Field>
           <Field label="Patient *">

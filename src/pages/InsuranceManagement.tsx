@@ -86,8 +86,9 @@ export default function InsuranceManagement() {
       .catch(() => setPendingCount(0));
   }, []);
 
-  // Payers are needed in the policy form dropdown.
-  useEffect(() => { insuranceApi.listPayers().then((r) => setPayers(r.data?.items || [])).catch(() => {}); }, []);
+  // Payers are needed in the policy form dropdown. Explicit limit: the payer
+  // list is paged now, and its page-1 default would hide payers from the picker.
+  useEffect(() => { insuranceApi.listPayers({ limit: 100 }).then((r) => setPayers(r.data?.items || [])).catch(() => {}); }, []);
 
   const searchPatients = async (q: string) => {
     setPatientQuery(q);

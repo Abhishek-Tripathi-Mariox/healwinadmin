@@ -6,8 +6,9 @@ import { Plus, Pencil, Trash2, MapPin } from "lucide-react";
 import { geofenceApi } from "../../services/admin-api";
 import { useAuth } from "../../auth/useAuth";
 import { PERMISSIONS } from "../../auth/permissions";
+import Pagination from "../../components/Pagination";
 import {
-  PageHeader, Button, Card, Table, THead, TBody, TR, Th, Td, TableState,
+  PageHeader, Button, Card, Select, Table, THead, TBody, TR, Th, Td, TableState,
   Badge, Modal, Field, Input, Alert,
 } from "../../components/ui";
 import { dialog } from "../../services/dialog";
@@ -41,21 +42,28 @@ export default function GeofenceManagement() {
   const [form, setForm] = useState({ ...blank });
   const [saving, setSaving] = useState(false);
   const [modalErr, setModalErr] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await geofenceApi.list();
+      const res = await geofenceApi.list({ page, limit });
       setItems(res.data?.items || []);
+      // Sent with every page — it is the category list the editor's chips are
+      // built from, not part of the paged rows.
       setCategories(res.data?.categories || []);
+      setTotal(res.data?.pagination?.total || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load locations");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setPage(1); }, [limit]);
 
   const openForm = (f?: Fence) => {
     setModalErr("");
@@ -130,6 +138,20 @@ export default function GeofenceManagement() {
         result is evidence for HR, not a gate on anyone's pay.
       </Alert>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
+        <span className="text-sm text-gray-500">{total} location(s)</span>
+      </div>
+
       <Card className="overflow-hidden">
         <Table>
           <THead>
@@ -194,6 +216,14 @@ export default function GeofenceManagement() {
           </TBody>
         </Table>
       </Card>
+
+      <Pagination
+        page={page}
+        totalPages={Math.max(1, Math.ceil(total / limit))}
+        total={total}
+        label="locations"
+        onPageChange={setPage}
+      />
 
       <Modal
         open={open}

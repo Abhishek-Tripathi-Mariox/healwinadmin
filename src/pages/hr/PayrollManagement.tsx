@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Download, Lock, Play, ArrowLeft } from "lucide-react";
+import { Download, Lock, Play, ArrowLeft, Search } from "lucide-react";
 import { payrollApi } from "../../services/admin-api";
 import { useAuth } from "../../auth/useAuth";
 import { PERMISSIONS } from "../../auth/permissions";
+import Pagination from "../../components/Pagination";
 import {
   PageHeader, Button, Select, Card, Table, THead, TBody, TR, Th, Td, TableState, Badge,
-  Modal, Field, Alert,
+  Modal, Field, Input, Alert,
 } from "../../components/ui";
 import { dialog } from "../../services/dialog";
 
@@ -92,22 +93,65 @@ export default function PayrollManagement() {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
 
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
+
   const [openRun, setOpenRun] = useState<Run | null>(null);
   const [payslips, setPayslips] = useState<Payslip[]>([]);
+  // The payslips inside a run are paged separately from the runs list — a
+  // single run holds one row per employee.
+  const [slipPage, setSlipPage] = useState(1);
+  const [slipLimit, setSlipLimit] = useState(25);
+  const [slipTotal, setSlipTotal] = useState(0);
+  const [slipsLoading, setSlipsLoading] = useState(false);
+  const [slipSearch, setSlipSearch] = useState("");
+  // What's actually queried: typing shouldn't fire a request per keystroke.
+  const [slipSearchQuery, setSlipSearchQuery] = useState("");
 
   const loadRuns = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await payrollApi.runs();
+      const res = await payrollApi.runs({ page, limit });
       setRuns(res.data?.items || []);
+      setTotal(res.data?.pagination?.total || 0);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit]);
 
   useEffect(() => {
     loadRuns();
   }, [loadRuns]);
+  useEffect(() => { setPage(1); }, [limit]);
+
+  const runId = openRun?._id;
+  const loadRunDetail = useCallback(async () => {
+    if (!runId) return;
+    setSlipsLoading(true);
+    try {
+      const params: Record<string, string | number> = {
+        page: slipPage,
+        limit: slipLimit,
+      };
+      if (slipSearchQuery.trim()) params.search = slipSearchQuery.trim();
+      const res = await payrollApi.runDetail(runId, params);
+      // The run totals come back with every page, so the header stays right
+      // however deep into the payslips you are.
+      if (res.data?.run) setOpenRun(res.data.run);
+      setPayslips(res.data?.payslips || []);
+      setSlipTotal(res.data?.pagination?.total || 0);
+    } finally {
+      setSlipsLoading(false);
+    }
+  }, [runId, slipPage, slipLimit, slipSearchQuery]);
+
+  useEffect(() => { loadRunDetail(); }, [loadRunDetail]);
+  useEffect(() => {
+    const t = setTimeout(() => setSlipSearchQuery(slipSearch), 300);
+    return () => clearTimeout(t);
+  }, [slipSearch]);
+  useEffect(() => { setSlipPage(1); }, [slipSearchQuery, slipLimit]);
 
   const generate = async (acknowledgeUnmarked = false) => {
     setGenerating(true);
@@ -176,19 +220,19 @@ export default function PayrollManagement() {
     try {
       await payrollApi.verify(run._id);
       await loadRuns();
-      const res = await payrollApi.runDetail(run._id);
-      setOpenRun(res.data?.run || null);
-      setPayslips(res.data?.payslips || []);
+      await loadRunDetail();
     } catch (err: unknown) {
       const e = err as { data?: { hint?: string }; message?: string };
       void dialog.alert(e.data?.hint || e.message || "Failed to verify the run");
     }
   };
 
-  const viewRun = async (run: Run) => {
-    const res = await payrollApi.runDetail(run._id);
-    setOpenRun(res.data?.run || run);
-    setPayslips(res.data?.payslips || []);
+  const viewRun = (run: Run) => {
+    setOpenRun(run);
+    setPayslips([]);
+    setSlipPage(1);
+    setSlipSearch("");
+    setSlipSearchQuery("");
   };
 
   const finalize = async () => {
@@ -265,14 +309,43 @@ export default function PayrollManagement() {
           <Card className="p-4 border-healwin-200 bg-healwin-50"><div className="text-xs text-healwin-700">Net Payable</div><div className="text-xl font-semibold text-healwin-800">{inr(openRun.totalNet)}</div></Card>
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Input
+              className="w-64 pl-9"
+              placeholder="Employee name or code…"
+              value={slipSearch}
+              onChange={(e) => setSlipSearch(e.target.value)}
+            />
+          </div>
+          <Select
+            value={String(slipLimit)}
+            onChange={(e) => setSlipLimit(Number(e.target.value))}
+            className="w-32"
+            aria-label="Rows per page"
+          >
+            {[25, 50, 100].map((n) => (
+              <option key={n} value={n}>{n} / page</option>
+            ))}
+          </Select>
+          <span className="text-sm text-gray-500">{slipTotal} payslip(s)</span>
+        </div>
+
         <Table>
           <THead>
             <Th>Code</Th><Th>Employee</Th><Th className="text-right">Paid Days</Th><Th className="text-right">Gross</Th>
             <Th className="text-right">Deductions</Th><Th className="text-right">Net Pay</Th><Th></Th>
           </THead>
           <TBody>
-            {payslips.length === 0 ? (
-              <TableState colSpan={7}>No payslips.</TableState>
+            {slipsLoading && payslips.length === 0 ? (
+              <TableState colSpan={7}>Loading…</TableState>
+            ) : payslips.length === 0 ? (
+              <TableState colSpan={7}>
+                {slipSearchQuery.trim()
+                  ? "No payslips match this search."
+                  : "No payslips."}
+              </TableState>
             ) : (
               payslips.map((p) => (
                 <TR key={p._id}>
@@ -310,6 +383,16 @@ export default function PayrollManagement() {
             )}
           </TBody>
         </Table>
+
+        <div className="mt-4">
+          <Pagination
+            page={slipPage}
+            totalPages={Math.max(1, Math.ceil(slipTotal / slipLimit))}
+            total={slipTotal}
+            label="payslips"
+            onPageChange={setSlipPage}
+          />
+        </div>
       </div>
     );
   }
@@ -370,6 +453,20 @@ export default function PayrollManagement() {
         }}
       />
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
+        <span className="text-sm text-gray-500">{total} run(s)</span>
+      </div>
+
       <Table>
         <THead>
           <Th>Period</Th><Th className="text-right">Employees</Th><Th className="text-right">Gross</Th>
@@ -396,6 +493,16 @@ export default function PayrollManagement() {
           )}
         </TBody>
       </Table>
+
+      <div className="mt-4">
+        <Pagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / limit))}
+          total={total}
+          label="runs"
+          onPageChange={setPage}
+        />
+      </div>
     </div>
   );
 }

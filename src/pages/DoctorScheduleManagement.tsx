@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { doctorScheduleApi } from "../services/admin-api";
+import Pagination from "../components/Pagination";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
-  Modal, Field, Input, Alert,
+  Modal, Field, Input, Alert, Select,
 } from "../components/ui";
 
 interface DoctorRow {
@@ -21,6 +22,12 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export default function DoctorScheduleManagement() {
   const [rows, setRows] = useState<DoctorRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  // What's actually queried: typing shouldn't fire a request per keystroke.
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [editFor, setEditFor] = useState<DoctorRow | null>(null);
   const [slotMinutes, setSlotMinutes] = useState(15);
@@ -32,16 +39,26 @@ export default function DoctorScheduleManagement() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await doctorScheduleApi.listDoctors();
+      const params: Record<string, string | number> = { page, limit };
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+      const res = await doctorScheduleApi.listDoctors(params);
       setRows(res.data?.items || []);
+      setTotal(res.data?.pagination?.total || 0);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit, searchQuery]);
 
   useEffect(() => {
     load();
   }, [load]);
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, limit]);
 
   const openEdit = async (d: DoctorRow) => {
     setEditFor(d);
@@ -93,6 +110,25 @@ export default function DoctorScheduleManagement() {
         actions={<Button variant="secondary" onClick={load}>Refresh</Button>}
       />
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Input
+          className="w-64"
+          placeholder="Name, email or speciality…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
+      </div>
+
       <Table>
         <THead>
           <Th>Doctor</Th><Th>Speciality</Th><Th>Schedule</Th><Th>Slot</Th><Th className="text-right">Actions</Th>
@@ -101,7 +137,11 @@ export default function DoctorScheduleManagement() {
           {loading && rows.length === 0 ? (
             <TableState colSpan={5}>Loading…</TableState>
           ) : rows.length === 0 ? (
-            <TableState colSpan={5}>No doctors found. Add doctor-role admins first.</TableState>
+            <TableState colSpan={5}>
+              {searchQuery.trim()
+                ? "No doctors match that search."
+                : "No doctors found. Add doctor-role admins first."}
+            </TableState>
           ) : (
             rows.map((d) => (
               <TR key={d._id}>
@@ -125,6 +165,16 @@ export default function DoctorScheduleManagement() {
           )}
         </TBody>
       </Table>
+
+      <div className="mt-4">
+        <Pagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / limit))}
+          total={total}
+          label="doctors"
+          onPageChange={setPage}
+        />
+      </div>
 
       <Modal
         open={!!editFor}

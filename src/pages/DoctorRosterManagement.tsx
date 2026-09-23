@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { doctorRosterApi, doctorScheduleApi, departmentApi } from "../services/admin-api";
+import Pagination from "../components/Pagination";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert, Select,
@@ -22,6 +23,9 @@ export default function DoctorRosterManagement() {
   const [rows, setRows] = useState<any[]>([]);
   const [doctors, setDoctors] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
 
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({ doctorId: "", shift: "full", isOnCall: false, department: "", notes: "" });
@@ -46,16 +50,17 @@ export default function DoctorRosterManagement() {
     setLoading(true);
     setLoadError("");
     try {
-      const res = await doctorRosterApi.list(date, toDate || undefined);
+      const res = await doctorRosterApi.list(date, toDate || undefined, { page, limit });
       if (seq !== requestSeq.current) return; // a newer request superseded this one
       setRows(res.data?.items || []);
+      setTotal(res.data?.pagination?.total || 0);
     } catch (e) {
       if (seq !== requestSeq.current) return;
       setLoadError(e instanceof Error ? e.message : "Could not load the roster.");
     } finally {
       if (seq === requestSeq.current) setLoading(false);
     }
-  }, [date, toDate]);
+  }, [date, toDate, page, limit]);
 
   /**
    * Moving "From" past "To" leaves an inverted range — from a later day to an
@@ -68,7 +73,12 @@ export default function DoctorRosterManagement() {
   };
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { doctorScheduleApi.listDoctors().then((r) => setDoctors(r.data?.items || [])).catch(() => {}); }, []);
+  // A new date range is a new list — staying on page 4 of the old one shows
+  // an empty table for a period that does have duties.
+  useEffect(() => { setPage(1); }, [date, toDate, limit]);
+  // Explicit limit: this fills the "Assign duty" doctor picker, and without it
+  // the picker silently stops at the backend's default page of doctors.
+  useEffect(() => { doctorScheduleApi.listDoctors({ limit: 100 }).then((r) => setDoctors(r.data?.items || [])).catch(() => {}); }, []);
   useEffect(() => {
     departmentApi
       .getAll({ status: "active" })
@@ -106,6 +116,16 @@ export default function DoctorRosterManagement() {
         {toDate && (
           <Button size="sm" variant="ghost" onClick={() => setToDate("")}>Clear range</Button>
         )}
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
         <div className="ml-auto">
           <Button size="sm" onClick={() => { setForm({ doctorId: "", shift: "full", isOnCall: false, department: "", notes: "" }); setError(""); setModal(true); }}>+ Assign duty</Button>
         </div>
@@ -129,6 +149,16 @@ export default function DoctorRosterManagement() {
             ))}
         </TBody>
       </Table>
+
+      <div className="mt-4">
+        <Pagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / limit))}
+          total={total}
+          label="duties"
+          onPageChange={setPage}
+        />
+      </div>
 
       <Modal open={modal} onClose={() => setModal(false)} title={`Assign duty — ${date}`}
         footer={<><Button variant="secondary" onClick={() => setModal(false)}>Cancel</Button><Button onClick={add} disabled={saving}>{saving ? "Saving…" : "Assign"}</Button></>}>

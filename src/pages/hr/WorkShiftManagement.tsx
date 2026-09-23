@@ -5,8 +5,9 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { workShiftApi } from "../../services/admin-api";
 import { useAuth } from "../../auth/useAuth";
 import { PERMISSIONS } from "../../auth/permissions";
+import Pagination from "../../components/Pagination";
 import {
-  PageHeader, Button, Card, Table, THead, TBody, TR, Th, Td, TableState,
+  PageHeader, Button, Card, Select, Table, THead, TBody, TR, Th, Td, TableState,
   Badge, Modal, Field, Input, Alert,
 } from "../../components/ui";
 import { dialog } from "../../services/dialog";
@@ -49,20 +50,25 @@ export default function WorkShiftManagement() {
   const [form, setForm] = useState({ ...blank });
   const [saving, setSaving] = useState(false);
   const [modalErr, setModalErr] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await workShiftApi.list();
+      const res = await workShiftApi.list({ page, limit });
       setItems(res.data?.items || []);
+      setTotal(res.data?.pagination?.total || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load shifts");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setPage(1); }, [limit]);
 
   const openForm = (s?: Shift) => {
     setModalErr("");
@@ -128,6 +134,20 @@ export default function WorkShiftManagement() {
       />
       {error && <Alert tone="danger">{error}</Alert>}
 
+      <div className="flex flex-wrap items-center gap-3">
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
+        <span className="text-sm text-gray-500">{total} shift(s)</span>
+      </div>
+
       <Card className="overflow-hidden">
         <Table>
           <THead>
@@ -185,6 +205,14 @@ export default function WorkShiftManagement() {
           </TBody>
         </Table>
       </Card>
+
+      <Pagination
+        page={page}
+        totalPages={Math.max(1, Math.ceil(total / limit))}
+        total={total}
+        label="shifts"
+        onPageChange={setPage}
+      />
 
       <Modal
         open={open}

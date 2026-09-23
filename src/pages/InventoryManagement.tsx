@@ -443,7 +443,8 @@ export default function InventoryManagement() {
     );
     setPoGenOpen(true);
     if (poGenSuppliers.length === 0) {
-      const res: any = await procurementApi.listSuppliers();
+      // Explicit limit: the supplier list is paged, and this fills a dropdown.
+      const res: any = await procurementApi.listSuppliers({ limit: 100 });
       setPoGenSuppliers(res.data?.items ?? res.rData?.items ?? []);
     }
   };

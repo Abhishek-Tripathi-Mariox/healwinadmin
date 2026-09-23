@@ -49,6 +49,9 @@ export default function LeaveManagement() {
   };
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [types, setTypes] = useState<LeaveType[]>([]);
+  // The request form must offer every leave type, not whichever page of the
+  // Leave Types tab happens to be open — so it has its own fetch.
+  const [typeOptions, setTypeOptions] = useState<LeaveType[]>([]);
   const [loading, setLoading] = useState(false);
 
   // create-request modal
@@ -63,21 +66,35 @@ export default function LeaveManagement() {
   const [typeForm, setTypeForm] = useState({ name: "", code: "", annualQuota: 0, isPaid: true });
   const [typeError, setTypeError] = useState("");
 
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [typePage, setTypePage] = useState(1);
+  const [typeTotal, setTypeTotal] = useState(0);
+  const TYPE_LIMIT = 25;
+
   const loadRequests = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string> = {};
+      const params: Record<string, string | number> = { page, limit };
       if (statusFilter) params.status = statusFilter;
       const res = await leaveApi.listRequests(params);
       setRequests(res.data?.items || []);
+      setTotal(res.data?.pagination?.total ?? 0);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, page, limit]);
 
   const loadTypes = useCallback(async () => {
-    const res = await leaveApi.listTypes();
+    const res = await leaveApi.listTypes({ page: typePage, limit: TYPE_LIMIT });
     setTypes(res.data?.items || []);
+    setTypeTotal(res.data?.pagination?.total ?? 0);
+  }, [typePage]);
+
+  const loadTypeOptions = useCallback(async () => {
+    const res = await leaveApi.listTypes({ limit: 100 });
+    setTypeOptions(res.data?.items || []);
   }, []);
 
   useEffect(() => {
@@ -85,8 +102,16 @@ export default function LeaveManagement() {
   }, [loadTypes]);
 
   useEffect(() => {
+    loadTypeOptions();
+  }, [loadTypeOptions]);
+
+  useEffect(() => {
     if (tab === "requests") loadRequests();
   }, [tab, loadRequests]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, limit]);
 
   const openReq = async () => {
     setReqError("");
@@ -205,6 +230,18 @@ export default function LeaveManagement() {
             <option value="rejected">Rejected</option>
           </Select>
         )}
+        {tab === "requests" && (
+          <Select
+            value={String(limit)}
+            onChange={(e) => setLimit(Number(e.target.value))}
+            className="w-auto"
+            aria-label="Rows per page"
+          >
+            {[25, 50, 100].map((n) => (
+              <option key={n} value={n}>{n} / page</option>
+            ))}
+          </Select>
+        )}
       </div>
 
       {tab === "requests" ? (
@@ -291,6 +328,24 @@ export default function LeaveManagement() {
         </Table>
       )}
 
+      {tab === "requests" ? (
+        <Pagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / limit))}
+          total={total}
+          label="requests"
+          onPageChange={setPage}
+        />
+      ) : (
+        <Pagination
+          page={typePage}
+          totalPages={Math.max(1, Math.ceil(typeTotal / TYPE_LIMIT))}
+          total={typeTotal}
+          label="leave types"
+          onPageChange={setTypePage}
+        />
+      )}
+
       {/* New request modal */}
       <Modal
         open={showReq}
@@ -309,7 +364,7 @@ export default function LeaveManagement() {
           <Field label="Leave type *">
             <Select value={reqForm.leaveTypeId} onChange={(e) => setReqForm({ ...reqForm, leaveTypeId: e.target.value })}>
               <option value="">Select…</option>
-              {types.map((t) => <option key={t._id} value={t._id}>{t.name} ({t.code})</option>)}
+              {typeOptions.map((t) => <option key={t._id} value={t._id}>{t.name} ({t.code})</option>)}
             </Select>
           </Field>
           <div className="grid grid-cols-2 gap-3">

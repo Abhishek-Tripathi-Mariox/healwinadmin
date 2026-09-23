@@ -31,6 +31,7 @@ import {
   cn,
 } from "../components/ui";
 import { dialog } from "../services/dialog";
+import Pagination from "../components/Pagination";
 
 interface Bed {
   _id: string;
@@ -205,6 +206,28 @@ export default function IPDManagement() {
                 : `Current Admissions (${admissionTotal})`}
           </button>
         ))}
+        <Select
+          value={String(tab === "beds" ? bedLimit : tab === "wards" ? wardLimit : admissionLimit)}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (tab === "beds") {
+              setBedLimit(n);
+              setBedPage(1);
+            } else if (tab === "wards") {
+              setWardLimit(n);
+              setWardPage(1);
+            } else {
+              setAdmissionLimit(n);
+              setAdmissionPage(1);
+            }
+          }}
+          className="mb-1 ml-auto w-auto"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
       </div>
 
       {tab === "admissions" ? (
@@ -358,6 +381,32 @@ export default function IPDManagement() {
             ))
           )}
         </div>
+      )}
+
+      {tab === "admissions" ? (
+        <Pagination
+          page={admissionPage}
+          totalPages={Math.max(1, Math.ceil(admissionTotal / admissionLimit))}
+          total={admissionTotal}
+          label="admissions"
+          onPageChange={setAdmissionPage}
+        />
+      ) : tab === "wards" ? (
+        <Pagination
+          page={wardPage}
+          totalPages={Math.max(1, Math.ceil(wardTotal / wardLimit))}
+          total={wardTotal}
+          label="wards"
+          onPageChange={setWardPage}
+        />
+      ) : (
+        <Pagination
+          page={bedPage}
+          totalPages={Math.max(1, Math.ceil(bedTotal / bedLimit))}
+          total={bedTotal}
+          label="beds"
+          onPageChange={setBedPage}
+        />
       )}
 
       {showAdmit && (
@@ -518,7 +567,7 @@ export default function IPDManagement() {
 
       {showBed && (
         <BedModal
-          wards={wards}
+          wards={wardOptions}
           onClose={() => setShowBed(false)}
           onDone={() => {
             setShowBed(false);

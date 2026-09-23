@@ -324,7 +324,9 @@ export default function EmployeeManagement() {
       setEmploymentTypes(r.data?.items || r.data || []),
     );
     rolesApi
-      .getAll()
+      // Explicit limit: the roles list is paged now, and its page-1 default
+      // would silently hide roles from this picker.
+      .getAll({ limit: 100 })
       .then((r) => setRoles(r.data?.roles || r.data?.items || r.data || []))
       .catch(() => undefined);
   }, []);

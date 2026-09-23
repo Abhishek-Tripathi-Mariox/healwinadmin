@@ -4,6 +4,7 @@ import {
   departmentApi,
   designationApi,
 } from "../services/admin-api";
+import Pagination from "../components/Pagination";
 import {
   PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert, Select,
@@ -27,6 +28,9 @@ export default function EmployeeShiftManagement() {
   const [rows, setRows] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
 
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({ employeeId: "", shift: "general", startTime: "", endTime: "", department: "", section: "", notes: "" });
@@ -42,12 +46,18 @@ export default function EmployeeShiftManagement() {
         departmentId: departmentId || undefined,
         designationId: designationId || undefined,
         shift: shift || undefined,
+        page,
+        limit,
       });
       setRows(res.data?.items || []);
+      setTotal(res.data?.pagination?.total || 0);
     } finally { setLoading(false); }
-  }, [date, dateTo, departmentId, designationId, shift]);
+  }, [date, dateTo, departmentId, designationId, shift, page, limit]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    setPage(1);
+  }, [date, dateTo, departmentId, designationId, shift, limit]);
 
   // The picker in the assign dialog follows the same department/designation
   // filter, so the list you are looking at and the people you can add to it
@@ -63,10 +73,12 @@ export default function EmployeeShiftManagement() {
   }, [departmentId, designationId]);
 
   useEffect(() => {
-    departmentApi.getAll({ status: "active" })
+    // Both lists are paged now; these fill filter dropdowns, so ask for the
+    // whole (small) master rather than the server's default first page.
+    departmentApi.getAll({ status: "active", limit: "100" })
       .then((r) => setDepartments(r.data?.items || r.data || []))
       .catch(() => {});
-    designationApi.getAll({ status: "active" })
+    designationApi.getAll({ status: "active", limit: "100" })
       .then((r) => setDesignations(r.data?.items || r.data || []))
       .catch(() => {});
   }, []);
@@ -136,6 +148,17 @@ export default function EmployeeShiftManagement() {
             {SHIFTS.map((s) => <option key={s} value={s}>{s}</option>)}
           </Select>
         </Field>
+        <Field label="Rows" className="w-32">
+          <Select
+            value={String(limit)}
+            onChange={(e) => setLimit(Number(e.target.value))}
+            aria-label="Rows per page"
+          >
+            {[25, 50, 100].map((n) => (
+              <option key={n} value={n}>{n} / page</option>
+            ))}
+          </Select>
+        </Field>
         {(dateTo || departmentId || designationId || shift) && (
           // Offset by a label's height so it lines up with the inputs.
           <div className="pt-5">
@@ -174,6 +197,16 @@ export default function EmployeeShiftManagement() {
             ))}
         </TBody>
       </Table>
+
+      <div className="mt-4">
+        <Pagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / limit))}
+          total={total}
+          label="shifts"
+          onPageChange={setPage}
+        />
+      </div>
 
       <Modal open={modal} onClose={() => setModal(false)} title={`Assign shift — ${date}`}
         footer={<><Button variant="secondary" onClick={() => setModal(false)}>Cancel</Button><Button onClick={add} disabled={saving}>{saving ? "Saving…" : "Assign"}</Button></>}>

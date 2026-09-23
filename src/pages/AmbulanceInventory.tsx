@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ambulanceStockApi } from "../services/admin-api";
+import Pagination from "../components/Pagination";
 import {
   PageHeader,
   Button,
+  Select,
   Table,
   THead,
   TBody,
@@ -53,48 +55,85 @@ type Txn = {
 
 const money = (n: number) => `₹${(n || 0).toLocaleString("en-IN")}`;
 
+/** Stock lines per page inside the detail modal — it has no filter row. */
+const DETAIL_LIMIT = 20;
+
+type Totals = { consumedValue: number; ambulancesStocked: number; patientsBilled: number };
+const EMPTY_TOTALS: Totals = { consumedValue: 0, ambulancesStocked: 0, patientsBilled: 0 };
+
 export default function AmbulanceInventory() {
   const [byAmbulance, setByAmbulance] = useState<AmbRow[]>([]);
   const [byPatient, setByPatient] = useState<PatientRow[]>([]);
-  const [totals, setTotals] = useState<{ consumedValue: number }>({ consumedValue: 0 });
+  const [totals, setTotals] = useState<Totals>(EMPTY_TOTALS);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"ambulances" | "patients">("ambulances");
+  // The two tables page independently on the backend, so they do here too.
+  const [ambPage, setAmbPage] = useState(1);
+  const [patientPage, setPatientPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
 
-  const [detail, setDetail] = useState<{ reg: string; items: StockItem[]; recent: Txn[]; onHandValue: number } | null>(null);
+  const [detail, setDetail] = useState<{ ambulanceId: string; reg: string; items: StockItem[]; recent: Txn[]; onHandValue: number } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [itemPage, setItemPage] = useState(1);
+  const [itemTotal, setItemTotal] = useState(0);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res: any = await ambulanceStockApi.reports();
+      // `tab` matters: the backend only pages the table being shown and
+      // returns the other one empty.
+      const res: any = await ambulanceStockApi.reports({
+        tab,
+        page: tab === "ambulances" ? ambPage : patientPage,
+        limit,
+      });
       const d = res.data ?? res.rData ?? res;
       setByAmbulance(d.byAmbulance || []);
       setByPatient(d.byPatient || []);
-      setTotals(d.totals || { consumedValue: 0 });
+      setTotals({ ...EMPTY_TOTALS, ...(d.totals || {}) });
+      setTotal(d.pagination?.total || 0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [tab, ambPage, patientPage, limit]);
+
+  const loadDetail = useCallback(async (ambulanceId: string, reg: string, p: number) => {
+    const res: any = await ambulanceStockApi.ambulance(ambulanceId, { page: p, limit: DETAIL_LIMIT });
+    const d = res.data ?? res.rData ?? res;
+    setDetail({
+      ambulanceId,
+      reg: d.ambulance?.registrationNumber || reg,
+      items: d.items || [],
+      recent: d.recent || [],
+      onHandValue: d.onHandValue || 0,
+    });
+    setItemTotal(d.pagination?.total || 0);
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
+  useEffect(() => {
+    setAmbPage(1);
+    setPatientPage(1);
+  }, [limit]);
 
   const openAmbulance = async (row: AmbRow) => {
     setDetailLoading(true);
-    setDetail({ reg: row.registrationNumber, items: [], recent: [], onHandValue: 0 });
+    setItemPage(1);
+    setDetail({ ambulanceId: row.ambulanceId, reg: row.registrationNumber, items: [], recent: [], onHandValue: 0 });
     try {
-      const res: any = await ambulanceStockApi.ambulance(row.ambulanceId);
-      const d = res.data ?? res.rData ?? res;
-      setDetail({
-        reg: d.ambulance?.registrationNumber || row.registrationNumber,
-        items: d.items || [],
-        recent: d.recent || [],
-        onHandValue: d.onHandValue || 0,
-      });
+      await loadDetail(row.ambulanceId, row.registrationNumber, 1);
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  const goItemPage = async (p: number) => {
+    if (!detail) return;
+    setItemPage(p);
+    await loadDetail(detail.ambulanceId, detail.reg, p);
   };
 
   return (
@@ -113,20 +152,32 @@ export default function AmbulanceInventory() {
         </div>
         <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
           <div className="text-xs font-medium text-gray-500">Ambulances stocked</div>
-          <div className="mt-1 text-2xl font-bold text-gray-900">{byAmbulance.filter((a) => a.onHandQty > 0).length}</div>
+          {/* Fleet-wide, from the server — counting the rows on screen would
+              only ever report this page's worth. */}
+          <div className="mt-1 text-2xl font-bold text-gray-900">{totals.ambulancesStocked}</div>
         </div>
         <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
           <div className="text-xs font-medium text-gray-500">Patients billed</div>
-          <div className="mt-1 text-2xl font-bold text-gray-900">{byPatient.length}</div>
+          <div className="mt-1 text-2xl font-bold text-gray-900">{totals.patientsBilled}</div>
         </div>
       </div>
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex items-center gap-2">
         {(["ambulances", "patients"] as const).map((t) => (
           <Button key={t} size="sm" variant={tab === t ? "primary" : "secondary"} onClick={() => setTab(t)}>
             {t === "ambulances" ? "By Ambulance" : "By Patient"}
           </Button>
         ))}
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
       </div>
 
       {tab === "ambulances" ? (
@@ -190,6 +241,16 @@ export default function AmbulanceInventory() {
         </Table>
       )}
 
+      <div className="mt-4">
+        <Pagination
+          page={tab === "ambulances" ? ambPage : patientPage}
+          totalPages={Math.max(1, Math.ceil(total / limit))}
+          total={total}
+          label={tab === "ambulances" ? "ambulances" : "patients"}
+          onPageChange={tab === "ambulances" ? setAmbPage : setPatientPage}
+        />
+      </div>
+
       <Modal
         open={!!detail}
         onClose={() => setDetail(null)}
@@ -217,6 +278,15 @@ export default function AmbulanceInventory() {
                   ))}
                 </div>
               )}
+              <div className="mt-3">
+                <Pagination
+                  page={itemPage}
+                  totalPages={Math.max(1, Math.ceil(itemTotal / DETAIL_LIMIT))}
+                  total={itemTotal}
+                  label="items"
+                  onPageChange={goItemPage}
+                />
+              </div>
             </div>
             <div>
               <h4 className="mb-2 text-sm font-semibold text-gray-700">Recent movements</h4>

@@ -75,7 +75,9 @@ export default function ProcurementManagement() {
   }, [tab]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { procurementApi.listSuppliers().then((r) => setSuppliers(r.data?.items || [])).catch(() => {}); }, []);
+  // Explicit limit: suppliers are paged now, and this fetch fills the purchase
+  // order form's dropdown, which must list more than the first page.
+  useEffect(() => { procurementApi.listSuppliers({ limit: 100 }).then((r) => setSuppliers(r.data?.items || [])).catch(() => {}); }, []);
 
   const saveSupplier = async () => {
     if (!supplierForm.name.trim()) { setError("Name required"); return; }

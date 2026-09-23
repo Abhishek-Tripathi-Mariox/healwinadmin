@@ -2155,6 +2155,8 @@ export const employeeShiftApi = {
     designationId?: string;
     shift?: string;
     employeeId?: string;
+    page?: number;
+    limit?: number;
   }) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/employee-shifts${qs ? `?${qs}` : ""}`);
@@ -3094,8 +3096,10 @@ export const ambulanceStockApi = {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/ambulance-stock/reports${qs ? `?${qs}` : ""}`);
   },
-  ambulance: (ambulanceId: string) =>
-    fetchWithAuth(`/admin/ambulance-stock/${ambulanceId}`),
+  ambulance: (ambulanceId: string, params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/ambulance-stock/${ambulanceId}${qs ? `?${qs}` : ""}`);
+  },
 };
 
 export const wardStockApi = {
@@ -3103,7 +3107,10 @@ export const wardStockApi = {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/ward-stock${qs ? `?${qs}` : ""}`);
   },
-  ward: (wardId: string) => fetchWithAuth(`/admin/ward-stock/${wardId}`),
+  ward: (wardId: string, params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/ward-stock/${wardId}${qs ? `?${qs}` : ""}`);
+  },
   catalogItems: (q?: string) =>
     fetchWithAuth(`/admin/ward-stock/catalog/items${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   issue: (wardId: string, items: { itemId: string; qty: number }[]) =>

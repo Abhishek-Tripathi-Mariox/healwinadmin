@@ -4,8 +4,9 @@ import { staffRecordsApi, ambulanceApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
+import Pagination from "../components/Pagination";
 import {
-  PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge, Modal, Field, Select,
+  PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge, Modal, Field, Input, Select,
 } from "../components/ui";
 
 /**
@@ -71,6 +72,14 @@ const TABS: { key: Tab; label: string }[] = [
   // store). Showing them here too was a confusing duplicate.
 ];
 
+/** Every tab is a separate list, so each remembers its own page. */
+const EMPTY_PAGES: Record<Tab, number> = {
+  patients: 1,
+  "case-notes": 1,
+  "stock-requests": 1,
+  leaves: 1,
+};
+
 const statusTone: Record<string, "warning" | "info" | "success" | "neutral" | "danger"> = {
   Pending: "warning",
   Approved: "success",
@@ -103,6 +112,15 @@ export default function StaffAppRecords() {
     if (t && TABS.some((x) => x.key === t)) setTab(t as Tab);
   }, [searchParams]);
   const [loading, setLoading] = useState(false);
+  const [pageByTab, setPageByTab] = useState<Record<Tab, number>>(EMPTY_PAGES);
+  const page = pageByTab[tab];
+  const setPage = (p: number) => setPageByTab((s) => ({ ...s, [tab]: p }));
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
+  // Only the patients list is searchable on the backend.
+  const [search, setSearch] = useState("");
+  // What's actually queried: typing shouldn't fire a request per keystroke.
+  const [searchQuery, setSearchQuery] = useState("");
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [caseNotes, setCaseNotes] = useState<CaseNoteRow[]>([]);
   const [stock, setStock] = useState<StockRow[]>([]);
@@ -117,18 +135,42 @@ export default function StaffAppRecords() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      if (tab === "patients") setPatients((await staffRecordsApi.patients()).data?.items || []);
-      else if (tab === "case-notes") setCaseNotes((await staffRecordsApi.caseNotes()).data?.items || []);
-      else if (tab === "stock-requests") setStock((await staffRecordsApi.stockRequests()).data?.items || []);
-      else if (tab === "leaves") setLeaves((await staffRecordsApi.leaves()).data?.items || []);
+      const params: Record<string, string | number> = { page, limit };
+      if (tab === "patients" && searchQuery.trim()) params.search = searchQuery.trim();
+      const res =
+        tab === "patients" ? await staffRecordsApi.patients(params)
+          : tab === "case-notes" ? await staffRecordsApi.caseNotes(params)
+            : tab === "stock-requests" ? await staffRecordsApi.stockRequests(params)
+              : await staffRecordsApi.leaves(params);
+      const items = res.data?.items || [];
+      if (tab === "patients") setPatients(items);
+      else if (tab === "case-notes") setCaseNotes(items);
+      else if (tab === "stock-requests") setStock(items);
+      else setLeaves(items);
+      setTotal(res.data?.pagination?.total || 0);
     } finally {
       setLoading(false);
     }
-  }, [tab]);
+  }, [tab, page, limit, searchQuery]);
 
   useEffect(() => {
     load();
   }, [load]);
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  // The search box only exists on the Patients tab; a term left behind would
+  // keep filtering a list with no visible control for it.
+  useEffect(() => {
+    setSearch("");
+  }, [tab]);
+  useEffect(() => {
+    setPageByTab((s) => ({ ...s, patients: 1 }));
+  }, [searchQuery]);
+  useEffect(() => {
+    setPageByTab(EMPTY_PAGES);
+  }, [limit]);
 
   // Live refresh: the staff app emits leave:new / stock:new when a record is
   // submitted, plus a 20s poll so the current tab never goes stale without a
@@ -207,12 +249,30 @@ export default function StaffAppRecords() {
         actions={<Button variant="secondary" onClick={load}>Refresh</Button>}
       />
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         {TABS.map((t) => (
           <Button key={t.key} size="sm" variant={tab === t.key ? "primary" : "secondary"} onClick={() => setTab(t.key)}>
             {t.label}
           </Button>
         ))}
+        {tab === "patients" && (
+          <Input
+            className="w-64"
+            placeholder="Name, phone or patient ID…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        )}
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
       </div>
 
       {tab === "patients" && (
@@ -224,7 +284,11 @@ export default function StaffAppRecords() {
             {loading && patients.length === 0 ? (
               <TableState colSpan={6}>Loading…</TableState>
             ) : patients.length === 0 ? (
-              <TableState colSpan={6}>No patients registered from the staff app.</TableState>
+              <TableState colSpan={6}>
+                {searchQuery.trim()
+                  ? "No patients match that search."
+                  : "No patients registered from the staff app."}
+              </TableState>
             ) : (
               patients.map((p) => (
                 <TR key={p._id}>
@@ -358,6 +422,16 @@ export default function StaffAppRecords() {
           </TBody>
         </Table>
       )}
+
+      <div className="mt-4">
+        <Pagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / limit))}
+          total={total}
+          label="records"
+          onPageChange={setPage}
+        />
+      </div>
 
       {/* Fulfil → load the requested stock onto an ambulance */}
       <Modal

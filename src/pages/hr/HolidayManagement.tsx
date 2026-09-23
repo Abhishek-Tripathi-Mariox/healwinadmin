@@ -8,6 +8,7 @@ import {
   TableState, Badge, Modal, Field, Input, Alert,
 } from "../../components/ui";
 import { dialog } from "../../services/dialog";
+import Pagination from "../../components/Pagination";
 
 interface Holiday {
   _id: string;
@@ -35,20 +36,28 @@ export default function HolidayManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", date: "", type: "public", isWorkingDay: true });
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await holidayApi.list(year);
+      const res = await holidayApi.list({ year, page, limit });
       setItems(res.data?.items || []);
+      setTotal(res.data?.pagination?.total ?? 0);
     } finally {
       setLoading(false);
     }
-  }, [year]);
+  }, [year, page, limit]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [year, limit]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -98,6 +107,16 @@ export default function HolidayManagement() {
             <option key={y} value={y}>{y}</option>
           ))}
         </Select>
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-auto"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
       </div>
 
       <Table>
@@ -143,6 +162,14 @@ export default function HolidayManagement() {
           )}
         </TBody>
       </Table>
+
+      <Pagination
+        page={page}
+        totalPages={Math.max(1, Math.ceil(total / limit))}
+        total={total}
+        label="holidays"
+        onPageChange={setPage}
+      />
 
       <Modal
         open={show}
