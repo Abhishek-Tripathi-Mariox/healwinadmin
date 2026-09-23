@@ -177,7 +177,9 @@ const StaffManagement: React.FC = () => {
           role: roleFilter === "ALL" ? undefined : roleFilter,
           status: statusFilter === "ALL" ? undefined : statusFilter.toLowerCase(),
         }),
-        rolesApi.getAll(),
+        // The roles list is paged server-side now; this is a dropdown of every
+        // role, so ask for the whole (small) set rather than the first page.
+        rolesApi.getAll({ limit: 100 }),
       ]);
 
       if (staffResponse.success) {

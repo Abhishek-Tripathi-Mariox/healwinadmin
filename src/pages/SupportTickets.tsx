@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supportApi } from "../services/admin-api";
 import { adminSocket } from "../services/socket";
@@ -101,27 +101,33 @@ export default function SupportTickets() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
+  const [total, setTotal] = useState(0);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await supportApi.tickets(statusFilter ? { status: statusFilter } : undefined);
+      const res = await supportApi.tickets({
+        // This endpoint counts pages from 0, the UI from 1.
+        page: String(page - 1),
+        limit: String(limit),
+        ...(statusFilter ? { status: statusFilter } : {}),
+      });
       setTickets(res.data?.tickets || []);
+      setTotal(res.data?.total ?? 0);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, page, limit]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(1); }, [statusFilter]);
+  useEffect(() => { setPage(1); }, [statusFilter, limit]);
 
-  const totalPages = Math.max(1, Math.ceil(tickets.length / limit));
+  const totalPages = Math.max(1, Math.ceil(total / limit));
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
-  const pageTickets = useMemo(
-    () => tickets.slice((page - 1) * limit, page * limit),
-    [tickets, page, limit],
-  );
+  // The server already returned just this page.
+  const pageTickets = tickets;
 
   // Live: a patient/driver reply pushes `support:message` to the admin room —
   // refresh the list, and the open thread if it's the same ticket.
@@ -309,7 +315,7 @@ export default function SupportTickets() {
             ))}
           </select>
         </label>
-        <Pagination page={page} totalPages={totalPages} total={tickets.length} label="tickets" onPageChange={setPage} />
+        <Pagination page={page} totalPages={totalPages} total={total} label="tickets" onPageChange={setPage} />
       </div>
 
       {active && (

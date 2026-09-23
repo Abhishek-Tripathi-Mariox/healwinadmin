@@ -4,6 +4,7 @@ import { Check, X, Plus, Undo2 } from "lucide-react";
 import { leaveApi, hrEmployeeApi } from "../../services/admin-api";
 import { useAuth } from "../../auth/useAuth";
 import { PERMISSIONS } from "../../auth/permissions";
+import Pagination from "../../components/Pagination";
 import {
   PageHeader, Button, Select, Table, THead, TBody, TR, Th, Td, TableState,
   Badge, Modal, Field, Input, Textarea, Alert,

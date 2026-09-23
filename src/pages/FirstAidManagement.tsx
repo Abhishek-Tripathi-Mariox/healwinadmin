@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { Search } from "lucide-react";
 import { firstAidApi } from "../services/admin-api";
+import Pagination from "../components/Pagination";
 import {
-  PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
+  PageHeader, Button, Select, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
 } from "../components/ui";
 import { dialog } from "../services/dialog";
@@ -13,13 +15,30 @@ export default function FirstAidManagement() {
   const [form, setForm] = useState<any>({ title: "", category: "", type: "video", videoUrl: "", content: "", durationLabel: "", sortOrder: 0, isActive: true });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  // What's actually queried: typing shouldn't fire a request per keystroke.
+  const [searchQuery, setSearchQuery] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setRows((await firstAidApi.list()).data?.items || []); }
+    try {
+      const params: Record<string, string | number> = { page, limit };
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+      const res = await firstAidApi.list(params);
+      setRows(res.data?.items || []);
+      setTotal(res.data?.pagination?.total || 0);
+    }
     finally { setLoading(false); }
-  }, []);
+  }, [page, limit, searchQuery]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  useEffect(() => { setPage(1); }, [searchQuery, limit]);
 
   const openNew = () => { setForm({ title: "", category: "", type: "video", videoUrl: "", content: "", durationLabel: "", sortOrder: 0, isActive: true }); setError(""); setModal({}); };
   const openEdit = (g: any) => { setForm({ ...g }); setError(""); setModal(g); };
@@ -40,11 +59,34 @@ export default function FirstAidManagement() {
       <PageHeader title="First Aid & Emergency Guides" subtitle="Videos & quick guides shown in the patient app"
         actions={<><Button variant="secondary" onClick={load}>Refresh</Button><Button onClick={openNew}>+ Guide</Button></>} />
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            className="w-64 pl-9"
+            placeholder="Title or category…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
+        <span className="text-sm text-gray-500">{total} guide(s)</span>
+      </div>
+
       <Table>
         <THead><Th>Title</Th><Th>Category</Th><Th>Type</Th><Th>Status</Th><Th className="text-right">Actions</Th></THead>
         <TBody>
           {loading && rows.length === 0 ? <TableState colSpan={5}>Loading…</TableState>
-            : rows.length === 0 ? <TableState colSpan={5}>No guides yet.</TableState>
+            : rows.length === 0 ? <TableState colSpan={5}>{searchQuery.trim() ? "No guides match this search." : "No guides yet."}</TableState>
             : rows.map((g) => (
               <TR key={g._id}>
                 <Td className="font-medium text-gray-900">{g.title}</Td>
@@ -59,6 +101,16 @@ export default function FirstAidManagement() {
             ))}
         </TBody>
       </Table>
+
+      <div className="mt-4">
+        <Pagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / limit))}
+          total={total}
+          label="guides"
+          onPageChange={setPage}
+        />
+      </div>
 
       <Modal open={!!modal} onClose={() => setModal(null)} title={modal?._id ? "Edit Guide" : "Add Guide"}
         footer={<><Button variant="secondary" onClick={() => setModal(null)}>Cancel</Button><Button onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</Button></>}>

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Search, Trash2 } from "lucide-react";
 import { faqApi } from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
 import {
-  PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge, Modal, Field, Input, Alert,
+  PageHeader, Button, Select, Table, THead, TBody, TR, Th, Td, TableState, Badge, Modal, Field, Input, Alert,
 } from "../components/ui";
 import Pagination from "../components/Pagination";
 import { dialog } from "../services/dialog";
@@ -36,30 +36,41 @@ export default function FaqManagement() {
   const [editing, setEditing] = useState<Faq | null>(null);
   const [form, setForm] = useState<typeof empty>(empty);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  // What's actually queried: typing shouldn't fire a request per keystroke.
+  const [searchQuery, setSearchQuery] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setItems((await faqApi.list()).data?.items || []);
+      const params: Record<string, string | number> = { page, limit };
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+      const res = await faqApi.list(params);
+      setItems(res.data?.items || []);
+      setTotal(res.data?.pagination?.total || 0);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit, searchQuery]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const totalPages = Math.max(1, Math.ceil(items.length / limit));
   useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-  const pageItems = useMemo(
-    () => items.slice((page - 1) * limit, page * limit),
-    [items, page, limit],
-  );
+    const t = setTimeout(() => setSearchQuery(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, limit]);
+
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
   const openNew = () => {
     setEditing(null);
@@ -79,6 +90,8 @@ export default function FaqManagement() {
   };
 
   const normQuestion = (q: string) => q.trim().toLowerCase().replace(/\s+/g, " ");
+  // Instant feedback against what's on screen only — the list is a page of the
+  // collection now, so the backend has the final say on uniqueness.
   const isDuplicate = useMemo(
     () =>
       !!form.question.trim() &&
@@ -90,11 +103,14 @@ export default function FaqManagement() {
     const question = form.question.trim();
     if (!question || !form.answer.trim() || saving || isDuplicate) return;
     setSaving(true);
+    setError("");
     try {
       if (editing) await faqApi.update(editing._id, form);
       else await faqApi.create(form);
       setShowForm(false);
       load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save FAQ");
     } finally {
       setSaving(false);
     }
@@ -118,6 +134,31 @@ export default function FaqManagement() {
         actions={canManage && <Button onClick={openNew}>Add FAQ</Button>}
       />
 
+      {error && <Alert tone="danger">{error}</Alert>}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            className="w-64 pl-9"
+            placeholder="Question, answer or category…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
+        <span className="text-sm text-gray-500">{total} FAQ(s)</span>
+      </div>
+
       <Table>
         <THead>
           <Th>Question</Th>
@@ -130,9 +171,13 @@ export default function FaqManagement() {
           {loading && items.length === 0 ? (
             <TableState colSpan={5}>Loading…</TableState>
           ) : items.length === 0 ? (
-            <TableState colSpan={5}>No FAQs yet. Add the first one.</TableState>
+            <TableState colSpan={5}>
+              {searchQuery.trim()
+                ? "No FAQs match this search."
+                : "No FAQs yet. Add the first one."}
+            </TableState>
           ) : (
-            pageItems.map((f) => (
+            items.map((f) => (
               <TR key={f._id}>
                 <Td className="max-w-md">
                   <div className="font-medium text-gray-900">{f.question}</div>
@@ -185,21 +230,7 @@ export default function FaqManagement() {
         </TBody>
       </Table>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <label className="flex items-center gap-2 text-sm text-gray-600">
-          Rows per page
-          <select
-            value={limit}
-            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
-            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
-          >
-            {[5, 10, 20, 50, 100].map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-        </label>
-        <Pagination page={page} totalPages={totalPages} total={items.length} label="FAQs" onPageChange={setPage} />
-      </div>
+      <Pagination page={page} totalPages={totalPages} total={total} label="FAQs" onPageChange={setPage} />
 
       <Modal
         open={showForm}

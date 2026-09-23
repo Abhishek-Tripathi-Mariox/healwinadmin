@@ -692,7 +692,10 @@ export const meApi = {
 
 export const rolesApi = {
   // Get all roles
-  getAll: () => fetchWithAuth("/admin/roles"),
+  getAll: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/roles${qs ? `?${qs}` : ""}`);
+  },
 
   // Get single role
   getById: (id: string) => fetchWithAuth(`/admin/roles/${id}`),
@@ -2036,7 +2039,10 @@ export const billingApi = {
 // OPD — appointments & queue
 export const doctorScheduleApi = {
   // Doctors + whether they have a published OPD availability schedule.
-  listDoctors: () => fetchWithAuth("/admin/doctor-schedules"),
+  listDoctors: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/doctor-schedules${qs ? `?${qs}` : ""}`);
+  },
   get: (doctorId: string) => fetchWithAuth(`/admin/doctor-schedules/${doctorId}`),
   save: (
     doctorId: string,
@@ -2054,7 +2060,10 @@ export const doctorScheduleApi = {
 
 export const insuranceApi = {
   // Payers (insurer/TPA)
-  listPayers: () => fetchWithAuth("/admin/insurance/payers"),
+  listPayers: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/insurance/payers${qs ? `?${qs}` : ""}`);
+  },
   createPayer: (data: any) =>
     fetchWithAuth("/admin/insurance/payers", { method: "POST", body: JSON.stringify(data) }),
   updatePayer: (id: string, data: any) =>
@@ -2064,7 +2073,7 @@ export const insuranceApi = {
   listPolicies: (patientId?: string) =>
     fetchWithAuth(`/admin/insurance/policies${patientId ? `?patientId=${patientId}` : ""}`),
   // Filter the verification queue — "pending" is what a verifier wants.
-  listPoliciesBy: (params: Record<string, string> = {}) => {
+  listPoliciesBy: (params: Record<string, string | number> = {}) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/insurance/policies${qs ? `?${qs}` : ""}`);
   },
@@ -2085,8 +2094,10 @@ export const insuranceApi = {
   updatePolicy: (id: string, data: any) =>
     fetchWithAuth(`/admin/insurance/policies/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   // Claims
-  listClaims: (status?: string) =>
-    fetchWithAuth(`/admin/insurance/claims${status ? `?status=${status}` : ""}`),
+  listClaims: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/insurance/claims${qs ? `?${qs}` : ""}`);
+  },
   createClaim: (data: any) =>
     fetchWithAuth("/admin/insurance/claims", { method: "POST", body: JSON.stringify(data) }),
   updateClaimStatus: (id: string, data: any) =>
@@ -2102,7 +2113,10 @@ export const fleetHealthApi = {
 };
 
 export const firstAidApi = {
-  list: () => fetchWithAuth("/admin/first-aid"),
+  list: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/first-aid${qs ? `?${qs}` : ""}`);
+  },
   create: (data: any) => fetchWithAuth("/admin/first-aid", { method: "POST", body: JSON.stringify(data) }),
   update: (id: string, data: any) => fetchWithAuth(`/admin/first-aid/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   remove: (id: string) => fetchWithAuth(`/admin/first-aid/${id}`, { method: "DELETE" }),
@@ -2113,17 +2127,20 @@ export const staffDirectoryApi = {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/staff-directory${qs ? `?${qs}` : ""}`);
   },
-  attendance: (date: string) => fetchWithAuth(`/admin/staff-directory/attendance?date=${date}`),
+  attendance: (params: { date: string; page?: number; limit?: number; search?: string }) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/staff-directory/attendance?${qs}`);
+  },
 };
 
 export const doctorRosterApi = {
   /** Single day, or a from..to range (the backend accepts both). */
-  list: (date: string, to?: string) =>
-    fetchWithAuth(
-      to
-        ? `/admin/doctor-roster?from=${date}&to=${to}`
-        : `/admin/doctor-roster?date=${date}`,
-    ),
+  list: (date: string, to?: string, params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(
+      sanitizeParams(to ? { from: date, to, ...params } : { date, ...params }),
+    ).toString();
+    return fetchWithAuth(`/admin/doctor-roster?${qs}`);
+  },
   add: (data: { doctorId: string; date: string; shift: string; isOnCall?: boolean; department?: string; notes?: string }) =>
     fetchWithAuth("/admin/doctor-roster", { method: "POST", body: JSON.stringify(data) }),
   remove: (id: string) => fetchWithAuth(`/admin/doctor-roster/${id}`, { method: "DELETE" }),
@@ -2152,23 +2169,35 @@ export const employeeShiftApi = {
 };
 
 export const otApi = {
-  listTheatres: () => fetchWithAuth("/admin/ot/theatres"),
+  listTheatres: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/ot/theatres${qs ? `?${qs}` : ""}`);
+  },
   createTheatre: (data: any) => fetchWithAuth("/admin/ot/theatres", { method: "POST", body: JSON.stringify(data) }),
   updateTheatre: (id: string, data: any) => fetchWithAuth(`/admin/ot/theatres/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteTheatre: (id: string) => fetchWithAuth(`/admin/ot/theatres/${id}`, { method: "DELETE" }),
-  listSurgeries: (status?: string) => fetchWithAuth(`/admin/ot/surgeries${status ? `?status=${status}` : ""}`),
+  listSurgeries: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/ot/surgeries${qs ? `?${qs}` : ""}`);
+  },
   createSurgery: (data: any) => fetchWithAuth("/admin/ot/surgeries", { method: "POST", body: JSON.stringify(data) }),
   updateSurgeryStatus: (id: string, status: string) =>
     fetchWithAuth(`/admin/ot/surgeries/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
 };
 
 export const procurementApi = {
-  listSuppliers: () => fetchWithAuth("/admin/procurement/suppliers"),
+  listSuppliers: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/procurement/suppliers${qs ? `?${qs}` : ""}`);
+  },
   createSupplier: (data: any) => fetchWithAuth("/admin/procurement/suppliers", { method: "POST", body: JSON.stringify(data) }),
   updateSupplier: (id: string, data: any) => fetchWithAuth(`/admin/procurement/suppliers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteSupplier: (id: string) => fetchWithAuth(`/admin/procurement/suppliers/${id}`, { method: "DELETE" }),
   supplierPerformance: (id: string) => fetchWithAuth(`/admin/procurement/suppliers/${id}/performance`),
-  listPurchaseOrders: (status?: string) => fetchWithAuth(`/admin/procurement/purchase-orders${status ? `?status=${status}` : ""}`),
+  listPurchaseOrders: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/procurement/purchase-orders${qs ? `?${qs}` : ""}`);
+  },
   createPurchaseOrder: (data: any) => fetchWithAuth("/admin/procurement/purchase-orders", { method: "POST", body: JSON.stringify(data) }),
   updatePurchaseOrderStatus: (id: string, status: string) =>
     fetchWithAuth(`/admin/procurement/purchase-orders/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
@@ -2183,7 +2212,7 @@ export const opdApi = {
       method: "PUT",
       body: JSON.stringify({ vitals }),
     }),
-  list: (params: Record<string, string> = {}) => {
+  list: (params: Record<string, string | number> = {}) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/opd${qs ? `?${qs}` : ""}`);
   },
@@ -2211,7 +2240,7 @@ export const ipdApi = {
   charges: (admissionId: string) =>
     fetchWithAuth(`/admin/ipd/admissions/${admissionId}/charges`),
   // Wards (managed picklist the bed form draws from).
-  listWards: (params: Record<string, string> = {}) => {
+  listWards: (params: Record<string, string | number> = {}) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/ipd/wards${qs ? `?${qs}` : ""}`);
   },
@@ -2221,7 +2250,7 @@ export const ipdApi = {
     fetchWithAuth(`/admin/ipd/wards/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteWard: (id: string) =>
     fetchWithAuth(`/admin/ipd/wards/${id}`, { method: "DELETE" }),
-  listBeds: (params: Record<string, string> = {}) => {
+  listBeds: (params: Record<string, string | number> = {}) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/ipd/beds${qs ? `?${qs}` : ""}`);
   },
@@ -2523,8 +2552,10 @@ export const myAttendanceApi = {
 };
 
 export const attendanceApi = {
-  byDate: (date: string) =>
-    fetchWithAuth(`/admin/hr/attendance?date=${encodeURIComponent(date)}`),
+  byDate: (params: { date: string; page?: number; limit?: number; status?: string; search?: string }) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/hr/attendance?${qs}`);
+  },
   byEmployeeMonth: (employeeId: string, month: number, year: number) =>
     fetchWithAuth(
       `/admin/hr/attendance/employee/${employeeId}?month=${month}&year=${year}`,
@@ -2552,7 +2583,10 @@ export const attendanceApi = {
 
 // ==================== HR — LEAVE API ====================
 export const leaveApi = {
-  listTypes: () => fetchWithAuth("/admin/hr/leave/types"),
+  listTypes: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/hr/leave/types${qs ? `?${qs}` : ""}`);
+  },
   saveType: (data: Record<string, any>, id?: string) =>
     fetchWithAuth(`/admin/hr/leave/types${id ? `/${id}` : ""}`, {
       method: id ? "PUT" : "POST",
@@ -2562,7 +2596,7 @@ export const leaveApi = {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/hr/leave/balances${qs ? `?${qs}` : ""}`);
   },
-  listRequests: (params: Record<string, string> = {}) => {
+  listRequests: (params: Record<string, string | number> = {}) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/hr/leave/requests${qs ? `?${qs}` : ""}`);
   },
@@ -2621,7 +2655,10 @@ export const compOffApi = {
 };
 
 export const holidayApi = {
-  list: (year: number) => fetchWithAuth(`/admin/hr/holidays?year=${year}`),
+  list: (params: { year: number; page?: number; limit?: number }) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/hr/holidays?${qs}`);
+  },
   save: (data: Record<string, any>, id?: string) =>
     fetchWithAuth(`/admin/hr/holidays${id ? `/${id}` : ""}`, {
       method: id ? "PUT" : "POST",
@@ -2634,7 +2671,7 @@ export const holidayApi = {
 // ==================== HR — PAYROLL API ====================
 /** HR — shift master (§3). */
 export const workShiftApi = {
-  list: (params: Record<string, string> = {}) => {
+  list: (params: Record<string, string | number> = {}) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/hr/work-shifts${qs ? `?${qs}` : ""}`);
   },
@@ -2649,7 +2686,7 @@ export const workShiftApi = {
 
 /** HR — attendance regularization (§4.5). */
 export const regularizationApi = {
-  list: (params: Record<string, string> = {}) => {
+  list: (params: Record<string, string | number> = {}) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(
       `/admin/hr/attendance/regularizations${qs ? `?${qs}` : ""}`,
@@ -2674,7 +2711,10 @@ export const regularizationApi = {
 
 /** HR — attendance geofence locations (§4.2). */
 export const geofenceApi = {
-  list: () => fetchWithAuth("/admin/hr/geofences"),
+  list: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/hr/geofences${qs ? `?${qs}` : ""}`);
+  },
   save: (data: Record<string, any>, id?: string) =>
     fetchWithAuth(`/admin/hr/geofences${id ? `/${id}` : ""}`, {
       method: id ? "PUT" : "POST",
@@ -2696,7 +2736,10 @@ export const hrReportsApi = {
 };
 
 export const payrollApi = {
-  runs: () => fetchWithAuth("/admin/hr/payroll/runs"),
+  runs: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/hr/payroll/runs${qs ? `?${qs}` : ""}`);
+  },
   /** The payroll calendar — which day of the month a period starts on. */
   settings: () => fetchWithAuth("/admin/hr/payroll/settings"),
   updateSettings: (cycleStartDay: number) =>
@@ -2717,7 +2760,11 @@ export const payrollApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  runDetail: (id: string) => fetchWithAuth(`/admin/hr/payroll/runs/${id}`),
+  /** The run plus a page of its payslips (`search` matches name or code). */
+  runDetail: (id: string, params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/hr/payroll/runs/${id}${qs ? `?${qs}` : ""}`);
+  },
   // HR's sign-off; a run cannot be finalized until this has happened.
   verify: (id: string, note?: string) =>
     fetchWithAuth(`/admin/hr/payroll/runs/${id}/verify`, {
@@ -2845,7 +2892,10 @@ export const ambulanceRequestApi = {
 
 // ==================== MEMBERSHIP PLANS ====================
 export const membershipPlanApi = {
-  list: () => fetchWithAuth(`/admin/membership-plans`),
+  list: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/membership-plans${qs ? `?${qs}` : ""}`);
+  },
   create: (data: Record<string, unknown>) =>
     fetchWithAuth(`/admin/membership-plans`, { method: "POST", body: JSON.stringify(data) }),
   update: (id: string, data: Record<string, unknown>) =>
@@ -2874,7 +2924,10 @@ export const membershipPlanApi = {
 
 // ==================== HOME PROMOS ====================
 export const homePromoApi = {
-  list: () => fetchWithAuth(`/admin/home-promos`),
+  list: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/home-promos${qs ? `?${qs}` : ""}`);
+  },
   create: (data: Record<string, unknown>) =>
     fetchWithAuth(`/admin/home-promos`, { method: "POST", body: JSON.stringify(data) }),
   update: (id: string, data: Record<string, unknown>) =>
@@ -2909,9 +2962,11 @@ export const promoApi = {
 
 // Records created by the ambulance-staff (attendant) app: staff-registered
 // patients, case notes, stock requests and leave applications.
-const qstr = (params: Record<string, string | undefined> = {}) => {
+const qstr = (params: Record<string, string | number | undefined> = {}) => {
   const clean = Object.fromEntries(
-    Object.entries(params).filter(([, v]) => v != null && v !== ""),
+    Object.entries(params)
+      .filter(([, v]) => v != null && v !== "")
+      .map(([k, v]) => [k, String(v)]),
   ) as Record<string, string>;
   const q = new URLSearchParams(clean).toString();
   return q ? `?${q}` : "";
@@ -2941,11 +2996,11 @@ export const supportApi = {
 };
 
 export const staffRecordsApi = {
-  patients: (params?: Record<string, string>) =>
+  patients: (params?: Record<string, string | number>) =>
     fetchWithAuth(`/admin/staff-records/patients${qstr(params)}`),
-  caseNotes: (params?: Record<string, string>) =>
+  caseNotes: (params?: Record<string, string | number>) =>
     fetchWithAuth(`/admin/staff-records/case-notes${qstr(params)}`),
-  stockRequests: (params?: Record<string, string>) =>
+  stockRequests: (params?: Record<string, string | number>) =>
     fetchWithAuth(`/admin/staff-records/stock-requests${qstr(params)}`),
   // `ambulanceId` (optional) tells the backend which vehicle to load the stock
   // onto when fulfilling — needed when the crew isn't assigned to one.
@@ -2954,7 +3009,7 @@ export const staffRecordsApi = {
       method: "PATCH",
       body: JSON.stringify({ status, ambulanceId }),
     }),
-  leaves: (params?: Record<string, string>) =>
+  leaves: (params?: Record<string, string | number>) =>
     fetchWithAuth(`/admin/staff-records/leaves${qstr(params)}`),
   setLeaveStatus: (id: string, status: string) =>
     fetchWithAuth(`/admin/staff-records/leaves/${id}`, {
@@ -2976,7 +3031,10 @@ export const geocodeApi = {
 
 // Help & Support FAQ management (patient-app Help screen).
 export const faqApi = {
-  list: () => fetchWithAuth(`/admin/faqs`),
+  list: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/faqs${qs ? `?${qs}` : ""}`);
+  },
   create: (data: { question: string; answer: string; category?: string; sortOrder?: number; isActive?: boolean }) =>
     fetchWithAuth(`/admin/faqs`, { method: "POST", body: JSON.stringify(data) }),
   update: (id: string, data: Record<string, unknown>) =>
@@ -3032,13 +3090,19 @@ export const patientCommerceApi = {
 
 // Ambulance inventory — per-vehicle on-hand stock + spend reports.
 export const ambulanceStockApi = {
-  reports: () => fetchWithAuth("/admin/ambulance-stock/reports"),
+  reports: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/ambulance-stock/reports${qs ? `?${qs}` : ""}`);
+  },
   ambulance: (ambulanceId: string) =>
     fetchWithAuth(`/admin/ambulance-stock/${ambulanceId}`),
 };
 
 export const wardStockApi = {
-  reports: () => fetchWithAuth("/admin/ward-stock"),
+  reports: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/ward-stock${qs ? `?${qs}` : ""}`);
+  },
   ward: (wardId: string) => fetchWithAuth(`/admin/ward-stock/${wardId}`),
   catalogItems: (q?: string) =>
     fetchWithAuth(`/admin/ward-stock/catalog/items${q ? `?q=${encodeURIComponent(q)}` : ""}`),

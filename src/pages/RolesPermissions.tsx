@@ -12,10 +12,12 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle,
+  Search,
 } from "lucide-react";
 import { rolesApi } from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
+import Pagination from "../components/Pagination";
 import {
   PageHeader,
   Button,
@@ -23,6 +25,7 @@ import {
   Modal,
   Field,
   Input,
+  Select,
 } from "../components/ui";
 
 interface Role {
@@ -983,6 +986,22 @@ export default function RolesPermissions() {
   });
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [search, setSearch] = useState("");
+  // What's actually queried: typing shouldn't fire a request per keystroke.
+  const [searchQuery, setSearchQuery] = useState("");
+  /**
+   * The header cards count every role the filter matches, not the page on
+   * screen, so they come from the server alongside the rows.
+   */
+  const [totals, setTotals] = useState({
+    totalRoles: 0,
+    systemRoles: 0,
+    assignedStaff: 0,
+  });
+  const [totalPages, setTotalPages] = useState(1);
+
   useEffect(() => {
     if (success) {
       const timer = setTimeout(() => setSuccess(null), 3000);
@@ -994,18 +1013,37 @@ export default function RolesPermissions() {
     setLoading(true);
     setError(null);
     try {
-      const res = await rolesApi.getAll();
-      if (res.success) setRoles(res.data.roles || []);
+      const params: Record<string, string | number> = { page, limit };
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+      const res = await rolesApi.getAll(params);
+      if (res.success) {
+        setRoles(res.data.roles || []);
+        setTotalPages(res.data.pagination?.pages || 1);
+        setTotals({
+          totalRoles: res.data.summary?.totalRoles ?? 0,
+          systemRoles: res.data.summary?.systemRoles ?? 0,
+          assignedStaff: res.data.summary?.assignedStaff ?? 0,
+        });
+      }
     } catch (err: any) {
       setError(err.message || "Failed to load roles");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit, searchQuery]);
 
   useEffect(() => {
     fetchRoles();
   }, [fetchRoles]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, limit]);
 
   const openCreateModal = () => {
     setEditingRole(null);
@@ -1111,8 +1149,6 @@ export default function RolesPermissions() {
     );
   };
 
-  const systemRoles = roles.filter((r) => r.isSystem).length;
-  const totalAssigned = roles.reduce((sum, r) => sum + (r.staffCount || 0), 0);
 
   return (
     <div className="space-y-6 p-6">
@@ -1153,7 +1189,7 @@ export default function RolesPermissions() {
             <div>
               <p className="text-sm text-gray-500">Total Roles</p>
               <p className="mt-1 text-2xl font-bold text-purple-600">
-                {roles.length}
+                {totals.totalRoles}
               </p>
             </div>
             <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-xl">
@@ -1166,7 +1202,7 @@ export default function RolesPermissions() {
             <div>
               <p className="text-sm text-gray-500">System Roles</p>
               <p className="mt-1 text-2xl font-bold text-gray-800">
-                {systemRoles}
+                {totals.systemRoles}
               </p>
             </div>
             <div className="flex items-center justify-center w-12 h-12 bg-gray-100 rounded-xl">
@@ -1179,7 +1215,7 @@ export default function RolesPermissions() {
             <div>
               <p className="text-sm text-gray-500">Assigned Staff</p>
               <p className="mt-1 text-2xl font-bold text-blue-600">
-                {totalAssigned}
+                {totals.assignedStaff}
               </p>
             </div>
             <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-xl">
@@ -1189,11 +1225,35 @@ export default function RolesPermissions() {
         </Card>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 w-4 h-4 text-gray-400 -translate-y-1/2" />
+          <Input
+            className="w-64 pl-9"
+            placeholder="Role name or description…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Roles per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
+      </div>
+
       {loading ? (
         <Card className="p-10 text-center text-gray-500">Loading roles…</Card>
       ) : roles.length === 0 ? (
         <Card className="p-10 text-center text-gray-500">
-          No roles yet. Create one to get started.
+          {searchQuery.trim()
+            ? "No roles match this search."
+            : "No roles yet. Create one to get started."}
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -1290,6 +1350,14 @@ export default function RolesPermissions() {
           })}
         </div>
       )}
+
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        total={totals.totalRoles}
+        label="roles"
+        onPageChange={setPage}
+      />
 
       {/* Create / Edit Role */}
       <Modal

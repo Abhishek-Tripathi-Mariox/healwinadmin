@@ -71,6 +71,24 @@ export default function IPDManagement() {
   const [loading, setLoading] = useState(false);
   const [doctors, setDoctors] = useState<any[]>([]);
 
+  const [admissionPage, setAdmissionPage] = useState(1);
+  const [admissionLimit, setAdmissionLimit] = useState(25);
+  const [admissionTotal, setAdmissionTotal] = useState(0);
+  const [bedPage, setBedPage] = useState(1);
+  const [bedLimit, setBedLimit] = useState(25);
+  const [bedTotal, setBedTotal] = useState(0);
+  const [wardPage, setWardPage] = useState(1);
+  const [wardLimit, setWardLimit] = useState(25);
+  const [wardTotal, setWardTotal] = useState(0);
+  /**
+   * The admit / transfer / bed forms pick from the whole hospital, not from
+   * whatever page of the table happens to be on screen — so the picklists are
+   * their own fetches and are not paged with the tables.
+   */
+  const [availableBeds, setAvailableBeds] = useState<Bed[]>([]);
+  const [freeBedCount, setFreeBedCount] = useState(0);
+  const [wardOptions, setWardOptions] = useState<Ward[]>([]);
+
   const [showAdmit, setShowAdmit] = useState(false);
   const [showBed, setShowBed] = useState(false);
   // Bed cards were inert — clicking one did nothing at all. This is the detail
@@ -82,21 +100,40 @@ export default function IPDManagement() {
   const loadAdmissions = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await ipdApi.listAdmissions({ status: "admitted" });
+      const res = await ipdApi.listAdmissions({
+        status: "admitted",
+        page: admissionPage,
+        limit: admissionLimit,
+      });
       setAdmissions(res.data?.items || []);
+      setAdmissionTotal(res.data?.pagination?.total || 0);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [admissionPage, admissionLimit]);
 
   const loadBeds = useCallback(async () => {
-    const res = await ipdApi.listBeds();
+    const res = await ipdApi.listBeds({ page: bedPage, limit: bedLimit });
     setBeds(res.data?.beds || []);
-  }, []);
+    setBedTotal(res.data?.pagination?.total || 0);
+  }, [bedPage, bedLimit]);
 
   const loadWards = useCallback(async () => {
-    const res = await ipdApi.listWards();
+    const res = await ipdApi.listWards({ page: wardPage, limit: wardLimit });
     setWards(res.data?.wards || []);
+    setWardTotal(res.data?.pagination?.total || 0);
+  }, [wardPage, wardLimit]);
+
+  // Picklist sources + the "N free" tab count, which both have to reflect the
+  // whole hospital rather than the page being shown.
+  const loadPicklists = useCallback(async () => {
+    const [bedRes, wardRes] = await Promise.all([
+      ipdApi.listBeds({ status: "available", limit: 100 }),
+      ipdApi.listWards({ limit: 100 }),
+    ]);
+    setAvailableBeds(bedRes.data?.beds || []);
+    setFreeBedCount(bedRes.data?.pagination?.total || 0);
+    setWardOptions(wardRes.data?.wards || []);
   }, []);
 
   const deleteWard = async (w: Ward) => {
@@ -104,6 +141,7 @@ export default function IPDManagement() {
     try {
       await ipdApi.deleteWard(w._id);
       loadWards();
+      loadPicklists();
     } catch (e: any) {
       void dialog.alert(e?.message || "Failed to delete ward");
     }
@@ -113,6 +151,7 @@ export default function IPDManagement() {
     loadAdmissions();
     loadBeds();
     loadWards();
+    loadPicklists();
     staffApi
       .getAll({ limit: 200 })
       .then((res) => {
@@ -125,9 +164,7 @@ export default function IPDManagement() {
         );
       })
       .catch(() => setDoctors([]));
-  }, [loadAdmissions, loadBeds, loadWards]);
-
-  const availableBeds = beds.filter((b) => b.status === "available");
+  }, [loadAdmissions, loadBeds, loadWards, loadPicklists]);
 
   return (
     <div className="p-6">
@@ -162,10 +199,10 @@ export default function IPDManagement() {
             )}
           >
             {t === "beds"
-              ? `Beds (${beds.filter((b) => b.status === "available").length} free)`
+              ? `Beds (${freeBedCount} free)`
               : t === "wards"
-                ? `Wards (${wards.length})`
-                : `Current Admissions (${admissions.length})`}
+                ? `Wards (${wardTotal})`
+                : `Current Admissions (${admissionTotal})`}
           </button>
         ))}
       </div>

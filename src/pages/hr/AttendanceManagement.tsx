@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { attendanceApi } from "../../services/admin-api";
 import { useAuth } from "../../auth/useAuth";
 import { PERMISSIONS } from "../../auth/permissions";
+import Pagination from "../../components/Pagination";
 import {
   PageHeader, Button, Input, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Select, Alert,
 } from "../../components/ui";
 import { dialog } from "../../services/dialog";
-import { Pencil } from "lucide-react";
+import { Pencil, Search } from "lucide-react";
 
 interface RosterRow {
   employee: { _id: string; fullName: string; employeeCode: string; departmentId?: { name: string } };
@@ -75,42 +76,65 @@ export default function AttendanceManagement() {
   const [marks, setMarks] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  // What's actually queried: typing shouldn't fire a request per keystroke.
+  const [searchQuery, setSearchQuery] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await attendanceApi.byDate(date);
+      const res = await attendanceApi.byDate({
+        date,
+        page,
+        limit,
+        ...(statusFilter ? { status: statusFilter } : {}),
+        ...(searchQuery.trim() ? { search: searchQuery.trim() } : {}),
+      });
       const rows: RosterRow[] = res.data?.roster || [];
       setRoster(rows);
-      const initial: Record<string, string> = {};
-      rows.forEach((r) => {
-        if (r.attendance?.status) initial[r.employee._id] = r.attendance.status;
+      setTotal(res.data?.pagination?.total ?? 0);
+      // Merged, not replaced: marks made on one page must survive paging to
+      // the next and back, or they are lost without ever saying so.
+      setMarks((prev) => {
+        const next = { ...prev };
+        rows.forEach((r) => {
+          if (r.attendance?.status) next[r.employee._id] = r.attendance.status;
+        });
+        return next;
       });
-      setMarks(initial);
     } finally {
       setLoading(false);
     }
-  }, [date]);
+  }, [date, page, limit, statusFilter, searchQuery]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // What the table is actually showing. A status filter must narrow the rows
-  // AND everything that acts on them.
-  const visible = useMemo(
-    () =>
-      statusFilter
-        ? roster.filter((r) => (marks[r.employee._id] || r.attendance?.status) === statusFilter)
-        : roster,
-    [roster, marks, statusFilter],
-  );
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [date, statusFilter, searchQuery, limit]);
+
+  // Unsaved marks belong to the day they were made on, so moving to another
+  // date starts clean rather than carrying them onto the wrong register.
+  useEffect(() => {
+    setMarks({});
+  }, [date]);
 
   const setAll = (status: string) => {
-    // Only the visible rows. Marking people you cannot see — because a filter
-    // is hiding them — would rewrite the day's register by accident.
+    // Only the rows on screen. Marking people you cannot see — because a
+    // filter or another page is hiding them — would rewrite the day's
+    // register by accident.
     const next: Record<string, string> = { ...marks };
-    visible.forEach((r) => (next[r.employee._id] = status));
+    roster.forEach((r) => (next[r.employee._id] = status));
     setMarks(next);
   };
 
@@ -149,9 +173,28 @@ export default function AttendanceManagement() {
           onChange={(e) => setParam("date", e.target.value)}
           className="w-44"
         />
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            className="w-64 pl-9"
+            placeholder="Name or employee code…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
         {statusFilter && (
           <span className="inline-flex items-center gap-2 rounded-full bg-healwin-50 px-3 py-1 text-xs font-medium text-healwin-700">
-            Showing {visible.length} marked “{statusFilter.replace("_", " ")}”
+            Showing {total} marked “{statusFilter.replace("_", " ")}”
             <button
               type="button"
               onClick={() => setParam("status", "")}
@@ -164,7 +207,7 @@ export default function AttendanceManagement() {
         )}
         {canManage && (
           <div className="flex items-center gap-1 text-xs text-gray-500">
-            <span>Mark {statusFilter ? "shown" : "all"}:</span>
+            <span>Mark this page:</span>
             {STATUSES.map((s) => (
               <Button key={s.value} size="sm" variant="secondary" onClick={() => setAll(s.value)}>
                 {s.label}
@@ -188,14 +231,16 @@ export default function AttendanceManagement() {
         <TBody>
           {loading ? (
             <TableState colSpan={8}>Loading…</TableState>
-          ) : visible.length === 0 ? (
+          ) : roster.length === 0 ? (
             <TableState colSpan={8}>
-              {roster.length === 0
-                ? "No employees."
-                : `Nobody is marked “${statusFilter.replace("_", " ")}” on this date.`}
+              {statusFilter
+                ? `Nobody is marked “${statusFilter.replace("_", " ")}” on this date.`
+                : searchQuery.trim()
+                  ? "No employee matches that search."
+                  : "No employees."}
             </TableState>
           ) : (
-            visible.map((r) => (
+            roster.map((r) => (
               <TR key={r.employee._id}>
                 <Td className="font-mono text-xs">{r.employee.employeeCode}</Td>
                 <Td className="font-medium text-gray-900">{r.employee.fullName}</Td>
@@ -269,6 +314,16 @@ export default function AttendanceManagement() {
           )}
         </TBody>
       </Table>
+
+      <div className="mt-4">
+        <Pagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / limit))}
+          total={total}
+          label="employees"
+          onPageChange={setPage}
+        />
+      </div>
 
       <CorrectionModal
         row={correcting}

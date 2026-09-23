@@ -6,6 +6,7 @@ import {
   billingApi,
 } from "../services/admin-api";
 import PatientPicker from "../components/PatientPicker";
+import Pagination from "../components/Pagination";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
 import {
@@ -114,6 +115,11 @@ export default function OPDManagement() {
   const [doctorFilter, setDoctorFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
+  // What's actually queried: typing shouldn't fire a request per keystroke.
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
 
   // Nurse / front-desk vitals, captured at check-in. Deliberately here and not
   // on the doctor's encounter form — triage records vitals, the doctor reads them.
@@ -151,31 +157,31 @@ export default function OPDManagement() {
     try {
       const res = await opdApi.list({
         date,
+        page,
+        limit,
         ...(doctorFilter ? { doctorId: doctorFilter } : {}),
         ...(statusFilter ? { status: statusFilter } : {}),
+        ...(searchQuery.trim() ? { search: searchQuery.trim() } : {}),
       });
       setAppts(res.data?.appointments || []);
+      setTotal(res.data?.pagination?.total || 0);
     } finally {
       setLoading(false);
     }
-  }, [date, doctorFilter, statusFilter]);
-
-  // Name / phone / token search across the day's list. Client-side because the
-  // list is already scoped to one day — no round trip needed.
-  const visibleAppts = appts.filter((a) => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      (a.patientId?.fullName || "").toLowerCase().includes(q) ||
-      (a.patientId?.phone || "").includes(q) ||
-      (a.patientId?.patientId || "").toLowerCase().includes(q) ||
-      String(a.tokenNumber) === q
-    );
-  });
+  }, [date, doctorFilter, statusFilter, searchQuery, page, limit]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [date, doctorFilter, statusFilter, searchQuery, limit]);
 
   // Doctors for the booking dropdown.
   //
@@ -186,7 +192,8 @@ export default function OPDManagement() {
   // swallowed it, so the list silently came up empty with no explanation.
   useEffect(() => {
     doctorScheduleApi
-      .listDoctors()
+      // A dropdown needs the whole roster, not the list page's default slice.
+      .listDoctors({ limit: 100 })
       .then((res) => setDoctors(res.data?.items || []))
       .catch((e: any) => {
         setDoctors([]);
@@ -353,6 +360,18 @@ export default function OPDManagement() {
           placeholder="Search patient, phone or token…"
           className="w-64"
         />
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>
+              {n} / page
+            </option>
+          ))}
+        </Select>
         {(doctorFilter || statusFilter || search) && (
           <Button
             size="sm"
@@ -366,9 +385,7 @@ export default function OPDManagement() {
             Clear
           </Button>
         )}
-        <span className="text-sm text-gray-500">
-          {visibleAppts.length} appointment(s)
-        </span>
+        <span className="text-sm text-gray-500">{total} appointment(s)</span>
       </div>
 
       <Table>
@@ -385,10 +402,14 @@ export default function OPDManagement() {
         <TBody>
           {loading ? (
             <TableState colSpan={8}>Loading…</TableState>
-          ) : visibleAppts.length === 0 ? (
-            <TableState colSpan={8}>No appointments for this day.</TableState>
+          ) : appts.length === 0 ? (
+            <TableState colSpan={8}>
+              {doctorFilter || statusFilter || searchQuery.trim()
+                ? "No appointments match these filters."
+                : "No appointments for this day."}
+            </TableState>
           ) : (
-            visibleAppts.map((a) => (
+            appts.map((a) => (
               <TR key={a._id}>
                 <Td className="font-semibold text-gray-900">#{a.tokenNumber}</Td>
                 <Td>
@@ -475,6 +496,16 @@ export default function OPDManagement() {
           )}
         </TBody>
       </Table>
+
+      <div className="mt-4">
+        <Pagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / limit))}
+          total={total}
+          label="appointments"
+          onPageChange={setPage}
+        />
+      </div>
 
       <Modal
         open={showBook}

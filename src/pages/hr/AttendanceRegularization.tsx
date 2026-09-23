@@ -6,6 +6,7 @@ import { Check, X, Plus } from "lucide-react";
 import { regularizationApi, hrEmployeeApi } from "../../services/admin-api";
 import { useAuth } from "../../auth/useAuth";
 import { PERMISSIONS } from "../../auth/permissions";
+import Pagination from "../../components/Pagination";
 import {
   PageHeader, Button, Card, Select, Table, THead, TBody, TR, Th, Td,
   TableState, Badge, Modal, Field, Input, Textarea, Alert,
@@ -51,6 +52,9 @@ export default function AttendanceRegularization() {
   const [items, setItems] = useState<AR[]>([]);
   const [employees, setEmployees] = useState<Emp[]>([]);
   const [statusFilter, setStatusFilter] = useState("pending");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
@@ -65,17 +69,21 @@ export default function AttendanceRegularization() {
     setLoading(true);
     setError("");
     try {
-      const res = await regularizationApi.list(
-        statusFilter ? { status: statusFilter } : {},
-      );
+      const res = await regularizationApi.list({
+        page,
+        limit,
+        ...(statusFilter ? { status: statusFilter } : {}),
+      });
       setItems(res.data?.items || []);
+      setTotal(res.data?.pagination?.total ?? 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load requests");
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, page, limit]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setPage(1); }, [statusFilter, limit]);
 
   useEffect(() => {
     hrEmployeeApi
@@ -136,7 +144,17 @@ export default function AttendanceRegularization() {
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
         </Select>
-        <span className="text-sm text-gray-500">{items.length} request(s)</span>
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
+        <span className="text-sm text-gray-500">{total} request(s)</span>
       </div>
 
       <Card className="overflow-hidden">
@@ -199,6 +217,14 @@ export default function AttendanceRegularization() {
           </TBody>
         </Table>
       </Card>
+
+      <Pagination
+        page={page}
+        totalPages={Math.max(1, Math.ceil(total / limit))}
+        total={total}
+        label="requests"
+        onPageChange={setPage}
+      />
 
       <Modal
         open={open}

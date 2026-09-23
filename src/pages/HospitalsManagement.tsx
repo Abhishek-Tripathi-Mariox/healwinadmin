@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Building2, Users, MapPin } from "lucide-react";
 import { hospitalApi } from "../services/admin-api";
+import Pagination from "../components/Pagination";
 import {
   PageHeader,
   SearchInput,
@@ -60,16 +61,23 @@ const HospitalsManagement: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
 
   const fetchHospitals = async () => {
     setLoading(true);
     setError(null);
     try {
-      const params: Record<string, string> = {};
+      const params: Record<string, string> = {
+        page: String(page),
+        limit: String(limit),
+      };
       if (search) params.search = search;
       if (typeFilter) params.type = typeFilter;
       const res = (await hospitalApi.list(params)) as ListResponse<Hospital>;
       setHospitals(unwrap(res));
+      setTotal(res?.data?.total ?? res?.rData?.total ?? 0);
     } catch (e: any) {
       setError(e?.message || "Failed to load hospitals");
     } finally {
@@ -80,12 +88,17 @@ const HospitalsManagement: React.FC = () => {
   useEffect(() => {
     fetchHospitals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [page, limit]);
 
   // Debounce search → server. Small UX nicety so typing doesn't fire
   // a request per keystroke.
   useEffect(() => {
-    const t = setTimeout(fetchHospitals, 300);
+    const t = setTimeout(() => {
+      // A narrowed list is a different list: go back to its first page
+      // rather than leaving the viewer on a page that no longer exists.
+      if (page !== 1) setPage(1);
+      else fetchHospitals();
+    }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, typeFilter]);
@@ -125,6 +138,20 @@ const HospitalsManagement: React.FC = () => {
           <option value="healwin_approved">HealWin approved</option>
           <option value="other">Other</option>
         </Select>
+        <Select
+          value={String(limit)}
+          onChange={(e) => {
+            setLimit(Number(e.target.value));
+            setPage(1);
+          }}
+          className="w-auto"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
+        <span className="text-sm text-gray-500">{total} hospital(s)</span>
       </div>
 
       <Card>
@@ -177,6 +204,14 @@ const HospitalsManagement: React.FC = () => {
           </ul>
         )}
       </Card>
+
+      <Pagination
+        page={page}
+        totalPages={Math.max(1, Math.ceil(total / limit))}
+        total={total}
+        label="hospitals"
+        onPageChange={setPage}
+      />
     </div>
   );
 };

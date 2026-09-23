@@ -93,7 +93,7 @@ export default function CallLogs() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
-  const [limit] = useState(25);
+  const [limit, setLimit] = useState(25);
   const [total, setTotal] = useState(0);
   /**
    * Which kind of call is on screen.
@@ -119,6 +119,10 @@ export default function CallLogs() {
   const [status, setStatus] = useState("");
   const [hasRecording, setHasRecording] = useState(false);
   const [search, setSearch] = useState("");
+  // What's actually queried: typing shouldn't fire a request per keystroke.
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [open, setOpen] = useState<Call | null>(null);
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
@@ -132,7 +136,9 @@ export default function CallLogs() {
       if (direction) params.direction = direction;
       if (status) params.status = status;
       if (hasRecording) params.hasRecording = "true";
-      if (search.trim()) params.search = search.trim();
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+      if (dateFrom) params.dateFrom = dateFrom;
+      if (dateTo) params.dateTo = dateTo;
       const res = await callsApi.list(params);
       setItems(res.data?.items || []);
       setTotal(res.data?.pagination?.total || 0);
@@ -141,15 +147,37 @@ export default function CallLogs() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, kind, direction, status, hasRecording, search]);
+  }, [page, limit, kind, direction, status, hasRecording, searchQuery, dateFrom, dateTo]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+  useEffect(() => {
     callsApi.stats().then((r) => setStats(r.data)).catch(() => setStats(null));
   }, []);
-  useEffect(() => { setPage(1); }, [kind, direction, status, hasRecording, search]);
+  useEffect(() => {
+    setPage(1);
+  }, [kind, direction, status, hasRecording, searchQuery, dateFrom, dateTo, limit]);
 
-  const filtered = !!(direction || status || hasRecording || search.trim());
+  const filtered = !!(
+    direction ||
+    status ||
+    hasRecording ||
+    searchQuery.trim() ||
+    dateFrom ||
+    dateTo
+  );
+
+  const clearFilters = () => {
+    setDirection("");
+    setStatus("");
+    setHasRecording(false);
+    setSearch("");
+    setDateFrom("");
+    setDateTo("");
+  };
   /**
    * An empty tab and an empty filter are different problems. Saying "no calls
    * yet" when a filter is hiding them sends someone to check the webhook for
@@ -300,10 +328,44 @@ export default function CallLogs() {
             <option key={s} value={s}>{label(s)}</option>
           ))}
         </Select>
+        <div className="flex items-center gap-2">
+          <Input
+            type="date"
+            className="w-40"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(e) => setDateFrom(e.target.value)}
+            aria-label="From date"
+          />
+          <span className="text-sm text-gray-400">to</span>
+          <Input
+            type="date"
+            className="w-40"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(e) => setDateTo(e.target.value)}
+            aria-label="To date"
+          />
+        </div>
         <label className="flex items-center gap-2 text-sm text-gray-600">
           <input type="checkbox" checked={hasRecording} onChange={(e) => setHasRecording(e.target.checked)} />
           Recorded only
         </label>
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
+        {filtered && (
+          <Button size="sm" variant="ghost" onClick={clearFilters}>
+            Clear filters
+          </Button>
+        )}
         <span className="text-sm text-gray-500">{total} call(s)</span>
       </div>
 
@@ -412,6 +474,7 @@ export default function CallLogs() {
         page={page}
         totalPages={Math.max(1, Math.ceil(total / limit))}
         total={total}
+        label="calls"
         onPageChange={setPage}
       />
 

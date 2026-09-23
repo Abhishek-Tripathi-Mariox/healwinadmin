@@ -23,6 +23,7 @@ import {
   shiftApi,
   workShiftApi,
 } from "../services/admin-api";
+import Pagination from "../components/Pagination";
 import SearchableSelect from "../components/SearchableSelect";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
@@ -132,6 +133,9 @@ const HospitalDetail: React.FC = () => {
   const [hospital, setHospital] = useState<Hospital | null>(null);
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
+  const [shiftPage, setShiftPage] = useState(1);
+  const [shiftTotal, setShiftTotal] = useState(0);
+  const SHIFT_LIMIT = 25;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -165,11 +169,16 @@ const HospitalDetail: React.FC = () => {
       try {
         const shiftRes = (await shiftApi.list({
           hospitalId: id,
-          limit: 100,
+          page: shiftPage,
+          limit: SHIFT_LIMIT,
         })) as ListResponse<ShiftRow>;
         setShifts(unwrapList(shiftRes));
+        setShiftTotal(
+          (shiftRes as any)?.data?.total ?? (shiftRes as any)?.rData?.total ?? 0,
+        );
       } catch {
         setShifts([]);
+        setShiftTotal(0);
       }
     } catch (e: any) {
       setError(e?.message || "Failed to load hospital");
@@ -181,7 +190,7 @@ const HospitalDetail: React.FC = () => {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, shiftPage]);
 
   const removeStaff = async (staffId: string) => {
     if (!id) return;
@@ -351,7 +360,7 @@ const HospitalDetail: React.FC = () => {
           to schedule a roster. */}
       <div className="flex items-center justify-between mt-8 mb-3">
         <h2 className="text-lg font-semibold text-gray-800">
-          Shifts ({shifts.length})
+          Shifts ({shiftTotal || shifts.length})
         </h2>
         {canManageShifts && (
           <Button
@@ -430,6 +439,14 @@ const HospitalDetail: React.FC = () => {
           </ul>
         )}
       </Card>
+
+      <Pagination
+        page={shiftPage}
+        totalPages={Math.max(1, Math.ceil(shiftTotal / SHIFT_LIMIT))}
+        total={shiftTotal}
+        label="shifts"
+        onPageChange={setShiftPage}
+      />
 
       {showAdd && id && (
         <AddStaffModal
@@ -752,7 +769,9 @@ const AddShiftModal: React.FC<AddShiftModalProps> = ({
 
   useEffect(() => {
     workShiftApi
-      .list({ active: "true" })
+      // The shift master is paged now; this is a template dropdown, so ask for
+      // the whole (small) master rather than the default first page.
+      .list({ active: "true", limit: "100" })
       .then((res: any) => {
         const rows = Array.isArray(res.data) ? res.data : res.data?.items || [];
         setTemplates(rows);

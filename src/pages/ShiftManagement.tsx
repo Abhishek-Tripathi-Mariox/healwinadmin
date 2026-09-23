@@ -6,6 +6,7 @@ import {
   ambulanceApi,
   ambulanceStaffApi,
 } from "../services/admin-api";
+import Pagination from "../components/Pagination";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
 import {
@@ -130,17 +131,24 @@ const ShiftManagement: React.FC = () => {
     role: "",
     status: "",
   });
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
 
   const fetchShifts = async () => {
     setLoading(true);
     setError(null);
     try {
-      const params: Record<string, string> = {};
+      const params: Record<string, string> = {
+        page: String(page),
+        limit: String(limit),
+      };
       Object.entries(filters).forEach(([k, v]) => {
         if (v) params[k] = v;
       });
       const res = (await shiftApi.list(params)) as ListResponse<ShiftRow>;
       setShifts(unwrap(res));
+      setTotal(res?.data?.total ?? res?.rData?.total ?? 0);
     } catch (e: any) {
       setError(e?.message || "Failed to load shifts");
     } finally {
@@ -175,7 +183,13 @@ const ShiftManagement: React.FC = () => {
   useEffect(() => {
     fetchShifts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+  }, [filters, page, limit]);
+
+  // A narrowed list is a different list — page 7 of the old one means nothing.
+  useEffect(() => {
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, limit]);
 
   const cancelShift = async (id: string) => {
     if (!await dialog.confirm({ message: "Cancel this shift?", confirmLabel: "Yes, cancel", cancelLabel: "Keep it", tone: "danger" })) return;
@@ -293,6 +307,17 @@ const ShiftManagement: React.FC = () => {
           <option value="cancelled">Cancelled</option>
           <option value="missed">Missed</option>
         </Select>
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-auto"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
+        <span className="text-sm text-gray-500">{total} shift(s)</span>
       </div>
 
       {error && (
@@ -377,6 +402,14 @@ const ShiftManagement: React.FC = () => {
           )}
         </TBody>
       </Table>
+
+      <Pagination
+        page={page}
+        totalPages={Math.max(1, Math.ceil(total / limit))}
+        total={total}
+        label="shifts"
+        onPageChange={setPage}
+      />
 
       {showCreate && (
         <CreateShiftModal

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import { Search } from "lucide-react";
 import { membershipPlanApi } from "../services/admin-api";
 import { useAuth } from "../auth/useAuth";
 import { PERMISSIONS } from "../auth/permissions";
+import Pagination from "../components/Pagination";
 import {
-  PageHeader, Button, Table, THead, TBody, TR, Th, Td, TableState, Badge,
+  PageHeader, Button, Select, Table, THead, TBody, TR, Th, Td, TableState, Badge,
   Modal, Field, Input, Alert,
 } from "../components/ui";
 import { dialog } from "../services/dialog";
@@ -45,18 +47,32 @@ export default function MembershipPlansManagement() {
   const [form, setForm] = useState<any>(empty);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  // What's actually queried: typing shouldn't fire a request per keystroke.
+  const [searchQuery, setSearchQuery] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await membershipPlanApi.list();
+      const params: Record<string, string | number> = { page, limit };
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+      const res = await membershipPlanApi.list(params);
       setItems(res.data?.items || []);
+      setTotal(res.data?.pagination?.total || 0);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit, searchQuery]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  useEffect(() => { setPage(1); }, [searchQuery, limit]);
 
   const openNew = () => {
     setEditing(null);
@@ -124,6 +140,29 @@ export default function MembershipPlansManagement() {
         actions={canManage && <Button onClick={openNew}>New Plan</Button>}
       />
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            className="w-64 pl-9"
+            placeholder="Plan name or tier…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
+        <span className="text-sm text-gray-500">{total} plan(s)</span>
+      </div>
+
       <Table>
         <THead>
           <Th>Name</Th><Th>Tier</Th><Th>Price</Th><Th>Duration</Th><Th>Concession</Th><Th>Family</Th><Th>Subscribers</Th><Th>Status</Th><Th className="text-right">Actions</Th>
@@ -132,7 +171,9 @@ export default function MembershipPlansManagement() {
           {loading && items.length === 0 ? (
             <TableState colSpan={9}>Loading…</TableState>
           ) : items.length === 0 ? (
-            <TableState colSpan={9}>No plans yet.</TableState>
+            <TableState colSpan={9}>
+              {searchQuery.trim() ? "No plans match this search." : "No plans yet."}
+            </TableState>
           ) : (
             items.map((p) => (
               <TR key={p._id}>
@@ -158,6 +199,16 @@ export default function MembershipPlansManagement() {
           )}
         </TBody>
       </Table>
+
+      <div className="mt-4">
+        <Pagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / limit))}
+          total={total}
+          label="plans"
+          onPageChange={setPage}
+        />
+      </div>
 
       <Modal
         open={open}

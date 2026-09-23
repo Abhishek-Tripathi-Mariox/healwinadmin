@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pencil, Power, Trash2 } from "lucide-react";
 import { offDutyReasonsApi } from "../services/admin-api";
+import Pagination from "../components/Pagination";
 import {
   PageHeader,
   Button,
   SearchInput,
+  Select,
   Table,
   THead,
   TBody,
@@ -31,6 +33,11 @@ export default function OffDutyReasonsManagement() {
   const [items, setItems] = useState<Reason[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  // What's actually queried: typing shouldn't fire a request per keystroke.
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [total, setTotal] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Reason | null>(null);
   const [form, setForm] = useState<{
@@ -39,25 +46,36 @@ export default function OffDutyReasonsManagement() {
     sortOrder: number;
   }>({ label: "", isActive: true, sortOrder: 0 });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string> = {};
-      if (search.trim()) params.search = search.trim();
+      const params: Record<string, string | number> = { page, limit };
+      if (searchQuery.trim()) params.search = searchQuery.trim();
       const res = await offDutyReasonsApi.list(params);
       setItems(res.data?.items || res.items || []);
+      setTotal(res.data?.pagination?.total ?? res.data?.total ?? 0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit, searchQuery]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, limit]);
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ label: "", isActive: true, sortOrder: items.length });
+    // Default to the end of the list, which is the count across every page.
+    setForm({ label: "", isActive: true, sortOrder: total });
     setShowForm(true);
   };
 
@@ -95,9 +113,16 @@ export default function OffDutyReasonsManagement() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-full max-w-xs"
         />
-        <Button variant="secondary" onClick={load}>
-          Apply
-        </Button>
+        <Select
+          value={String(limit)}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          className="w-32"
+          aria-label="Rows per page"
+        >
+          {[25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </Select>
       </div>
 
       <Table>
@@ -112,9 +137,15 @@ export default function OffDutyReasonsManagement() {
             <TableState colSpan={4}>Loading…</TableState>
           ) : items.length === 0 ? (
             <TableState colSpan={4}>
-              No reasons configured yet. Click <b>New Reason</b> to add one, or
-              run the seed script:{" "}
-              <code>npx ts-node src/scripts/seed-off-duty-reasons.ts</code>
+              {searchQuery.trim() ? (
+                "No reasons match this search."
+              ) : (
+                <>
+                  No reasons configured yet. Click <b>New Reason</b> to add one,
+                  or run the seed script:{" "}
+                  <code>npx ts-node src/scripts/seed-off-duty-reasons.ts</code>
+                </>
+              )}
             </TableState>
           ) : (
             items.map((r) => (
@@ -172,6 +203,16 @@ export default function OffDutyReasonsManagement() {
           )}
         </TBody>
       </Table>
+
+      <div className="mt-4">
+        <Pagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / limit))}
+          total={total}
+          label="reasons"
+          onPageChange={setPage}
+        />
+      </div>
 
       <Modal
         open={showForm}
