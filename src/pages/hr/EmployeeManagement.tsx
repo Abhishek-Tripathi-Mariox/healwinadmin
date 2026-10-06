@@ -19,6 +19,7 @@ import {
 } from "../../components/ui";
 import { dialog } from "../../services/dialog";
 import Pagination from "../../components/Pagination";
+import WeekOffPicker from "../../components/WeekOffPicker";
 
 interface Ref { _id: string; name: string }
 
@@ -138,6 +139,9 @@ const emptyForm = {
   pfApplicable: true,
   esiApplicable: true,
   ptApplicable: true,
+  // Empty means "use the organisation default" — not "works every day".
+  weekOffDays: [] as number[],
+  weekOffSaturdays: [] as number[],
 };
 
 export default function EmployeeManagement() {
@@ -381,6 +385,8 @@ export default function EmployeeManagement() {
       pfApplicable: s.pfApplicable !== false,
       esiApplicable: s.esiApplicable !== false,
       ptApplicable: s.ptApplicable !== false,
+      weekOffDays: emp.weekOffDays || [],
+      weekOffSaturdays: emp.weekOffSaturdays || [],
     });
     setShow(true);
   };
@@ -414,6 +420,8 @@ export default function EmployeeManagement() {
     pan: form.pan || undefined,
     aadhaar: form.aadhaar || undefined,
     uan: form.uan || undefined,
+    weekOffDays: form.weekOffDays,
+    weekOffSaturdays: form.weekOffSaturdays,
     salaryStructure: {
       ctcAnnual: Number(form.ctcAnnual) || 0,
       basic: Number(form.basic) || 0,
@@ -808,6 +816,19 @@ export default function EmployeeManagement() {
                 </Select>
               </Field>
             </div>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Week offs</h3>
+            <WeekOffPicker
+              label="Days this person does not work"
+              days={form.weekOffDays}
+              saturdays={form.weekOffSaturdays}
+              onChange={(weekOffDays, weekOffSaturdays) =>
+                setForm({ ...form, weekOffDays, weekOffSaturdays })
+              }
+              hint="Leave empty to use the organisation default set under Payroll → Working calendar."
+            />
           </div>
 
           <div>

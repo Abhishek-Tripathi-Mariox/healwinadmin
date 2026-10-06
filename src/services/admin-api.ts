@@ -1565,6 +1565,40 @@ export const offDutyReasonsApi = {
     fetchWithAuth(`/admin/off-duty-reasons/${id}`, { method: "DELETE" }),
 };
 
+// ==================== RIDE DRIVERS API ====================
+// The Driver collection behind the driver app. Separate from
+// `ambulanceStaffApi` above, which is ambulance crew. Driver-app login is
+// invite-only, so `create` here is the only way a driver account is born.
+export const driversApi = {
+  list: (params: Record<string, string | number | boolean> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/drivers${qs ? `?${qs}` : ""}`);
+  },
+  create: (data: {
+    fullName: string;
+    mobileNumber: string;
+    email?: string;
+    district?: string;
+    state?: string;
+  }) =>
+    fetchWithAuth("/admin/drivers", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: Record<string, unknown>) =>
+    fetchWithAuth(`/admin/drivers/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  setStatus: (id: string, status: string, reason?: string) =>
+    fetchWithAuth(`/admin/drivers/${id}/status`, {
+      method: "PUT",
+      body: JSON.stringify({ status, reason }),
+    }),
+  remove: (id: string) =>
+    fetchWithAuth(`/admin/drivers/${id}`, { method: "DELETE" }),
+};
+
 // ==================== AMBULANCE STAFF API ====================
 export const ambulanceStaffApi = {
   list: (params: Record<string, string | number | boolean> = {}) => {
@@ -2167,6 +2201,41 @@ export const employeeShiftApi = {
   },
   add: (data: { employeeId: string; date: string; shift: string; startTime?: string; endTime?: string; department?: string; section?: string; notes?: string }) =>
     fetchWithAuth("/admin/employee-shifts", { method: "POST", body: JSON.stringify(data) }),
+  /**
+   * Roster many people over a date range in one call. Targets are either an
+   * explicit `employeeIds` list or a department/designation filter — the
+   * server refuses a request that gives neither, because "everyone" is almost
+   * always a mis-click.
+   */
+  bulkAssign: (data: {
+    employeeIds?: string[];
+    departmentId?: string;
+    designationIds?: string[];
+    from: string;
+    to: string;
+    shift: string;
+    startTime?: string;
+    endTime?: string;
+    department?: string;
+    section?: string;
+    notes?: string;
+    skipWeekOffs?: boolean;
+  }) =>
+    fetchWithAuth("/admin/employee-shifts/bulk", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  /** The undo for a bad bulk assign: clears a range back off the roster. */
+  bulkRemove: (data: {
+    employeeIds: string[];
+    from: string;
+    to: string;
+    shift?: string;
+  }) =>
+    fetchWithAuth("/admin/employee-shifts/bulk", {
+      method: "DELETE",
+      body: JSON.stringify(data),
+    }),
   remove: (id: string) => fetchWithAuth(`/admin/employee-shifts/${id}`, { method: "DELETE" }),
 };
 
@@ -2581,6 +2650,20 @@ export const attendanceApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  /**
+   * Fill a month's holidays / week offs into attendance. Both only write days
+   * that carry no decision yet, so nothing already marked is overwritten.
+   */
+  applyHolidays: (month: number, year: number) =>
+    fetchWithAuth("/admin/hr/attendance/apply-holidays", {
+      method: "POST",
+      body: JSON.stringify({ month, year }),
+    }),
+  applyWeekOffs: (month: number, year: number) =>
+    fetchWithAuth("/admin/hr/attendance/apply-week-offs", {
+      method: "POST",
+      body: JSON.stringify({ month, year }),
+    }),
 };
 
 // ==================== HR — LEAVE API ====================
@@ -2742,12 +2825,21 @@ export const payrollApi = {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/hr/payroll/runs${qs ? `?${qs}` : ""}`);
   },
-  /** The payroll calendar — which day of the month a period starts on. */
+  /**
+   * The working calendar: which day of the month a pay period starts on, plus
+   * the week-off pattern used for everyone without a personal one.
+   */
   settings: () => fetchWithAuth("/admin/hr/payroll/settings"),
-  updateSettings: (cycleStartDay: number) =>
+  updateSettings: (data: {
+    cycleStartDay: number;
+    /** 0 = Sunday … 6 = Saturday. */
+    defaultWeekOffDays?: number[];
+    /** Which Saturdays of the month are off, e.g. [2, 4]. */
+    defaultWeekOffSaturdays?: number[];
+  }) =>
     fetchWithAuth("/admin/hr/payroll/settings", {
       method: "PUT",
-      body: JSON.stringify({ cycleStartDay }),
+      body: JSON.stringify(data),
     }),
   // `acknowledgeUnmarked` confirms a run for a month with no attendance marked
   // at all — the server refuses that outright otherwise, because every

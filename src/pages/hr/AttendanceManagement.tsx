@@ -76,6 +76,8 @@ export default function AttendanceManagement() {
   const [marks, setMarks] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [applyingWeekOffs, setApplyingWeekOffs] = useState(false);
+  const [applyingHolidays, setApplyingHolidays] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [total, setTotal] = useState(0);
@@ -138,6 +140,82 @@ export default function AttendanceManagement() {
     setMarks(next);
   };
 
+  /**
+   * Fill the whole month's week offs into attendance in one pass — the same
+   * shape as the holiday pass. Without it, every off day has to be marked by
+   * hand or it reaches payroll as an unmarked (and so unpaid) day.
+   */
+  const applyWeekOffs = async () => {
+    const [year, month] = date.split("-").map(Number);
+    const label = new Date(year, month - 1, 1).toLocaleDateString("en-IN", {
+      month: "long",
+      year: "numeric",
+    });
+    const ok = await dialog.confirm({
+      title: `Fill week offs for ${label}?`,
+      message:
+        "Each employee's off days — from their own pattern, the organisation default, or a day the roster marks as a week off — are written into this month's attendance.\n\nDays that already carry a decision are never overwritten, so a week off somebody actually worked stays exactly as it is.",
+      confirmLabel: "Fill week offs",
+    });
+    if (!ok) return;
+    setApplyingWeekOffs(true);
+    try {
+      const res = await attendanceApi.applyWeekOffs(month, year);
+      const days = res.data?.daysMarked ?? 0;
+      await dialog.alert({
+        title: days ? "Week offs filled" : "Nothing to fill",
+        message: days
+          ? `${days} ${days === 1 ? "day" : "days"} marked as week off across ${res.data?.employees ?? 0} employees. Days that already had a decision were left untouched.`
+          : "Every week off this month already carries a decision, so nothing was changed.",
+      });
+      await load();
+    } catch (err) {
+      void dialog.alert(
+        err instanceof Error ? err.message : "Could not fill the week offs.",
+      );
+    } finally {
+      setApplyingWeekOffs(false);
+    }
+  };
+
+  /**
+   * The holiday calendar's counterpart to the pass above. The endpoint has
+   * existed since holidays were made real, but nothing in the panel ever
+   * called it — so a closed holiday reached payroll as an unmarked day.
+   */
+  const applyHolidays = async () => {
+    const [year, month] = date.split("-").map(Number);
+    const label = new Date(year, month - 1, 1).toLocaleDateString("en-IN", {
+      month: "long",
+      year: "numeric",
+    });
+    const ok = await dialog.confirm({
+      title: `Fill holidays for ${label}?`,
+      message:
+        "Days the organisation is closed for are written into this month's attendance for everyone on the rolls.\n\nWorking holidays are left out — those are worked and earn a compensatory off instead. Days that already carry a decision are never overwritten.",
+      confirmLabel: "Fill holidays",
+    });
+    if (!ok) return;
+    setApplyingHolidays(true);
+    try {
+      const res = await attendanceApi.applyHolidays(month, year);
+      const days = res.data?.daysMarked ?? 0;
+      await dialog.alert({
+        title: days ? "Holidays filled" : "Nothing to fill",
+        message: days
+          ? `${days} ${days === 1 ? "day" : "days"} marked as holiday, from ${res.data?.holidays ?? 0} holiday(s) this month. Days that already had a decision were left untouched.`
+          : "No closed holiday this month is missing from attendance, so nothing was changed.",
+      });
+      await load();
+    } catch (err) {
+      void dialog.alert(
+        err instanceof Error ? err.message : "Could not fill the holidays.",
+      );
+    } finally {
+      setApplyingHolidays(false);
+    }
+  };
+
   const save = async () => {
     const entries = Object.entries(marks).map(([employeeId, status]) => ({ employeeId, status }));
     if (entries.length === 0) return;
@@ -159,9 +237,27 @@ export default function AttendanceManagement() {
         subtitle="Mark daily attendance — feeds payroll loss-of-pay"
         actions={
           canManage ? (
-            <Button onClick={save} disabled={saving}>
-              {saving ? "Saving…" : "Save Attendance"}
-            </Button>
+            <>
+              <Button
+                variant="secondary"
+                onClick={applyHolidays}
+                disabled={applyingHolidays}
+                title="Fill this month's holidays into attendance"
+              >
+                {applyingHolidays ? "Filling…" : "Apply holidays"}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={applyWeekOffs}
+                disabled={applyingWeekOffs}
+                title="Fill this month's week offs into attendance"
+              >
+                {applyingWeekOffs ? "Filling…" : "Apply week offs"}
+              </Button>
+              <Button onClick={save} disabled={saving}>
+                {saving ? "Saving…" : "Save Attendance"}
+              </Button>
+            </>
           ) : undefined
         }
       />

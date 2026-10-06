@@ -10,6 +10,7 @@ import {
   Modal, Field, Input, Alert,
 } from "../../components/ui";
 import { dialog } from "../../services/dialog";
+import WeekOffPicker, { describeWeekOff } from "../../components/WeekOffPicker";
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const inr = (n: number) => "₹" + (n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -32,6 +33,15 @@ interface Payslip {
   _id: string; employeeCode: string; employeeName: string; month: number; year: number;
   paidDays: number; lopDays: number; serviceDays?: number; totalDays?: number; unmarkedDays?: number;
   earnings: { gross: number }; deductions: { total: number }; netPay: number;
+}
+
+/** What GET/PUT /hr/payroll/settings carries — the working calendar. */
+interface PayrollSettings {
+  cycleStartDay: number;
+  /** 0 = Sunday … 6 = Saturday. */
+  defaultWeekOffDays?: number[];
+  /** Which Saturdays of the month are off, e.g. [2, 4]. */
+  defaultWeekOffSaturdays?: number[];
 }
 
 const now = new Date();
@@ -58,7 +68,7 @@ export default function PayrollManagement() {
 
   // The payroll calendar. Shown next to the month picker so it is obvious
   // which days a run will cover before it is generated.
-  const [cycle, setCycle] = useState<{ cycleStartDay: number } | null>(null);
+  const [cycle, setCycle] = useState<PayrollSettings | null>(null);
   const [cycleOpen, setCycleOpen] = useState(false);
 
   const loadCycle = useCallback(() => {
@@ -435,7 +445,12 @@ export default function PayrollManagement() {
                 onClick={() => setCycleOpen(true)}
                 className="mt-0.5 text-xs text-healwin-600 hover:underline"
               >
-                Cycle starts on day {cycle.cycleStartDay} — change
+                Cycle starts on day {cycle.cycleStartDay} · off{" "}
+                {describeWeekOff(
+                  cycle.defaultWeekOffDays || [],
+                  cycle.defaultWeekOffSaturdays || [],
+                )}{" "}
+                — change
               </button>
             </div>
           )}
@@ -444,10 +459,10 @@ export default function PayrollManagement() {
 
       <CycleModal
         open={cycleOpen}
-        current={cycle?.cycleStartDay ?? 16}
+        current={cycle}
         onClose={() => setCycleOpen(false)}
-        onSaved={(day) => {
-          setCycle((c) => (c ? { ...c, cycleStartDay: day } : c));
+        onSaved={(saved) => {
+          setCycle((c) => (c ? { ...c, ...saved } : saved));
           setCycleOpen(false);
           loadCycle();
         }}
@@ -508,11 +523,13 @@ export default function PayrollManagement() {
 }
 
 /**
- * The payroll calendar.
+ * The working calendar.
  *
- * Changing this moves every future run's period, so it states what the new
- * cycle means in plain dates before saving, and the server keeps already
- * finalized runs on the period they were actually run under.
+ * Changing the cycle moves every future run's period, so it states what the
+ * new cycle means in plain dates before saving, and the server keeps already
+ * finalized runs on the period they were actually run under. The week-off
+ * default lives here because it shapes the same calendar: which days a person
+ * is expected to work at all.
  */
 function CycleModal({
   open,
@@ -521,32 +538,53 @@ function CycleModal({
   onSaved,
 }: {
   open: boolean;
-  current: number;
+  current: PayrollSettings | null;
   onClose: () => void;
-  onSaved: (day: number) => void;
+  onSaved: (saved: PayrollSettings) => void;
 }) {
-  const [day, setDay] = useState(current);
+  const currentDay = current?.cycleStartDay ?? 16;
+  const [day, setDay] = useState(currentDay);
+  const [weekOffDays, setWeekOffDays] = useState<number[]>([]);
+  const [weekOffSaturdays, setWeekOffSaturdays] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
 
   useEffect(() => {
     if (open) {
-      setDay(current);
+      setDay(currentDay);
+      setWeekOffDays(current?.defaultWeekOffDays || []);
+      setWeekOffSaturdays(current?.defaultWeekOffSaturdays || []);
       setError("");
       setNote("");
     }
-  }, [open, current]);
+  }, [open, current, currentDay]);
+
+  const changed =
+    day !== currentDay ||
+    weekOffDays.join() !== (current?.defaultWeekOffDays || []).join() ||
+    weekOffSaturdays.join() !== (current?.defaultWeekOffSaturdays || []).join();
 
   const save = async () => {
     setSaving(true);
     setError("");
     try {
-      const res = await payrollApi.updateSettings(day);
+      const res = await payrollApi.updateSettings({
+        cycleStartDay: day,
+        defaultWeekOffDays: weekOffDays,
+        defaultWeekOffSaturdays: weekOffSaturdays,
+      });
       setNote(res.data?.note || "");
-      onSaved(res.data?.cycleStartDay ?? day);
+      onSaved({
+        cycleStartDay: res.data?.cycleStartDay ?? day,
+        defaultWeekOffDays: res.data?.defaultWeekOffDays ?? weekOffDays,
+        defaultWeekOffSaturdays:
+          res.data?.defaultWeekOffSaturdays ?? weekOffSaturdays,
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save the cycle.");
+      setError(
+        e instanceof Error ? e.message : "Could not save the working calendar.",
+      );
     } finally {
       setSaving(false);
     }
@@ -563,14 +601,14 @@ function CycleModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Payroll cycle"
-      subtitle="Which day of the month a pay period begins"
+      title="Working calendar"
+      subtitle="When a pay period begins, and which days are off by default"
       size="sm"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} disabled={saving || day === current}>
-            {saving ? "Saving…" : "Save cycle"}
+          <Button onClick={save} disabled={saving || !changed}>
+            {saving ? "Saving…" : "Save calendar"}
           </Button>
         </>
       }
@@ -592,6 +630,16 @@ function CycleModal({
         <p className="text-xs text-gray-400">
           Runs that are already finalized keep the period they were run under.
         </p>
+
+        <div className="border-t border-gray-100 pt-3">
+          <WeekOffPicker
+            label="Default week offs"
+            days={weekOffDays}
+            saturdays={weekOffSaturdays}
+            onChange={(d, sat) => { setWeekOffDays(d); setWeekOffSaturdays(sat); }}
+            hint="Used for everyone who has no week-off pattern of their own on their employee record."
+          />
+        </div>
       </div>
     </Modal>
   );

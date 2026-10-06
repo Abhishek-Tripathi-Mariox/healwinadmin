@@ -202,6 +202,14 @@ const Sidebar: React.FC<SidebarProps> = ({
       icon: Users,
       path: "/admin/users",
     },
+    // Ride drivers (driver app). Ambulance crew is a separate list under
+    // Ambulance Operations -> Drivers & Attendants.
+    {
+      id: "drivers",
+      label: "Drivers",
+      icon: Car,
+      path: "/admin/drivers",
+    },
     // Named for what it holds (providers + crew + vehicles + shifts + pricing)
     // rather than "Service Providers", which collided with its own first child.
     // `id` stays "providers-group" — it is the openDropdowns state key.

@@ -101,6 +101,7 @@ const UserManagement = lazy(() => import("./pages/UserManagement"));
 const ServiceProviderManagement = lazy(
   () => import("./pages/ServiceProviderManagement"),
 );
+const DriversManagement = lazy(() => import("./pages/DriversManagement"));
 const AmbulanceStaffManagement = lazy(
   () => import("./pages/AmbulanceStaffManagement"),
 );
@@ -393,6 +394,15 @@ export const adminRoutes = [
     element: AmbulanceStaffManagement,
     name: "Ambulance Staff",
     icon: Users,
+  },
+  // Ride drivers (driver app). Distinct from "Ambulance Staff" above, which is
+  // ambulance crew. Login is invite-only, so this page is where drivers are
+  // onboarded.
+  {
+    path: "drivers",
+    element: DriversManagement,
+    name: "Drivers",
+    icon: Car,
   },
   // Drill-in route — reached by clicking a row on the Drivers list.
   // Hidden from the sidebar; permission piggy-backs on the parent.
