@@ -2976,11 +2976,27 @@ export const ambulanceRequestApi = {
       method: "PUT",
       body: JSON.stringify({ expenses }),
     }),
-  // Mark the bill collected (e.g. crew took Cash/UPI on the spot).
-  markPaid: (id: string, method = "CASH") =>
+  // Mark the bill collected off-app (crew took Cash/UPI on the spot). Leaving
+  // `amount` out records the whole outstanding balance.
+  markPaid: (id: string, method = "CASH", amount?: number) =>
     fetchWithAuth(`/admin/ambulance-requests/${id}/payment`, {
       method: "POST",
-      body: JSON.stringify({ method }),
+      body: JSON.stringify(amount != null ? { method, amount } : { method }),
+    }),
+};
+
+// ==================== PAYMENTS (collected money + refunds) ====================
+export const paymentApi = {
+  list: (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams(sanitizeParams(params)).toString();
+    return fetchWithAuth(`/admin/payments${qs ? `?${qs}` : ""}`);
+  },
+  detail: (id: string) => fetchWithAuth(`/admin/payments/${id}`),
+  // Omit `amount` to refund everything still refundable on this payment.
+  refund: (id: string, body: { amount?: number; reason?: string } = {}) =>
+    fetchWithAuth(`/admin/payments/${id}/refund`, {
+      method: "POST",
+      body: JSON.stringify(body),
     }),
 };
 

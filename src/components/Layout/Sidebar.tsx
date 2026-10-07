@@ -760,6 +760,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           path: "/admin/activity-logs",
         },
         {
+          id: "payments",
+          label: "Payments & Refunds",
+          icon: IndianRupee,
+          path: "/admin/payments",
+        },
+        {
           id: "payment-config",
           label: "Payment Configuration",
           icon: CreditCard,

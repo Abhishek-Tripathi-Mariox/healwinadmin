@@ -156,6 +156,10 @@ export const PERMISSIONS = {
   CALLS_MANAGE: "calls:manage",
   PAYMENT_CONFIG_VIEW: "payment_config:view",
   PAYMENT_CONFIG_MANAGE: "payment_config:manage",
+  // Collected money + refunds (distinct from gateway CONFIGURATION above).
+  PAYMENTS_VIEW: "payments:view",
+  PAYMENTS_PROCESS: "payments:process",
+  PAYMENTS_REFUND: "payments:refund",
   // HR & Payroll
   HR_DASHBOARD_VIEW: "hr_dashboard:view",
   EMPLOYEES_VIEW: "employees:view",
@@ -290,6 +294,7 @@ export const SIDEBAR_PERMISSION_MAP: Record<string, string[]> = {
   "pharmacy-dispense": [PERMISSIONS.INVENTORY_VIEW],
   calls: [PERMISSIONS.CALLS_VIEW],
   "payment-config": [PERMISSIONS.PAYMENT_CONFIG_VIEW],
+  payments: [PERMISSIONS.PAYMENTS_VIEW],
   "ambulance-requests": [PERMISSIONS.SOS_VIEW],
   // HR & Payroll
   hr: [PERMISSIONS.HR_DASHBOARD_VIEW],
