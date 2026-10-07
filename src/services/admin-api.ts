@@ -2664,6 +2664,41 @@ export const attendanceApi = {
       method: "POST",
       body: JSON.stringify({ month, year }),
     }),
+
+  /**
+   * Import a biometric export. `dryRun` validates and reports without
+   * writing — the screen always previews first, because committing
+   * OVERWRITES days that are already marked.
+   */
+  importCsv: async (file: File, dryRun: boolean) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("dryRun", String(dryRun));
+    return fetchWithAuth("/admin/hr/attendance/import", {
+      method: "POST",
+      body: fd,
+    });
+  },
+  /**
+   * Download the CSV template. Fetched as a blob rather than linked: the
+   * endpoint needs the bearer token and an <a href> cannot carry one.
+   */
+  downloadImportTemplate: async () => {
+    const token = getAuthToken();
+    const res = await fetch(`${API_URL}/admin/hr/attendance/import/template`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("Could not download the template");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "attendance-import-template.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 };
 
 // ==================== HR — LEAVE API ====================

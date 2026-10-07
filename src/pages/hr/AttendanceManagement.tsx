@@ -9,7 +9,7 @@ import {
   Modal, Field, Select, Alert,
 } from "../../components/ui";
 import { dialog } from "../../services/dialog";
-import { Pencil, Search } from "lucide-react";
+import { Pencil, Search, Upload } from "lucide-react";
 
 interface RosterRow {
   employee: { _id: string; fullName: string; employeeCode: string; departmentId?: { name: string } };
@@ -48,6 +48,36 @@ const today = () => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 
+/** What the import endpoint reports, for both the preview and the commit. */
+interface ImportSummary {
+  dryRun: boolean;
+  totalRows: number;
+  days: number;
+  employees: number;
+  from?: string;
+  to?: string;
+  newDays: number;
+  overwrites: number;
+  derivedFromHours: number;
+  failed: number;
+  imported?: number;
+  unknownCodes: string[];
+  warnings: string[];
+  errors: { row: number; employee: string; date: string; errors: string[] }[];
+  preview: {
+    employeeCode: string;
+    name: string;
+    date: string;
+    checkIn: string | null;
+    checkOut: string | null;
+    status: string;
+    statusSource: string;
+    workedMinutes: number;
+    overwrites: boolean;
+    punches: number;
+  }[];
+}
+
 export default function AttendanceManagement() {
   const { hasPermission } = useAuth();
   const canManage = hasPermission(PERMISSIONS.ATTENDANCE_MANAGE);
@@ -73,6 +103,7 @@ export default function AttendanceManagement() {
   // forget to punch, arrive through a side door, or work a shift the system
   // never knew about — so HR has to be able to set the record straight.
   const [correcting, setCorrecting] = useState<RosterRow | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [marks, setMarks] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -254,6 +285,14 @@ export default function AttendanceManagement() {
               >
                 {applyingWeekOffs ? "Filling…" : "Apply week offs"}
               </Button>
+              <Button
+                variant="secondary"
+                icon={<Upload className="h-4 w-4" />}
+                onClick={() => setImportOpen(true)}
+                title="Import a biometric device export — one day or a whole month"
+              >
+                Import biometric CSV
+              </Button>
               <Button onClick={save} disabled={saving}>
                 {saving ? "Saving…" : "Save Attendance"}
               </Button>
@@ -427,6 +466,12 @@ export default function AttendanceManagement() {
         onClose={() => setCorrecting(null)}
         onSaved={() => { setCorrecting(null); load(); }}
       />
+
+      <ImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={load}
+      />
     </div>
   );
 }
@@ -544,5 +589,275 @@ function CorrectionModal({
         </p>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Import a biometric export.
+ *
+ * Previews before it writes, because committing OVERWRITES days that are
+ * already marked — which is what an import is for, but never something to
+ * discover afterwards. The preview counts those separately from new days.
+ */
+function ImportModal({
+  open,
+  onClose,
+  onImported,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<ImportSummary | null>(null);
+  const [result, setResult] = useState<ImportSummary | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const reset = () => {
+    setFile(null);
+    setPreview(null);
+    setResult(null);
+    setError("");
+  };
+
+  const runPreview = async (f: File) => {
+    setBusy(true);
+    setError("");
+    setResult(null);
+    try {
+      const res = await attendanceApi.importCsv(f, true);
+      setPreview(res.data);
+    } catch (e) {
+      setPreview(null);
+      setError(e instanceof Error ? e.message : "That file could not be read.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const commit = async () => {
+    if (!file) return;
+    if (
+      preview?.overwrites &&
+      !(await dialog.confirm({
+        title: `Overwrite ${preview.overwrites} day${preview.overwrites === 1 ? "" : "s"} already marked?`,
+        message:
+          "Those days have an attendance decision on them already. The file's version replaces it, and attendance feeds payroll — so a day someone was marked present on becomes whatever this file says.",
+        confirmLabel: "Replace them",
+        tone: "danger",
+      }))
+    )
+      return;
+
+    setBusy(true);
+    setError("");
+    try {
+      const res = await attendanceApi.importCsv(file, false);
+      setResult(res.data);
+      setPreview(null);
+      onImported();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The import failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const range = (s?: ImportSummary | null) =>
+    s?.from ? (s.from === s.to ? s.from : `${s.from} → ${s.to}`) : "—";
+
+  return (
+    <Modal
+      open={open}
+      onClose={() => { onClose(); reset(); }}
+      title="Import biometric attendance"
+      subtitle="One day or a whole month — the file's own dates decide"
+      size="lg"
+      footer={
+        <>
+          <Button variant="secondary" onClick={() => { onClose(); reset(); }}>
+            Close
+          </Button>
+          {preview && preview.days > 0 && (
+            <Button onClick={commit} disabled={busy}>
+              {busy
+                ? "Importing…"
+                : `Import ${preview.days} day${preview.days === 1 ? "" : "s"}`}
+            </Button>
+          )}
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && <Alert tone="danger">{error}</Alert>}
+
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+          <p className="mb-2">
+            <strong>Employee Code</strong> and <strong>Date</strong> are
+            required; the code is matched against the roster (email or phone
+            work too). Leave <strong>Status</strong> blank and the day is
+            worked out from the hours against that person&rsquo;s shift.
+            Several punch rows for one person on one day are combined into
+            the earliest in and the latest out.
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() =>
+              attendanceApi
+                .downloadImportTemplate()
+                .catch((e) =>
+                  setError(e instanceof Error ? e.message : "Download failed"),
+                )
+            }
+          >
+            Download template
+          </Button>
+        </div>
+
+        <Field label="CSV file">
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-healwin-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-healwin-700 hover:file:bg-healwin-100"
+            onChange={(e) => {
+              const f = e.target.files?.[0] || null;
+              setFile(f);
+              setResult(null);
+              // Preview straight away — there is no reason to make someone
+              // press a second button before seeing what is wrong.
+              if (f) runPreview(f);
+            }}
+          />
+        </Field>
+
+        {busy && !preview && !result && (
+          <p className="text-sm text-gray-500">Checking the file…</p>
+        )}
+
+        {/* Preview — what WOULD happen. Nothing has been written yet. */}
+        {preview && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Badge tone="neutral">{preview.totalRows} rows read</Badge>
+              <Badge tone="neutral">{range(preview)}</Badge>
+              <Badge tone="neutral">{preview.employees} people</Badge>
+              <Badge tone={preview.newDays ? "success" : "neutral"}>
+                {preview.newDays} new day{preview.newDays === 1 ? "" : "s"}
+              </Badge>
+              {preview.overwrites > 0 && (
+                <Badge tone="warning">{preview.overwrites} already marked</Badge>
+              )}
+              {preview.derivedFromHours > 0 && (
+                <Badge tone="info">
+                  {preview.derivedFromHours} status worked out from hours
+                </Badge>
+              )}
+              {preview.failed > 0 && (
+                <Badge tone="danger">{preview.failed} rows with problems</Badge>
+              )}
+            </div>
+
+            {preview.overwrites > 0 && (
+              <Alert tone="warning">
+                {preview.overwrites} of these days already carry an attendance
+                decision. Importing replaces them.
+              </Alert>
+            )}
+            {preview.warnings.map((w) => (
+              <Alert key={w} tone="warning">{w}</Alert>
+            ))}
+            {preview.unknownCodes.length > 0 && (
+              <Alert tone="danger">
+                No employee matches: {preview.unknownCodes.join(", ")}. Those
+                rows are skipped — fix the codes in the sheet, or add the
+                people first.
+              </Alert>
+            )}
+            {preview.errors.length > 0 && <RowProblems rows={preview.errors} />}
+            {preview.preview.length > 0 && <PreviewRows rows={preview.preview} />}
+          </div>
+        )}
+
+        {/* Result — what actually happened. */}
+        {result && (
+          <Alert tone="success">
+            {result.imported} day{result.imported === 1 ? "" : "s"} imported
+            for {result.employees} {result.employees === 1 ? "person" : "people"}{" "}
+            ({range(result)}).
+            {result.failed > 0 && ` ${result.failed} rows were skipped.`}
+          </Alert>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/** Rows the file got wrong, with the line number to fix in the spreadsheet. */
+function RowProblems({
+  rows,
+}: {
+  rows: { row: number; employee: string; date: string; errors: string[] }[];
+}) {
+  return (
+    <div className="max-h-48 overflow-y-auto rounded-lg border border-red-100 bg-red-50 p-2">
+      {rows.map((r) => (
+        <div key={`${r.row}`} className="px-2 py-1 text-xs text-red-700">
+          <span className="font-medium">Row {r.row}</span>
+          {r.employee !== "—" && <span> · {r.employee}</span>}
+          {r.date && <span> · {r.date}</span>} — {r.errors.join("; ")}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** What each day would become, so the decision is visible before committing. */
+function PreviewRows({
+  rows,
+}: {
+  rows: ImportSummary["preview"];
+}) {
+  return (
+    <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-200">
+      <Table>
+        <THead>
+          {/* THead renders the <tr> itself — these are its cells. */}
+          <Th>Date</Th><Th>Employee</Th><Th>In</Th><Th>Out</Th>
+          <Th>Worked</Th><Th>Status</Th>
+        </THead>
+        <TBody>
+          {rows.map((r) => (
+            <TR key={`${r.employeeCode}-${r.date}`}>
+              <Td className="whitespace-nowrap text-xs">{r.date}</Td>
+              <Td>
+                <div className="text-sm text-gray-800">{r.name}</div>
+                <div className="font-mono text-[11px] text-gray-400">
+                  {r.employeeCode}
+                  {r.punches > 1 && ` · ${r.punches} punches`}
+                </div>
+              </Td>
+              <Td className="text-xs">{r.checkIn || "—"}</Td>
+              <Td className="text-xs">{r.checkOut || "—"}</Td>
+              <Td className="text-xs">{dur(r.workedMinutes)}</Td>
+              <Td>
+                <Badge
+                  tone={
+                    STATUSES.find((s) => s.value === r.status)?.tone || "neutral"
+                  }
+                >
+                  {r.status.replace("_", " ")}
+                </Badge>
+                {r.overwrites && (
+                  <div className="text-[11px] text-amber-600">replaces a marked day</div>
+                )}
+                <div className="text-[11px] text-gray-400">from {r.statusSource}</div>
+              </Td>
+            </TR>
+          ))}
+        </TBody>
+      </Table>
+    </div>
   );
 }

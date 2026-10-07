@@ -282,16 +282,15 @@ export default function PaymentsManagement() {
       <Card>
         <Table>
           <THead>
-            <TR>
-              <Th>When</Th>
-              <Th>Customer</Th>
-              <Th>For</Th>
-              <Th>Amount</Th>
-              <Th>Method</Th>
-              <Th>Status</Th>
-              <Th>Gateway id</Th>
-              <Th />
-            </TR>
+            {/* THead renders the <tr> itself — these are its cells. */}
+            <Th>When</Th>
+            <Th>Customer</Th>
+            <Th>For</Th>
+            <Th>Amount</Th>
+            <Th>Method</Th>
+            <Th>Status</Th>
+            <Th>Gateway id</Th>
+            <Th />
           </THead>
           <TBody>
             {loading && <TableState colSpan={8}>Loading…</TableState>}
@@ -316,7 +315,13 @@ export default function PaymentsManagement() {
                   </Td>
                   <Td>
                     <div className="text-sm text-gray-800">{purposeLabel(p.purpose)}</div>
-                    <div className="text-xs text-gray-500">{p.description}</div>
+                    {/* The description is the line the customer saw on the
+                        checkout sheet. For most purposes it just restates the
+                        label — printing both gives "Lab tests / Lab tests". */}
+                    {p.description &&
+                      p.description.toLowerCase() !== purposeLabel(p.purpose).toLowerCase() && (
+                        <div className="text-xs text-gray-500">{p.description}</div>
+                      )}
                   </Td>
                   <Td className="whitespace-nowrap font-medium">
                     {money(p.amount)}
