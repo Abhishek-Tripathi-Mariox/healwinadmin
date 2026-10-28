@@ -442,6 +442,13 @@ export const sosSubmissionApi = {
   // Get single submission
   getById: (id: string) => fetchWithAuth(`/admin/sos-submissions/${id}`),
 
+  /**
+   * "I am taking this one." Records who picked it up and silences the
+   * looping alarm on every other dispatcher's screen.
+   */
+  acknowledge: (id: string) =>
+    fetchWithAuth(`/admin/sos-submissions/${id}/acknowledge`, { method: "POST" }),
+
   // Update submission status
   updateStatus: (id: string, status: string, resolutionNotes?: string) =>
     fetchWithAuth(`/admin/sos-submissions/${id}/status`, {
@@ -1438,10 +1445,12 @@ export const ambulanceApi = {
       method: "POST",
       body: JSON.stringify({ staffId }),
     }),
-  unassign: (id: string, role: "driver" | "attendant") =>
+  // `staffId` names WHICH attendant to stand down — a vehicle can carry
+  // several. Omitting it clears the whole attendant crew.
+  unassign: (id: string, role: "driver" | "attendant", staffId?: string) =>
     fetchWithAuth(`/admin/ambulances/${id}/unassign`, {
       method: "POST",
-      body: JSON.stringify({ role }),
+      body: JSON.stringify(staffId ? { role, staffId } : { role }),
     }),
   remove: (id: string) =>
     fetchWithAuth(`/admin/ambulances/${id}`, { method: "DELETE" }),
@@ -2357,11 +2366,30 @@ export const ipdApi = {
       method: "POST",
       body: JSON.stringify({ bedId }),
     }),
-  discharge: (id: string, dischargeSummary?: string) =>
+  /**
+   * Discharge. Fails with `unpaid_balance` when the bill is still open —
+   * resend with `credit` naming who authorises carrying the debt and why.
+   */
+  discharge: (
+    id: string,
+    dischargeSummary?: string,
+    credit?: { authorisedBy: string; reason: string },
+  ) =>
     fetchWithAuth(`/admin/ipd/admissions/${id}/discharge`, {
       method: "POST",
-      body: JSON.stringify({ dischargeSummary }),
+      body: JSON.stringify(
+        credit
+          ? {
+              dischargeSummary,
+              overrideUnpaid: true,
+              authorisedBy: credit.authorisedBy,
+              overrideReason: credit.reason,
+            }
+          : { dischargeSummary },
+      ),
     }),
+  /** Admins who may authorise a discharge with money still owing. */
+  creditAuthorisers: () => fetchWithAuth(`/admin/ipd/credit-authorisers`),
   addLog: (id: string, data: Record<string, any>) =>
     fetchWithAuth(`/admin/ipd/admissions/${id}/log`, {
       method: "POST",
@@ -2716,6 +2744,21 @@ export const leaveApi = {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/hr/leave/balances${qs ? `?${qs}` : ""}`);
   },
+  /** One person's leave end to end — entitlement, used, pending, history. */
+  employeeLeave: (employeeId: string, year: number) =>
+    fetchWithAuth(`/admin/hr/leave/employee/${employeeId}?year=${year}`),
+  /** Create missing balance rows and top up monthly accrual. */
+  syncBalances: (body: { year: number; employeeId?: string }) =>
+    fetchWithAuth("/admin/hr/leave/balances/sync", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  /** Carry unused days into the next year, capped per leave type. */
+  rollover: (body: { fromYear: number; toYear: number }) =>
+    fetchWithAuth("/admin/hr/leave/balances/rollover", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   listRequests: (params: Record<string, string | number> = {}) => {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/hr/leave/requests${qs ? `?${qs}` : ""}`);
@@ -3243,6 +3286,18 @@ export const ambulanceStockApi = {
     const qs = new URLSearchParams(sanitizeParams(params)).toString();
     return fetchWithAuth(`/admin/ambulance-stock/${ambulanceId}${qs ? `?${qs}` : ""}`);
   },
+  /** Load stock from central inventory onto a vehicle, without a crew request. */
+  issue: (ambulanceId: string, items: { itemId: string; qty: number }[]) =>
+    fetchWithAuth(`/admin/ambulance-stock/${ambulanceId}/issue`, {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    }),
+  /** Correct the on-hand count after a stock-take. Central stock is untouched. */
+  adjust: (ambulanceId: string, body: { itemId: string; delta: number; note: string }) =>
+    fetchWithAuth(`/admin/ambulance-stock/${ambulanceId}/adjust`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };
 
 export const wardStockApi = {

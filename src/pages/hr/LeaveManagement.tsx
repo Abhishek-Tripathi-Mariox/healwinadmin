@@ -7,11 +7,23 @@ import { PERMISSIONS } from "../../auth/permissions";
 import Pagination from "../../components/Pagination";
 import {
   PageHeader, Button, Select, Table, THead, TBody, TR, Th, Td, TableState,
-  Badge, Modal, Field, Input, Textarea, Alert,
+  Badge, Modal, Field, Input, Textarea, Alert, Card,
 } from "../../components/ui";
 import { dialog } from "../../services/dialog";
 
-interface LeaveType { _id: string; name: string; code: string; annualQuota: number; isPaid: boolean; isActive: boolean }
+interface LeaveType {
+  _id: string;
+  name: string;
+  code: string;
+  annualQuota: number;
+  isPaid: boolean;
+  isActive: boolean;
+  /** "monthly" earns 1/12 per completed month; "annual" grants it up front. */
+  accrual?: "annual" | "monthly";
+  carryForward?: boolean;
+  /** 0 with carryForward on means uncapped. */
+  maxCarryForward?: number;
+}
 interface LeaveRequest {
   _id: string;
   subjectType?: "hr_employee" | "ambulance_staff";
@@ -36,7 +48,79 @@ export default function LeaveManagement() {
   const canManage = hasPermission(PERMISSIONS.LEAVE_MANAGE);
   const canApprove = hasPermission(PERMISSIONS.LEAVE_APPROVE);
 
-  const [tab, setTab] = useState<"requests" | "types">("requests");
+  const [tab, setTab] = useState<"requests" | "types" | "balances">("requests");
+
+  /**
+   * One person's leave, end to end.
+   *
+   * Until now a balance existed only once someone had taken leave, and the
+   * only place it ever appeared was a generic report. Entitlement, what was
+   * carried in, what is pending and what is left now live on the page where
+   * leave is actually decided.
+   */
+  const [balYear, setBalYear] = useState(new Date().getFullYear());
+  const [balEmployee, setBalEmployee] = useState("");
+  const [sheet, setSheet] = useState<any | null>(null);
+  const [sheetLoading, setSheetLoading] = useState(false);
+  const [balMsg, setBalMsg] = useState("");
+  const [balErr, setBalErr] = useState("");
+  const [balBusy, setBalBusy] = useState(false);
+
+  const loadSheet = useCallback(async (employeeId: string, year: number) => {
+    if (!employeeId) {
+      setSheet(null);
+      return;
+    }
+    setSheetLoading(true);
+    setBalErr("");
+    try {
+      const res = await leaveApi.employeeLeave(employeeId, year);
+      setSheet(res.data);
+    } catch (e) {
+      setSheet(null);
+      setBalErr(e instanceof Error ? e.message : "Could not load this person's leave.");
+    } finally {
+      setSheetLoading(false);
+    }
+  }, []);
+
+  const syncAll = async () => {
+    setBalBusy(true);
+    setBalErr("");
+    setBalMsg("");
+    try {
+      const res = await leaveApi.syncBalances({ year: balYear });
+      setBalMsg(res.message || "Entitlement updated.");
+      if (balEmployee) await loadSheet(balEmployee, balYear);
+    } catch (e) {
+      setBalErr(e instanceof Error ? e.message : "Could not update entitlement.");
+    } finally {
+      setBalBusy(false);
+    }
+  };
+
+  const rollover = async () => {
+    if (
+      !(await dialog.confirm({
+        title: `Carry ${balYear} balances into ${balYear + 1}?`,
+        message:
+          "Unused days roll over for the leave types that allow it, up to each type's cap. Types without carry-forward lapse. Safe to run again — it sets next year's carried-forward rather than adding to it.",
+        confirmLabel: "Carry forward",
+      }))
+    )
+      return;
+    setBalBusy(true);
+    setBalErr("");
+    setBalMsg("");
+    try {
+      const res = await leaveApi.rollover({ fromYear: balYear, toYear: balYear + 1 });
+      setBalMsg(res.message || "Balances carried forward.");
+    } catch (e) {
+      setBalErr(e instanceof Error ? e.message : "Could not carry the balances forward.");
+    } finally {
+      setBalBusy(false);
+    }
+  };
   // In the URL so the HR dashboard's "Pending Leave Requests" card can open
   // this page already showing the pending ones.
   const [params, setParams] = useSearchParams();
@@ -63,7 +147,15 @@ export default function LeaveManagement() {
   // type modal
   const [showType, setShowType] = useState(false);
   const [editingType, setEditingType] = useState<string | null>(null);
-  const [typeForm, setTypeForm] = useState({ name: "", code: "", annualQuota: 0, isPaid: true });
+  const [typeForm, setTypeForm] = useState({
+    name: "",
+    code: "",
+    annualQuota: 0,
+    isPaid: true,
+    accrual: "annual" as "annual" | "monthly",
+    carryForward: false,
+    maxCarryForward: 0,
+  });
   const [typeError, setTypeError] = useState("");
 
   const [page, setPage] = useState(1);
@@ -113,13 +205,15 @@ export default function LeaveManagement() {
     setPage(1);
   }, [statusFilter, limit]);
 
+  const loadEmployees = useCallback(async () => {
+    const res = await hrEmployeeApi.list({ status: "active", limit: 200 });
+    setEmployees(res.data?.items || []);
+  }, []);
+
   const openReq = async () => {
     setReqError("");
     setReqForm({ employeeId: "", leaveTypeId: "", fromDate: "", toDate: "", reason: "" });
-    if (employees.length === 0) {
-      const res = await hrEmployeeApi.list({ status: "active", limit: 200 });
-      setEmployees(res.data?.items || []);
-    }
+    if (employees.length === 0) await loadEmployees();
     setShowReq(true);
   };
 
@@ -181,10 +275,26 @@ export default function LeaveManagement() {
     setTypeError("");
     if (t) {
       setEditingType(t._id);
-      setTypeForm({ name: t.name, code: t.code, annualQuota: t.annualQuota, isPaid: t.isPaid });
+      setTypeForm({
+        name: t.name,
+        code: t.code,
+        annualQuota: t.annualQuota,
+        isPaid: t.isPaid,
+        accrual: t.accrual || "annual",
+        carryForward: !!t.carryForward,
+        maxCarryForward: t.maxCarryForward || 0,
+      });
     } else {
       setEditingType(null);
-      setTypeForm({ name: "", code: "", annualQuota: 0, isPaid: true });
+      setTypeForm({
+        name: "",
+        code: "",
+        annualQuota: 0,
+        isPaid: true,
+        accrual: "annual",
+        carryForward: false,
+        maxCarryForward: 0,
+      });
     }
     setShowType(true);
   };
@@ -222,6 +332,16 @@ export default function LeaveManagement() {
       <div className="mb-4 flex gap-2">
         <Button variant={tab === "requests" ? "primary" : "secondary"} size="sm" onClick={() => setTab("requests")}>Requests</Button>
         <Button variant={tab === "types" ? "primary" : "secondary"} size="sm" onClick={() => setTab("types")}>Leave Types</Button>
+        <Button
+          variant={tab === "balances" ? "primary" : "secondary"}
+          size="sm"
+          onClick={() => {
+            setTab("balances");
+            if (employees.length === 0) loadEmployees();
+          }}
+        >
+          Balances &amp; History
+        </Button>
         {tab === "requests" && (
           <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="ml-auto w-44 capitalize">
             <option value="">All statuses</option>
@@ -328,6 +448,154 @@ export default function LeaveManagement() {
         </Table>
       )}
 
+      {tab === "balances" && (
+        <div className="space-y-4">
+          {balErr && <Alert tone="danger">{balErr}</Alert>}
+          {balMsg && <Alert tone="success">{balMsg}</Alert>}
+
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Employee" className="w-72">
+              <Select
+                value={balEmployee}
+                onChange={(e) => {
+                  setBalEmployee(e.target.value);
+                  loadSheet(e.target.value, balYear);
+                }}
+              >
+                <option value="">Choose an employee…</option>
+                {employees.map((em) => (
+                  <option key={em._id} value={em._id}>
+                    {em.employeeCode} — {em.fullName}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Year" className="w-32">
+              <Select
+                value={String(balYear)}
+                onChange={(e) => {
+                  const y = Number(e.target.value);
+                  setBalYear(y);
+                  loadSheet(balEmployee, y);
+                }}
+              >
+                {[0, 1, 2].map((back) => {
+                  const y = new Date().getFullYear() - back;
+                  return <option key={y} value={y}>{y}</option>;
+                })}
+              </Select>
+            </Field>
+            {canManage && (
+              <>
+                <Button variant="secondary" disabled={balBusy} onClick={syncAll}>
+                  {balBusy ? "Working…" : "Update entitlement"}
+                </Button>
+                <Button variant="secondary" disabled={balBusy} onClick={rollover}>
+                  Carry forward to {balYear + 1}
+                </Button>
+              </>
+            )}
+          </div>
+
+          {!balEmployee && (
+            <p className="text-sm text-gray-500">
+              Pick someone to see what they are entitled to, what they have
+              taken and what is left.
+            </p>
+          )}
+          {sheetLoading && <p className="text-sm text-gray-500">Loading…</p>}
+
+          {sheet && !sheetLoading && (
+            <>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                {[
+                  { label: "Entitled", value: sheet.totals.entitled, tone: "text-gray-900" },
+                  { label: "Taken", value: sheet.totals.used, tone: "text-gray-900" },
+                  { label: "Balance", value: sheet.totals.balance, tone: "text-green-700" },
+                  { label: "Awaiting decision", value: sheet.totals.pending, tone: "text-amber-600" },
+                  { label: "Unpaid days", value: sheet.totals.unpaidDays, tone: "text-red-600" },
+                ].map((s) => (
+                  <Card key={s.label} className="p-4">
+                    <div className="text-xs uppercase tracking-wide text-gray-500">{s.label}</div>
+                    <div className={`mt-1 text-2xl font-semibold ${s.tone}`}>{s.value}</div>
+                  </Card>
+                ))}
+              </div>
+
+              <Table>
+                <THead>
+                  <Th>Leave type</Th><Th>Paid</Th><Th>Quota</Th><Th>Earned</Th>
+                  <Th>Carried in</Th><Th>Taken</Th><Th>Pending</Th><Th>Balance</Th>
+                </THead>
+                <TBody>
+                  {sheet.entitlements.map((e: any) => (
+                    <TR key={e.leaveTypeId}>
+                      <Td>
+                        <div className="font-medium text-gray-900">{e.name}</div>
+                        <div className="font-mono text-[11px] text-gray-400">
+                          {e.code}
+                          {e.accrual === "monthly" ? " · accrues monthly" : ""}
+                        </div>
+                      </Td>
+                      <Td>{e.isPaid ? <Badge tone="success">Paid</Badge> : <Badge tone="neutral">Unpaid</Badge>}</Td>
+                      <Td className="text-gray-500">{e.annualQuota}</Td>
+                      {/* Earned, not the headline quota — a mid-year joiner
+                          has not earned a full year of it. */}
+                      <Td>{e.allocated}</Td>
+                      <Td>{e.carriedForward || "—"}</Td>
+                      <Td>{e.used}</Td>
+                      <Td className={e.pending ? "text-amber-600" : "text-gray-400"}>
+                        {e.pending || "—"}
+                      </Td>
+                      <Td className={e.balance < 0 ? "font-semibold text-red-600" : "font-semibold"}>
+                        {e.balance}
+                      </Td>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+
+              <div>
+                <h3 className="mb-2 text-sm font-semibold text-gray-700">
+                  {sheet.year} history
+                </h3>
+                <Table>
+                  <THead>
+                    <Th>Type</Th><Th>From → To</Th><Th>Days</Th><Th>Paid</Th>
+                    <Th>Status</Th><Th>Reason</Th>
+                  </THead>
+                  <TBody>
+                    {sheet.history.length === 0 ? (
+                      <TableState colSpan={6}>No leave taken this year.</TableState>
+                    ) : (
+                      sheet.history.map((h: any) => (
+                        <TR key={h._id}>
+                          <Td>{h.leaveTypeId?.name || h.leaveTypeName || "—"}</Td>
+                          <Td className="whitespace-nowrap text-xs">
+                            {new Date(h.fromDate).toLocaleDateString("en-IN")} →{" "}
+                            {new Date(h.toDate).toLocaleDateString("en-IN")}
+                          </Td>
+                          <Td>{h.days}</Td>
+                          <Td>
+                            {h.leaveTypeId?.isPaid === false ? (
+                              <Badge tone="neutral">Unpaid</Badge>
+                            ) : (
+                              <Badge tone="success">Paid</Badge>
+                            )}
+                          </Td>
+                          <Td className="capitalize">{h.status}</Td>
+                          <Td className="text-xs text-gray-500">{h.reason || "—"}</Td>
+                        </TR>
+                      ))
+                    )}
+                  </TBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {tab === "requests" ? (
         <Pagination
           page={page}
@@ -387,7 +655,44 @@ export default function LeaveManagement() {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Name *"><Input value={typeForm.name} onChange={(e) => setTypeForm({ ...typeForm, name: e.target.value })} /></Field>
             <Field label="Code *"><Input value={typeForm.code} onChange={(e) => setTypeForm({ ...typeForm, code: e.target.value.toUpperCase() })} disabled={!!editingType} /></Field>
-            <Field label="Annual quota"><Input type="number" value={typeForm.annualQuota} onChange={(e) => setTypeForm({ ...typeForm, annualQuota: Number(e.target.value) })} /></Field>
+            <Field label="Annual quota" hint="Days a full year on the rolls earns"><Input type="number" value={typeForm.annualQuota} onChange={(e) => setTypeForm({ ...typeForm, annualQuota: Number(e.target.value) })} /></Field>
+            <Field
+              label="How it is earned"
+              hint="Monthly suits earned leave — four months in has earned four twelfths, not a year"
+            >
+              <Select
+                value={typeForm.accrual}
+                onChange={(e) =>
+                  setTypeForm({ ...typeForm, accrual: e.target.value as "annual" | "monthly" })
+                }
+              >
+                <option value="annual">All at once, on 1 January</option>
+                <option value="monthly">Accrues each completed month</option>
+              </Select>
+            </Field>
+            <Field label="Unused days carry into next year">
+              <Select
+                value={typeForm.carryForward ? "yes" : "no"}
+                onChange={(e) =>
+                  setTypeForm({ ...typeForm, carryForward: e.target.value === "yes" })
+                }
+              >
+                <option value="no">No — they lapse</option>
+                <option value="yes">Yes</option>
+              </Select>
+            </Field>
+            {typeForm.carryForward && (
+              <Field label="Most that can carry over" hint="0 means no cap">
+                <Input
+                  type="number"
+                  min={0}
+                  value={typeForm.maxCarryForward}
+                  onChange={(e) =>
+                    setTypeForm({ ...typeForm, maxCarryForward: Number(e.target.value) })
+                  }
+                />
+              </Field>
+            )}
             <Field label="Paid leave">
               <Select value={typeForm.isPaid ? "yes" : "no"} onChange={(e) => setTypeForm({ ...typeForm, isPaid: e.target.value === "yes" })}>
                 <option value="yes">Paid</option><option value="no">Unpaid (LOP)</option>

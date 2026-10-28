@@ -139,6 +139,8 @@ export const PERMISSIONS = {
   OPD_MANAGE: "opd:manage",
   IPD_VIEW: "ipd:view",
   IPD_MANAGE: "ipd:manage",
+  // Authorise sending a patient home with the bill still open.
+  IPD_DISCHARGE_ON_CREDIT: "ipd:discharge_on_credit",
   BEDS_VIEW: "beds:view",
   BEDS_MANAGE: "beds:manage",
   PHARMACIES_VIEW: "pharmacies:view",

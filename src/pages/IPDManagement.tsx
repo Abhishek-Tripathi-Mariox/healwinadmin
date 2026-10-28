@@ -925,6 +925,18 @@ function AdmissionDrawer({
   const [transferring, setTransferring] = useState(false);
   const [transferErr, setTransferErr] = useState("");
   const [dischargeSummary, setDischargeSummary] = useState("");
+  /** Set when a discharge was refused for an open bill — drives the modal. */
+  const [credit, setCredit] = useState<{
+    balanceDue: number;
+    invoiceNo: string;
+    authorisedBy: string;
+    reason: string;
+  } | null>(null);
+  const [authorisers, setAuthorisers] = useState<
+    { _id: string; fullName: string; roleName?: string }[]
+  >([]);
+  const [creditErr, setCreditErr] = useState("");
+  const [creditSaving, setCreditSaving] = useState(false);
 
   const addVital = async () => {
     // Send only the fields actually filled in — an empty string used to reach
@@ -1026,7 +1038,53 @@ function AdmissionDrawer({
       await ipdApi.discharge(admission._id, dischargeSummary.trim() || undefined);
       onDischarged();
     } catch (e: any) {
+      // The bill is still open. That is not a dead end — a hospital does
+      // discharge on credit — but it needs a name against it, so ask for one
+      // instead of leaving the clerk stuck on an error.
+      if (e?.data?.balanceDue > 0) {
+        setCredit({
+          balanceDue: e.data.balanceDue,
+          invoiceNo: e.data.invoiceNo || "",
+          authorisedBy: "",
+          reason: "",
+        });
+        setTransferErr("");
+        ipdApi
+          .creditAuthorisers()
+          .then((r) => setAuthorisers(r.data?.items || []))
+          .catch(() => setAuthorisers([]));
+        return;
+      }
       setTransferErr(e?.data?.hint || e?.message || "The discharge could not be completed.");
+    }
+  };
+
+  /**
+   * Discharge with the balance carried, on someone's authority.
+   *
+   * The patient goes home now — they are not held over a bill — and the
+   * named authoriser is notified and recorded on the admission. The invoice
+   * stays open; nothing here writes it off.
+   */
+  const dischargeOnCredit = async () => {
+    if (!credit || creditSaving) return;
+    if (!credit.authorisedBy || !credit.reason.trim()) {
+      setCreditErr("Choose who is authorising this, and say why.");
+      return;
+    }
+    setCreditSaving(true);
+    setCreditErr("");
+    try {
+      await ipdApi.discharge(admission._id, dischargeSummary.trim() || undefined, {
+        authorisedBy: credit.authorisedBy,
+        reason: credit.reason.trim(),
+      });
+      setCredit(null);
+      onDischarged();
+    } catch (e: any) {
+      setCreditErr(e?.data?.hint || e?.message || "The discharge could not be completed.");
+    } finally {
+      setCreditSaving(false);
     }
   };
   const generateBill = async () => {
@@ -1135,6 +1193,74 @@ function AdmissionDrawer({
               </div>
             </div>
           )}
+
+          {/* The bill is still open. The patient is not held over it — this
+              asks whose authority the hospital carries the debt on. */}
+          <Modal
+            open={!!credit}
+            onClose={() => setCredit(null)}
+            title="Discharge with the bill still open"
+            subtitle="The invoice stays unpaid — this records who allowed it"
+            size="md"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setCredit(null)}>
+                  Collect payment first
+                </Button>
+                <Button variant="danger" disabled={creditSaving} onClick={dischargeOnCredit}>
+                  {creditSaving ? "Discharging…" : "Discharge on credit"}
+                </Button>
+              </>
+            }
+          >
+            {credit && (
+              <div className="space-y-4">
+                {creditErr && <Alert tone="danger">{creditErr}</Alert>}
+
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  <span className="font-semibold">₹{credit.balanceDue}</span> is
+                  still due{credit.invoiceNo ? ` on ${credit.invoiceNo}` : ""}.
+                  Discharging now does not write it off — the invoice stays
+                  open and collectable.
+                </div>
+
+                <Field
+                  label="Authorised by"
+                  hint="Only people who may approve a discharge on credit are listed. They are notified and named on the record."
+                >
+                  <Select
+                    value={credit.authorisedBy}
+                    onChange={(e) =>
+                      setCredit({ ...credit, authorisedBy: e.target.value })
+                    }
+                  >
+                    <option value="">Choose who is authorising this</option>
+                    {authorisers.map((a) => (
+                      <option key={a._id} value={a._id}>
+                        {a.fullName}
+                        {a.roleName ? ` — ${a.roleName}` : ""}
+                      </option>
+                    ))}
+                  </Select>
+                  {authorisers.length === 0 && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      Nobody holds the &ldquo;discharge on credit&rdquo;
+                      permission yet. Grant it under Roles &amp; Permissions
+                      before a discharge can be authorised this way.
+                    </p>
+                  )}
+                </Field>
+
+                <Field label="Why is the balance being carried?">
+                  <Input
+                    value={credit.reason}
+                    onChange={(e) => setCredit({ ...credit, reason: e.target.value })}
+                    placeholder="e.g. insurance claim pending, family to settle on Monday"
+                  />
+                </Field>
+              </div>
+            )}
+          </Modal>
           {/* Ward round -> a real IPD encounter on the patient's record, the
               same jump OPD's "Consult" makes. encounterType=IPD matters: the
               admission's procedure billing only picks up IPD encounters. */}

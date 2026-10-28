@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Phone, MapPin, X } from "lucide-react";
 import { adminSocket } from "../services/socket";
-import { sosAlertApi } from "../services/admin-api";
+import { sosAlertApi, sosSubmissionApi } from "../services/admin-api";
 
 /**
  * Real-time emergency alerter. When a patient triggers SOS (or a new ambulance
@@ -182,10 +182,28 @@ export const SosRealtime: React.FC = () => {
     const offSos = adminSocket.on("sos:new", (d) => add(d, true));
     const offReq = adminSocket.on("ambulance-request:new", (d) => add(d, false));
     const offCrew = adminSocket.on("sos-alert:new", (d) => addCrew(d));
+    /**
+     * Somebody else took it. Drop it from this screen too.
+     *
+     * Fired when a dispatcher acknowledges, an ambulance goes out, or the
+     * submission is resolved — so whichever way an emergency gets answered,
+     * every other panel stops ringing for it.
+     */
+    const clear = (raw: unknown) => {
+      const d = (raw || {}) as { sosId?: string; submission?: { _id?: string } };
+      const id = String(d.sosId || d.submission?._id || "");
+      // Drops straight into state rather than calling `dismiss`, which is
+      // declared below this effect.
+      if (id) setItems((prev) => prev.filter((p) => p.id !== id));
+    };
+    const offClaimed = adminSocket.on("sos:claimed", clear);
+    const offUpdated = adminSocket.on("sos:submission-updated", clear);
     return () => {
       offSos();
       offReq();
       offCrew();
+      offClaimed();
+      offUpdated();
     };
   }, []);
 
@@ -217,8 +235,25 @@ export const SosRealtime: React.FC = () => {
   }, [items]);
 
   const dismiss = (id: string) => setItems((prev) => prev.filter((p) => p.id !== id));
-  const dispatch = (id: string) => {
+
+  /**
+   * Tell the control room this one is being handled, then clear it here.
+   *
+   * Acknowledging used to silence only the browser it was clicked in, so the
+   * alarm kept looping on every other dispatcher's screen for an emergency
+   * already being worked — and an alarm that cries wolf is one people learn
+   * to ignore. The server records who took it and silences the rest.
+   */
+  const acknowledge = async (id: string) => {
     dismiss(id);
+    await sosSubmissionApi.acknowledge(id).catch(() => undefined);
+  };
+
+  const dispatch = (id: string) => {
+    // Dispatching IS acknowledging — the server emits sos:claimed when the
+    // ambulance actually goes out, but silence the others now rather than
+    // leaving them ringing while this dispatcher picks a vehicle.
+    void acknowledge(id);
     // Open THIS SOS's detail (with the dispatch panel) directly, not just the
     // listing — SOSDashboard reads ?open=<id> and auto-opens that submission.
     navigate(`/admin/sos?open=${encodeURIComponent(id)}`);
@@ -305,10 +340,10 @@ export const SosRealtime: React.FC = () => {
                     <Phone className="h-4 w-4" /> Dispatch now
                   </button>
                   <button
-                    onClick={() => dismiss(it.id)}
+                    onClick={() => void acknowledge(it.id)}
                     className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
-                    Acknowledge
+                    I&apos;ll take this
                   </button>
                 </div>
               )}

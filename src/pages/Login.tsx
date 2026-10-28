@@ -27,7 +27,7 @@ const Login: React.FC = () => {
       const response = await fetch(`${API_URL}/admin/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ identifier: email.trim(), password }),
       });
 
       const data = await response.json();
@@ -112,12 +112,15 @@ const Login: React.FC = () => {
             </div>
           )}
 
-          {/* Email */}
+          {/* Email or mobile — staff without a desk often have only a phone,
+              and `type="email"` made the browser reject a valid number. */}
           <div className="relative">
             <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
-              type="email"
-              placeholder="Email"
+              type="text"
+              inputMode="email"
+              autoComplete="username"
+              placeholder="Email or mobile number"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required

@@ -37,6 +37,7 @@ import {
   Card,
   Modal,
   Field,
+  Alert,
   Input,
 } from "../components/ui";
 
@@ -263,8 +264,14 @@ const StaffManagement: React.FC = () => {
   };
 
   const handleSaveStaff = async () => {
-    if (!staffForm.name || !staffForm.email || !staffForm.roleId) {
+    // Either identifier signs them in, so either one will do — but one of
+    // them has to be there, or the account cannot be logged into at all.
+    if (!staffForm.name || !staffForm.roleId) {
       setError("Please fill in all required fields");
+      return;
+    }
+    if (!staffForm.email?.trim() && !staffForm.phone?.trim()) {
+      setError("Add an email address or a mobile number — they sign in with it");
       return;
     }
     if (staffForm.phone && !/^[6-9]\d{9}$/.test(staffForm.phone.trim())) {
@@ -721,7 +728,8 @@ const StaffManagement: React.FC = () => {
               icon={saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : undefined}
               disabled={
                 !staffForm.name ||
-                !staffForm.email ||
+                // Either identifier is enough — both are login credentials.
+                (!staffForm.email?.trim() && !staffForm.phone?.trim()) ||
                 !staffForm.roleId ||
                 saving ||
                 (!editingStaff &&
@@ -745,7 +753,16 @@ const StaffManagement: React.FC = () => {
             />
           </Field>
 
-          <Field label="Email *">
+          {/* Either one signs them in, so neither is individually required —
+              but the form will not submit with both blank. */}
+          <Field
+            label="Email"
+            hint={
+              staffForm.phone?.trim()
+                ? "Optional — they can sign in with their mobile"
+                : "Email or mobile is required — they sign in with it"
+            }
+          >
             <Input
               type="email"
               value={staffForm.email}
@@ -756,7 +773,14 @@ const StaffManagement: React.FC = () => {
             />
           </Field>
 
-          <Field label="Phone">
+          <Field
+            label="Mobile"
+            hint={
+              staffForm.email?.trim()
+                ? "Optional — a second way to sign in"
+                : "They will sign in with this number"
+            }
+          >
             <Input
               type="tel"
               inputMode="numeric"
@@ -771,6 +795,15 @@ const StaffManagement: React.FC = () => {
               placeholder="10-digit mobile number"
             />
           </Field>
+
+          {!staffForm.email?.trim() && staffForm.phone?.trim() && !editingStaff && (
+            <Alert tone="warning">
+              With no email there is nowhere to send their sign-in details —
+              note the password down and hand it over yourself. Password
+              recovery also goes by email, so a Super Admin will have to reset
+              it if they forget.
+            </Alert>
+          )}
 
           <Field label="Role *">
             <Select

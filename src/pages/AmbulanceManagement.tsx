@@ -25,6 +25,7 @@ import {
   Input,
 } from "../components/ui";
 import { dialog } from "../services/dialog";
+import MultiSelect from "../components/MultiSelect";
 
 type Ambulance = {
   _id: string;
@@ -33,8 +34,32 @@ type Ambulance = {
   status: "available" | "on_dispatch" | "offline" | "maintenance";
   providerId: any;
   assignedDriverId?: any;
+  /** @deprecated kept so vehicles crewed before the change still render. */
   assignedAttendantId?: any;
+  assignedAttendantIds?: any[];
   lastLocationAt?: string;
+};
+
+/**
+ * Who is crewing this vehicle, whichever shape the record uses.
+ *
+ * Attendants became a list; vehicles crewed before that carry a single id in
+ * the old field. Read through here so both render.
+ */
+const attendantDocsOf = (a: Ambulance): any[] => {
+  const list = Array.isArray(a.assignedAttendantIds) ? a.assignedAttendantIds : [];
+  if (list.length) return list.filter((x) => x && typeof x === "object");
+  return a.assignedAttendantId && typeof a.assignedAttendantId === "object"
+    ? [a.assignedAttendantId]
+    : [];
+};
+
+const attendantIdsOf = (a: Ambulance): string[] => {
+  const list = Array.isArray(a.assignedAttendantIds) ? a.assignedAttendantIds : [];
+  if (list.length) return list.map((x: any) => (typeof x === "object" ? x._id : x));
+  const single: any = a.assignedAttendantId;
+  if (!single) return [];
+  return [typeof single === "object" ? single._id : single];
 };
 
 const statusTone: Record<
@@ -71,8 +96,9 @@ export default function AmbulanceManagement() {
   }>({ drivers: [], attendants: [] });
   const [assignForm, setAssignForm] = useState<{
     driverId?: string;
-    attendantId?: string;
-  }>({});
+    /** A crew, not a seat — a transfer can carry a nurse AND a technician. */
+    attendantIds: string[];
+  }>({ attendantIds: [] });
   const [assignError, setAssignError] = useState("");
   const [assignSaving, setAssignSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -135,10 +161,7 @@ export default function AmbulanceManagement() {
         a.assignedDriverId && typeof a.assignedDriverId === "object"
           ? a.assignedDriverId._id
           : a.assignedDriverId,
-      attendantId:
-        a.assignedAttendantId && typeof a.assignedAttendantId === "object"
-          ? a.assignedAttendantId._id
-          : a.assignedAttendantId,
+      attendantIds: attendantIdsOf(a),
     });
     setAssignFor(a);
   };
@@ -154,9 +177,9 @@ export default function AmbulanceManagement() {
     const idOf = (v: any) =>
       v && typeof v === "object" ? v._id : v || "";
     const origDriver = idOf(assignFor.assignedDriverId);
-    const origAttendant = idOf(assignFor.assignedAttendantId);
+    const origAttendants = attendantIdsOf(assignFor);
     const newDriver = assignForm.driverId || "";
-    const newAttendant = assignForm.attendantId || "";
+    const newAttendants = assignForm.attendantIds;
     try {
       // Backend derives the seat from each staff member's role — we just send
       // the staffId. (Driver/Attendant dropdowns are already role-filtered.)
@@ -165,10 +188,12 @@ export default function AmbulanceManagement() {
       else if (!newDriver && origDriver)
         await ambulanceApi.unassign(assignFor._id, "driver");
 
-      if (newAttendant && newAttendant !== origAttendant)
-        await ambulanceApi.assign(assignFor._id, newAttendant);
-      else if (!newAttendant && origAttendant)
-        await ambulanceApi.unassign(assignFor._id, "attendant");
+      // Attendants are a set, so send only the difference: adding one must
+      // not knock the others off the vehicle.
+      for (const id of newAttendants.filter((x) => !origAttendants.includes(x)))
+        await ambulanceApi.assign(assignFor._id, id);
+      for (const id of origAttendants.filter((x) => !newAttendants.includes(x)))
+        await ambulanceApi.unassign(assignFor._id, "attendant", id);
 
       setAssignFor(null);
       load();
@@ -316,22 +341,18 @@ export default function AmbulanceManagement() {
                     : "—"}
                 </Td>
                 <Td>
-                  {a.assignedAttendantId
-                    ? typeof a.assignedAttendantId === "object"
-                      ? (
-                          <div>
-                            <div className="font-medium">
-                              {a.assignedAttendantId.fullName || "—"}
+                  {attendantDocsOf(a).length === 0
+                    ? "—"
+                    : attendantDocsOf(a).map((att: any) => (
+                        <div key={att._id} className="mb-1 last:mb-0">
+                          <div className="font-medium">{att.fullName || "—"}</div>
+                          {att.mobileNumber && (
+                            <div className="text-xs text-gray-500">
+                              {att.mobileNumber}
                             </div>
-                            {a.assignedAttendantId.mobileNumber && (
-                              <div className="text-xs text-gray-500">
-                                {a.assignedAttendantId.mobileNumber}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      : "—"
-                    : "—"}
+                          )}
+                        </div>
+                      ))}
                 </Td>
                 <Td>
                   <Badge tone={statusTone[a.status] || "neutral"} dot>
@@ -559,23 +580,20 @@ export default function AmbulanceManagement() {
               ))}
             </Select>
           </Field>
-          <Field label="Attendant">
-            <Select
-              value={assignForm.attendantId || ""}
-              onChange={(e) =>
-                setAssignForm({
-                  ...assignForm,
-                  attendantId: e.target.value || undefined,
-                })
-              }
-            >
-              <option value="">No attendant</option>
-              {staffOptions.attendants.map((a) => (
-                <option key={a._id} value={a._id}>
-                  {a.fullName} ({a.mobileNumber})
-                </option>
-              ))}
-            </Select>
+          <Field
+            label="Attendants"
+            hint="Pick as many as ride on this vehicle"
+          >
+            <MultiSelect
+              options={staffOptions.attendants.map((a) => ({
+                _id: a._id,
+                name: a.fullName,
+                hint: a.mobileNumber ? `(${a.mobileNumber})` : undefined,
+              }))}
+              selected={assignForm.attendantIds}
+              onChange={(ids) => setAssignForm({ ...assignForm, attendantIds: ids })}
+              emptyLabel="No attendant"
+            />
           </Field>
         </form>
       </Modal>

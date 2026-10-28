@@ -44,6 +44,8 @@ const EVENTS: { event: string; title: string; route: string; tone: ActivityItem[
   // Only patient/driver replies reach the admin room (emitToAdmin), so this
   // never fires for the admin's own replies.
   { event: "support:message", title: "Support ticket reply", route: "/admin/support-tickets", tone: "info" },
+  // Sent only to the admin who authorised it, not the whole admin room.
+  { event: "ipd:discharged-on-credit", title: "Discharge on your authority", route: "/admin/ipd", tone: "warning" },
 ];
 
 const msgFor = (event: string, d: any): string => {
@@ -53,6 +55,10 @@ const msgFor = (event: string, d: any): string => {
   if (event === "consultation:new") return name ? `Dr. ${name}` : "Doctor consultation requested";
   if (event === "leave:new") return d?.staffName ? `${d.staffName} · ${d.type || "leave"}` : "Staff leave request";
   if (event === "stock:new") return d?.staffName ? `${d.staffName} · stock request` : "Staff stock request";
+  if (event === "ipd:discharged-on-credit")
+    return d?.balanceDue
+      ? `₹${d.balanceDue} still due${d.admissionNo ? ` · ${d.admissionNo}` : ""}`
+      : "Patient discharged with the bill open";
   if (event === "support:message") return d?.message ? `${d.ticketId ? d.ticketId + " · " : ""}${String(d.message).slice(0, 40)}` : "New reply on a ticket";
   return name || "Tap to view";
 };

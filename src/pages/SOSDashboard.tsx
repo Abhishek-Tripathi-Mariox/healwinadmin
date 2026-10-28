@@ -212,6 +212,12 @@ const SOSDashboard: React.FC = () => {
 
   // Map
   const [showMap, setShowMap] = useState(false);
+  /**
+   * Shown when a run falls through and the emergency is back in the queue.
+   * A silent list refresh is not enough — the operator has to be told that
+   * someone is still waiting for an ambulance.
+   */
+  const [reassignAlert, setReassignAlert] = useState<string | null>(null);
   const [mapSubmissions, setMapSubmissions] = useState<SOSSubmission[]>([]);
   const [mapLoading, setMapLoading] = useState(false);
 
@@ -307,6 +313,19 @@ const SOSDashboard: React.FC = () => {
       adminSocket.on("sos:submission-updated", refresh),
       adminSocket.on("sos:dispatch-created", refresh),
       adminSocket.on("sos:dispatch-updated", refresh),
+      // A crew declining a run, or a patient standing one down, used to reach
+      // this board only on the 30s poll — half a minute of the control room
+      // believing an ambulance was on its way when it was not.
+      adminSocket.on("sos:dispatch-cancelled", (p: any) => {
+        refresh();
+        if (p?.needsReassign) {
+          setReassignAlert(
+            p?.by === "crew"
+              ? `A crew stood down a run${p?.reason ? ` — ${p.reason}` : ""}. Assign another ambulance.`
+              : "A dispatch was cancelled and this emergency still needs an ambulance.",
+          );
+        }
+      }),
     ];
     return () => offs.forEach((off) => off());
   }, [fetchSubmissions, fetchStats, fetchMapData, showMap]);
@@ -756,6 +775,22 @@ const SOSDashboard: React.FC = () => {
           </>
         }
       />
+
+      {/* A run fell through and someone is still waiting. */}
+      {reassignAlert && (
+        <Alert tone="warning" className="flex items-center gap-4">
+          <div className="flex items-center justify-center w-12 h-12 bg-amber-100 rounded-full shrink-0">
+            <Bell className="w-6 h-6 text-amber-600" />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold text-amber-800">Ambulance needed again</p>
+            <p className="text-sm text-amber-700">{reassignAlert}</p>
+          </div>
+          <Button variant="secondary" onClick={() => setReassignAlert(null)}>
+            Dismiss
+          </Button>
+        </Alert>
+      )}
 
       {/* Alert Banner */}
       {pendingCount > 0 && (

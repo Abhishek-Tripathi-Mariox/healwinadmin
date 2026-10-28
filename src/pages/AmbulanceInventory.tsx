@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { ambulanceStockApi } from "../services/admin-api";
+import { ambulanceStockApi, inventoryApi } from "../services/admin-api";
+import { useAuth } from "../auth/useAuth";
+import { PERMISSIONS } from "../auth/permissions";
 import Pagination from "../components/Pagination";
 import {
   PageHeader,
@@ -14,6 +16,9 @@ import {
   TableState,
   Badge,
   Modal,
+  Field,
+  Input,
+  Alert,
 } from "../components/ui";
 
 type AmbRow = {
@@ -75,6 +80,61 @@ export default function AmbulanceInventory() {
 
   const [detail, setDetail] = useState<{ ambulanceId: string; reg: string; items: StockItem[]; recent: Txn[]; onHandValue: number } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  /**
+   * Loading a vehicle directly.
+   *
+   * Stock could only reach an ambulance by fulfilling a crew request, so
+   * kitting out a new vehicle meant asking the crew to request what you were
+   * about to give them. This is the same move the ward side has always had.
+   */
+  const { hasPermission } = useAuth();
+  const canAdjust = hasPermission(PERMISSIONS.INVENTORY_ADJUST);
+  const [loadOpen, setLoadOpen] = useState(false);
+  const [catalog, setCatalog] = useState<{ _id: string; name: string; currentStock?: number; unit?: string }[]>([]);
+  const [loadLines, setLoadLines] = useState<{ itemId: string; qty: string }[]>([
+    { itemId: "", qty: "" },
+  ]);
+  const [loadErr, setLoadErr] = useState("");
+  const [loadMsg, setLoadMsg] = useState("");
+  const [loadSaving, setLoadSaving] = useState(false);
+
+  const openLoad = () => {
+    setLoadErr("");
+    setLoadMsg("");
+    setLoadLines([{ itemId: "", qty: "" }]);
+    setLoadOpen(true);
+    inventoryApi
+      .list({ limit: 200, isActive: true })
+      .then((r) => setCatalog(r.data?.items || []))
+      .catch(() => setCatalog([]));
+  };
+
+  const submitLoad = async () => {
+    if (!detail || loadSaving) return;
+    const items = loadLines
+      .filter((l) => l.itemId && Number(l.qty) > 0)
+      .map((l) => ({ itemId: l.itemId, qty: Number(l.qty) }));
+    if (items.length === 0) {
+      setLoadErr("Pick at least one item and a quantity.");
+      return;
+    }
+    setLoadSaving(true);
+    setLoadErr("");
+    try {
+      const res = await ambulanceStockApi.issue(detail.ambulanceId, items);
+      // The server reports partial loads (central stock short on some lines),
+      // so its message is shown rather than a blanket "done".
+      setLoadMsg(res.message || "Stock loaded.");
+      setLoadLines([{ itemId: "", qty: "" }]);
+      await loadDetail(detail.ambulanceId, detail.reg, itemPage);
+      load();
+    } catch (e) {
+      setLoadErr(e instanceof Error ? e.message : "Could not load the stock.");
+    } finally {
+      setLoadSaving(false);
+    }
+  };
   const [itemPage, setItemPage] = useState(1);
   const [itemTotal, setItemTotal] = useState(0);
 
@@ -136,6 +196,9 @@ export default function AmbulanceInventory() {
     await loadDetail(detail.ambulanceId, detail.reg, p);
   };
 
+  const setLine = (i: number, patch: Partial<{ itemId: string; qty: string }>) =>
+    setLoadLines((ls) => ls.map((l, k) => (k === i ? { ...l, ...patch } : l)));
+
   return (
     <div className="p-6">
       <PageHeader
@@ -194,7 +257,10 @@ export default function AmbulanceInventory() {
             {loading ? (
               <TableState colSpan={6}>Loading…</TableState>
             ) : byAmbulance.length === 0 ? (
-              <TableState colSpan={6}>No ambulance stock yet.</TableState>
+              <TableState colSpan={6}>
+                No ambulances on the fleet yet. Add one under Ambulance
+                &rarr; Fleet, then load supplies onto it from here.
+              </TableState>
             ) : (
               byAmbulance.map((a) => (
                 <TR key={a.ambulanceId}>
@@ -202,12 +268,33 @@ export default function AmbulanceInventory() {
                     {a.registrationNumber}
                     {a.type && <span className="ml-2 text-xs text-gray-400">{a.type}</span>}
                   </Td>
-                  <Td>{a.onHandLines}</Td>
-                  <Td>{a.onHandQty}</Td>
-                  <Td>{a.consumedQty}</Td>
+                  <Td>
+                    {a.onHandLines || (
+                      <span className="text-xs text-amber-600">Nothing loaded</span>
+                    )}
+                  </Td>
+                  <Td>{a.onHandQty || "—"}</Td>
+                  <Td>{a.consumedQty || "—"}</Td>
                   <Td className="text-right font-semibold text-gray-900">{money(a.consumedValue)}</Td>
                   <Td className="text-right">
-                    <Button size="sm" variant="ghost" onClick={() => openAmbulance(a)}>View stock</Button>
+                    {/* Loading is reachable from the row itself. Behind the
+                        detail modal it was invisible on a vehicle that had
+                        nothing on it — exactly the one you need to load. */}
+                    {canAdjust && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={async () => {
+                          await openAmbulance(a);
+                          openLoad();
+                        }}
+                      >
+                        Load stock
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => openAmbulance(a)}>
+                      View stock
+                    </Button>
                   </Td>
                 </TR>
               ))
@@ -256,6 +343,16 @@ export default function AmbulanceInventory() {
         onClose={() => setDetail(null)}
         title={detail ? `Stock — ${detail.reg}` : undefined}
         size="lg"
+        footer={
+          canAdjust && detail ? (
+            <>
+              <Button variant="secondary" onClick={() => setDetail(null)}>
+                Close
+              </Button>
+              <Button onClick={openLoad}>Load stock</Button>
+            </>
+          ) : undefined
+        }
       >
         {detailLoading ? (
           <div className="py-8 text-center text-sm text-gray-500">Loading…</div>
@@ -312,6 +409,78 @@ export default function AmbulanceInventory() {
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      {/* Load stock onto the vehicle straight from central inventory. */}
+      <Modal
+        open={loadOpen}
+        onClose={() => setLoadOpen(false)}
+        title={detail ? `Load stock — ${detail.reg}` : "Load stock"}
+        subtitle="Moves from central inventory onto this vehicle, no crew request needed"
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setLoadOpen(false)}>
+              Close
+            </Button>
+            <Button disabled={loadSaving} onClick={submitLoad}>
+              {loadSaving ? "Loading…" : "Load onto vehicle"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {loadErr && <Alert tone="danger">{loadErr}</Alert>}
+          {loadMsg && <Alert tone="success">{loadMsg}</Alert>}
+
+          {loadLines.map((line, i) => (
+            <div key={i} className="flex items-end gap-2">
+              <Field label={i === 0 ? "Item" : ""} className="flex-1">
+                <Select
+                  value={line.itemId}
+                  onChange={(e) => setLine(i, { itemId: e.target.value })}
+                >
+                  <option value="">Choose an item</option>
+                  {catalog.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name}
+                      {c.currentStock != null ? ` — ${c.currentStock} in store` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={i === 0 ? "Qty" : ""} className="w-24">
+                <Input
+                  type="number"
+                  min={1}
+                  value={line.qty}
+                  onChange={(e) => setLine(i, { qty: e.target.value })}
+                />
+              </Field>
+              {loadLines.length > 1 && (
+                <Button
+                  variant="ghost"
+                  onClick={() => setLoadLines((ls) => ls.filter((_, k) => k !== i))}
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+          ))}
+
+          <Button
+            variant="secondary"
+            onClick={() => setLoadLines((ls) => [...ls, { itemId: "", qty: "" }])}
+          >
+            Add another item
+          </Button>
+
+          <p className="text-xs text-gray-500">
+            Central stock drops by the same amount, drawing the
+            soonest-expiring batch first. A line is skipped if the store does
+            not have enough — the result says which.
+          </p>
+        </div>
       </Modal>
     </div>
   );
