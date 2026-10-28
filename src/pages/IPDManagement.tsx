@@ -863,6 +863,16 @@ function AdmissionDrawer({
   onDischarged: () => void;
 }) {
   const navigate = useNavigate();
+  // This stay is over. The drawer used to gate its actions on permission
+  // alone, so a discharged admission still offered a bed transfer, a
+  // second Discharge, vitals and medication rounds — for a patient who has
+  // gone home. The server rejects all of them ("admission not found"),
+  // which reads like a bug rather than an answer.
+  //
+  // Money is the exception and stays available: an open bill is collected
+  // AFTER discharge far more often than before it.
+  const isDischarged = admission.status === "discharged";
+  const canTreat = canManage && !isDischarged;
   const [vital, setVital] = useState({ bloodPressure: "", pulse: "", temperature: "", spo2: "" });
   const [med, setMed] = useState({ drug: "", dose: "", route: "" });
   const [note, setNote] = useState("");
@@ -1192,6 +1202,19 @@ function AdmissionDrawer({
         </div>
 
         <div className="px-6 py-4 space-y-5 text-sm">
+          {/* Say the stay is over before showing what is left of it, so the
+              missing Transfer and Discharge read as deliberate rather than
+              broken. The dues banner below says it louder when there is
+              money outstanding, so this one steps aside for that case. */}
+          {isDischarged && !admission.dischargedWithDues && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+              Discharged
+              {admission.dischargedAt &&
+                ` on ${new Date(admission.dischargedAt).toLocaleString()}`}
+              . This stay is closed — bed, vitals and medication actions are
+              no longer available.
+            </div>
+          )}
           {/* A stay that went home with the bill open. This was recorded on
               the admission at discharge but shown nowhere, so the decision
               and the person who took it were invisible the moment the
@@ -1215,11 +1238,13 @@ function AdmissionDrawer({
                 </p>
               )}
               <p className="mt-2 text-xs text-amber-700">
-                The invoice stays open until the balance is collected.
+                The invoice stays open until the balance is collected — use
+                Collect payment below. This stay is closed, so bed, vitals
+                and medication actions are no longer available.
               </p>
             </div>
           )}
-          {canManage && (
+          {canTreat && (
             <div className="space-y-3">
               {transferErr && <Alert>{transferErr}</Alert>}
 
@@ -1395,12 +1420,23 @@ function AdmissionDrawer({
                 </div>
               )}
 
-              <div className="flex justify-between border-t border-gray-100 pt-1 font-semibold text-gray-900">
-                <span>Accrued</span>
-                <span>₹{charges.accrued}</span>
-              </div>
-              {charges.invoice && (
+              {/* Two different numbers used to be stacked as if they were
+                  one sum: "Accrued" is recomputed live from bed days,
+                  pharmacy and procedures, while Paid/Due come off the raised
+                  invoice, which a clerk can add lines to by hand. So a bill
+                  of ₹5000 under an accrual of ₹500 read as arithmetic that
+                  does not work. Once a bill exists IT is the figure that
+                  counts, and the accrual is demoted to the estimate it is. */}
+              {charges.invoice ? (
                 <>
+                  <div className="flex justify-between border-t border-gray-100 pt-1 text-xs text-gray-500">
+                    <span>Accrued so far (estimate)</span>
+                    <span>₹{charges.accrued}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between border-t border-gray-100 pt-1 font-semibold text-gray-900">
+                    <span>Bill {charges.invoice.invoiceNo}</span>
+                    <span>₹{charges.invoice.total}</span>
+                  </div>
                   <div className="flex justify-between text-green-700">
                     <span>Paid</span>
                     <span>₹{charges.invoice.amountPaid}</span>
@@ -1410,6 +1446,11 @@ function AdmissionDrawer({
                     <span>₹{charges.invoice.balanceDue}</span>
                   </div>
                 </>
+              ) : (
+                <div className="flex justify-between border-t border-gray-100 pt-1 font-semibold text-gray-900">
+                  <span>Accrued</span>
+                  <span>₹{charges.accrued}</span>
+                </div>
               )}
 
               {canManage && (
@@ -1502,7 +1543,7 @@ function AdmissionDrawer({
                 {logErr}
               </Alert>
             )}
-            {canManage && (
+            {canTreat && (
               <div className="grid grid-cols-4 gap-2 mb-2">
                 <Input
                   placeholder="BP"
@@ -1563,7 +1604,7 @@ function AdmissionDrawer({
                       )}
                     </div>
                     {d.status !== "given" ? (
-                      canManage && (
+                      canTreat && (
                         <Button size="sm" variant={d.status === "overdue" ? "danger" : "secondary"} onClick={() => markDoseGiven(d)}>
                           Mark given
                         </Button>
@@ -1580,7 +1621,7 @@ function AdmissionDrawer({
           {/* Medication */}
           <section>
             <h3 className="mb-2 font-semibold text-gray-700">Medication</h3>
-            {canManage && (
+            {canTreat && (
               <div className="grid grid-cols-3 gap-2 mb-2">
                 <Input
                   placeholder="Drug"
@@ -1614,7 +1655,7 @@ function AdmissionDrawer({
           {/* Progress notes / rounds */}
           <section>
             <h3 className="mb-2 font-semibold text-gray-700">Progress Notes (Rounds)</h3>
-            {canManage && (
+            {canTreat && (
               <div className="mb-2">
                 <Textarea
                   rows={2}
