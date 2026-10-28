@@ -558,6 +558,17 @@ export const alertsApi = {
   get: () => fetchWithAuth("/admin/alerts"),
 };
 
+// The signed-in user's OWN inbox — things addressed to them by name, which
+// survive a refresh. Distinct from `notificationApi` below, which is the
+// tool for BROADCASTING to app users.
+export const myNotificationsApi = {
+  list: (limit = 30) => fetchWithAuth(`/admin/my-notifications?limit=${limit}`),
+  markRead: (id: string) =>
+    fetchWithAuth(`/admin/my-notifications/${id}/read`, { method: "POST" }),
+  markAllRead: () =>
+    fetchWithAuth("/admin/my-notifications/read-all", { method: "POST" }),
+};
+
 // ==================== CONFIG: FARE + VEHICLE TYPES API ====================
 export const configApi = {
   getFareConfig: () => fetchWithAuth("/admin/config/fare-config"),

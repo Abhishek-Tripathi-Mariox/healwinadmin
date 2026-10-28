@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Menu, Bell, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { alertsApi } from "../../services/admin-api";
+import { alertsApi, myNotificationsApi } from "../../services/admin-api";
 import { adminSocket } from "../../services/socket";
 
 interface HeaderProps {
@@ -23,6 +23,24 @@ interface ActivityItem {
   tone: "danger" | "warning" | "info" | "success";
   route: string;
   at: number;
+}
+
+/**
+ * A notification addressed to THIS user and stored server-side.
+ *
+ * The activity feed above is live-only, which is right for shared events —
+ * a missed "new lab booking" is picked up by whoever looks at the list next.
+ * It is wrong for anything addressed to one person by name: a discharge
+ * authorised on someone's say-so reached them only if they happened to have
+ * the tab open at that instant. These survive a refresh and a logout.
+ */
+interface InboxItem {
+  _id: string;
+  title: string;
+  body: string;
+  isRead: boolean;
+  createdAt: string;
+  data?: { route?: string };
 }
 
 const toneText: Record<string, string> = {
@@ -69,6 +87,8 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
   const [items, setItems] = useState<AlertItem[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [unseen, setUnseen] = useState(0);
+  const [inbox, setInbox] = useState<InboxItem[]>([]);
+  const [inboxUnread, setInboxUnread] = useState(0);
   // Clinical alerts that have already been seen (badge ignores these until a
   // genuinely new alert id appears). Without this, opening the bell cleared the
   // socket-activity count but the alert count kept the badge lit — so it looked
@@ -143,6 +163,45 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
     };
   }, []);
 
+  // This user's own stored notifications. Loaded on mount — which is the
+  // whole point: whatever was sent while they were logged out is waiting
+  // here. Refreshed when the socket says a new one landed, and polled
+  // slowly as a backstop for a dropped socket.
+  const loadInbox = React.useCallback(() => {
+    myNotificationsApi
+      .list()
+      .then((res) => {
+        const d = res.data || {};
+        setInbox(d.items || []);
+        setInboxUnread(d.unread || 0);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadInbox();
+    const off = adminSocket.on("notification:new", () => loadInbox());
+    const t = setInterval(loadInbox, 2 * 60 * 1000);
+    return () => {
+      off();
+      clearInterval(t);
+    };
+  }, [loadInbox]);
+
+  const openInboxItem = (item: InboxItem) => {
+    // Mark read optimistically; a failed call only means the badge is
+    // refreshed back on the next poll, never a lost notification.
+    if (!item.isRead) {
+      setInbox((prev) =>
+        prev.map((x) => (x._id === item._id ? { ...x, isRead: true } : x)),
+      );
+      setInboxUnread((n) => Math.max(0, n - 1));
+      myNotificationsApi.markRead(item._id).catch(() => loadInbox());
+    }
+    setShowNotifications(false);
+    if (item.data?.route) navigate(item.data.route);
+  };
+
   // Real-time activity feed over the admin socket.
   useEffect(() => {
     adminSocket.connect();
@@ -184,6 +243,14 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
   const clearAll = () => {
     setActivity([]);
     setUnseen(0);
+    // Mail is marked read rather than removed — the row is the durable
+    // record of what this person was told, and clearing the bell must not
+    // destroy it.
+    if (inboxUnread > 0) {
+      setInbox((prev) => prev.map((x) => ({ ...x, isRead: true })));
+      setInboxUnread(0);
+      myNotificationsApi.markAllRead().catch(() => loadInbox());
+    }
     setDismissed((prev) => {
       const next = { ...prev };
       for (const a of visibleAlerts) next[a.id] = a.fingerprint;
@@ -205,7 +272,7 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
   };
 
   const unseenAlerts = visibleAlerts.filter((i) => !seenAlertIds.has(i.id)).length;
-  const badge = unseen + unseenAlerts;
+  const badge = unseen + unseenAlerts + inboxUnread;
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/60 bg-white/70 backdrop-blur-xl">
@@ -235,7 +302,7 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
                 <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
                   <h3 className="font-semibold text-gray-800">Notifications</h3>
                   <div className="flex items-center gap-3">
-                    {(activity.length > 0 || visibleAlerts.length > 0) && (
+                    {(activity.length > 0 || visibleAlerts.length > 0 || inboxUnread > 0) && (
                       <button onClick={clearAll} className="text-xs font-medium text-blue-600 hover:text-blue-800">
                         Clear all
                       </button>
@@ -246,13 +313,41 @@ const Header: React.FC<HeaderProps> = ({ setIsMobileMenuOpen }) => {
                   </div>
                 </div>
                 <div className="overflow-y-auto max-h-96">
-                  {activity.length === 0 && visibleAlerts.length === 0 && (
+                  {activity.length === 0 && visibleAlerts.length === 0 && inbox.length === 0 && (
                     <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
                       <Bell className="h-8 w-8 text-gray-300" />
                       <p className="text-sm font-medium text-gray-700">You're all caught up</p>
                       <p className="text-xs text-gray-400">New requests, orders and alerts appear here live.</p>
                     </div>
                   )}
+
+                  {inbox.length > 0 && (
+                    <div className="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                      For you
+                    </div>
+                  )}
+                  {inbox.map((n) => (
+                    <button
+                      key={n._id}
+                      onClick={() => openInboxItem(n)}
+                      className={`flex w-full items-start gap-2 border-b border-gray-50 px-4 py-3 text-left last:border-0 hover:bg-gray-50 ${
+                        n.isRead ? "" : "bg-amber-50/60"
+                      }`}
+                    >
+                      {!n.isRead && (
+                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium text-gray-800">
+                          {n.title}
+                        </span>
+                        <span className="block text-xs text-gray-500">{n.body}</span>
+                        <span className="mt-0.5 block text-[10px] text-gray-400">
+                          {new Date(n.createdAt).toLocaleString()}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
 
                   {activity.length > 0 && (
                     <div className="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">

@@ -58,6 +58,15 @@ interface Admission {
   currentBedNumber?: string;
   patientId?: { patientId?: string; fullName?: string };
   attendingDoctorId?: { fullName?: string };
+  dischargedAt?: string;
+  // Set when someone with the authority let a patient go home with the bill
+  // still open. Recorded on discharge and never shown anywhere until now,
+  // which made a discharge on credit effectively invisible afterwards.
+  dischargedWithDues?: boolean;
+  duesAtDischarge?: number;
+  creditAuthorisedBy?: { fullName?: string };
+  creditAuthorisedAt?: string;
+  creditReason?: string;
 }
 
 export default function IPDManagement() {
@@ -66,6 +75,15 @@ export default function IPDManagement() {
   const canBeds = hasPermission(PERMISSIONS.BEDS_MANAGE);
 
   const [tab, setTab] = useState<"admissions" | "beds" | "wards">("admissions");
+  // The admissions list only ever asked for status "admitted", so a patient
+  // who had gone home was unreachable from this screen — including the ones
+  // who left owing money, which are exactly the ones worth finding again.
+  const [admissionView, setAdmissionView] = useState<"admitted" | "dues">(
+    () =>
+      new URLSearchParams(window.location.search).get("withDues") === "1"
+        ? "dues"
+        : "admitted",
+  );
   const [admissions, setAdmissions] = useState<Admission[]>([]);
   const [beds, setBeds] = useState<Bed[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
@@ -101,17 +119,17 @@ export default function IPDManagement() {
   const loadAdmissions = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await ipdApi.listAdmissions({
-        status: "admitted",
-        page: admissionPage,
-        limit: admissionLimit,
-      });
+      const res = await ipdApi.listAdmissions(
+        admissionView === "dues"
+          ? { withDues: 1, page: admissionPage, limit: admissionLimit }
+          : { status: "admitted", page: admissionPage, limit: admissionLimit },
+      );
       setAdmissions(res.data?.items || []);
       setAdmissionTotal(res.data?.pagination?.total || 0);
     } finally {
       setLoading(false);
     }
-  }, [admissionPage, admissionLimit]);
+  }, [admissionPage, admissionLimit, admissionView]);
 
   const loadBeds = useCallback(async () => {
     const res = await ipdApi.listBeds({ page: bedPage, limit: bedLimit });
@@ -231,33 +249,68 @@ export default function IPDManagement() {
       </div>
 
       {tab === "admissions" ? (
+        <>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {([
+            ["admitted", "Currently admitted"],
+            ["dues", "Discharged with dues"],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => {
+                setAdmissionView(key);
+                setAdmissionPage(1);
+              }}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                admissionView === key
+                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <Table>
           <THead>
             <Th>Admission</Th>
             <Th>Patient</Th>
             <Th>Ward / Bed</Th>
             <Th>Doctor</Th>
-            <Th>Admitted</Th>
+            <Th>{admissionView === "dues" ? "Discharged" : "Admitted"}</Th>
             <Th className="text-right">Actions</Th>
           </THead>
           <TBody>
             {loading ? (
               <TableState colSpan={6}>Loading…</TableState>
             ) : admissions.length === 0 ? (
-              <TableState colSpan={6}>No current admissions.</TableState>
+              <TableState colSpan={6}>
+                {admissionView === "dues"
+                  ? "No patient has been discharged with an open bill."
+                  : "No current admissions."}
+              </TableState>
             ) : (
               admissions.map((a) => (
                 <TR key={a._id}>
                   <Td className="font-mono text-xs">{a.admissionNo}</Td>
                   <Td className="font-medium text-gray-900">
                     {a.patientId?.fullName || "—"}
+                    {a.dischargedWithDues && (
+                      <span className="mt-1 block text-xs font-normal text-amber-700">
+                        ₹{a.duesAtDischarge ?? 0} outstanding · authorised by{" "}
+                        {a.creditAuthorisedBy?.fullName || "—"}
+                      </span>
+                    )}
                   </Td>
                   <Td>
                     {a.currentWard} / {a.currentBedNumber}
                   </Td>
                   <Td>{a.attendingDoctorId?.fullName || "—"}</Td>
                   <Td className="text-gray-500">
-                    {new Date(a.admittedAt).toLocaleDateString()}
+                    {new Date(
+                      (admissionView === "dues" && a.dischargedAt) || a.admittedAt,
+                    ).toLocaleDateString()}
                   </Td>
                   <Td className="text-right whitespace-nowrap">
                     <Button
@@ -276,6 +329,7 @@ export default function IPDManagement() {
             )}
           </TBody>
         </Table>
+        </>
       ) : tab === "wards" ? (
         <Table>
           <THead>
@@ -1138,6 +1192,33 @@ function AdmissionDrawer({
         </div>
 
         <div className="px-6 py-4 space-y-5 text-sm">
+          {/* A stay that went home with the bill open. This was recorded on
+              the admission at discharge but shown nowhere, so the decision
+              and the person who took it were invisible the moment the
+              notification faded. */}
+          {admission.dischargedWithDues && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm font-semibold text-amber-900">
+                Discharged with ₹{admission.duesAtDischarge ?? 0} outstanding
+              </p>
+              <p className="mt-1 text-xs text-amber-800">
+                Authorised by{" "}
+                <span className="font-medium">
+                  {admission.creditAuthorisedBy?.fullName || "—"}
+                </span>
+                {admission.creditAuthorisedAt &&
+                  ` on ${new Date(admission.creditAuthorisedAt).toLocaleString()}`}
+              </p>
+              {admission.creditReason && (
+                <p className="mt-1 text-xs italic text-amber-800">
+                  “{admission.creditReason}”
+                </p>
+              )}
+              <p className="mt-2 text-xs text-amber-700">
+                The invoice stays open until the balance is collected.
+              </p>
+            </div>
+          )}
           {canManage && (
             <div className="space-y-3">
               {transferErr && <Alert>{transferErr}</Alert>}
