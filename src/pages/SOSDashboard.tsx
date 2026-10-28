@@ -1896,7 +1896,33 @@ const SOSDashboard: React.FC = () => {
                                   {a.providerName} · Driver {a.driverName}
                                 </p>
                                 <p className="text-xs text-gray-500">
-                                  {a.roadDistanceKm} km · ETA {a.etaMinutes} min
+                                  {a.locationSource === "none" ? (
+                                    <span className="text-amber-600">
+                                      Location unknown — crew has not sent a GPS
+                                      fix
+                                    </span>
+                                  ) : (
+                                    <>
+                                      {a.roadDistanceKm} km · ETA {a.etaMinutes}{" "}
+                                      min
+                                      {a.distanceSource === "straight-line" && (
+                                        <span className="ml-1 text-gray-400">
+                                          (approx — straight line)
+                                        </span>
+                                      )}
+                                      {a.locationSource === "attendant" && (
+                                        <span className="ml-1 text-amber-600">
+                                          (from attendant, not the driver)
+                                        </span>
+                                      )}
+                                      {typeof a.locationAgeMin === "number" &&
+                                        a.locationAgeMin > 5 && (
+                                          <span className="ml-1 text-amber-600">
+                                            · fix is {a.locationAgeMin} min old
+                                          </span>
+                                        )}
+                                    </>
+                                  )}
                                 </p>
                               </div>
                               <span

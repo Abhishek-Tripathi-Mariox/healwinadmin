@@ -22,6 +22,21 @@ export interface NearbyAmbulance {
   driverName: string;
   attendantName: string;
   ambulanceLocation: { lat: number; lng: number };
+  /**
+   * Whose GPS fix the distance was measured from. The vehicle is ranked on
+   * where its assigned DRIVER is; "attendant" means we only had a fix from
+   * someone else in the crew, which is worth saying out loud before a
+   * dispatcher trusts the number.
+   */
+  locationSource?: "driver" | "attendant" | "none";
+  /** Minutes since that fix; null when there is no position at all. */
+  locationAgeMin?: number | null;
+  /**
+   * "road" = Google driving distance. "straight-line" = crow flies, which is
+   * always an under-estimate, so it is labelled rather than passed off as a
+   * real driving figure.
+   */
+  distanceSource?: "road" | "straight-line";
   roadDistanceKm: number;
   etaMinutes: number;
 }
@@ -172,6 +187,20 @@ export default function DispatchPanel({ sosId }: { sosId: string }) {
                   Ambulance {activeDispatch.ambulanceId?.registrationNumber} · ETA{" "}
                   {activeDispatch.etaMinutes} min
                 </p>
+                {/* The trip odometer: distance actually driven since the
+                    crew set off, through the pickup and on to the hospital.
+                    It is accumulated from their GPS pings, so it is the
+                    figure the ride is billed on — the ETA above is only an
+                    estimate made at dispatch time. */}
+                {activeDispatch.actualDistanceKm > 0 && (
+                  <p className="text-sm text-gray-700">
+                    Trip so far: {activeDispatch.actualDistanceKm.toFixed(1)} km
+                    <span className="text-xs text-gray-500">
+                      {" "}
+                      (start → pickup → hospital)
+                    </span>
+                  </p>
+                )}
               </div>
               <button
                 onClick={doCancel}
